@@ -109,9 +109,9 @@ final class CounterScopeElement
   @override
   Widget buildOnState(AsyncScopeState state) {
     return switch (state) {
-      AsyncScopeWaiting() => const Text('Waiting...'),
+      AsyncScopeWaiting() => const Text('Waiting…'),
       AsyncScopeError(:final error) => Text('Error: $error'),
-      AsyncScopeProgress() => const Text('Initializing...'),
+      AsyncScopeProgress() => const Text('Initializing…'),
       AsyncScopeReady() => buildOnReady(),
     };
   }

@@ -107,7 +107,7 @@ final class CounterScope extends LiteScope<CounterScope, CounterState> {
 
   @override
   Widget buildOnWaiting(BuildContext context) {
-    return const Text('Waiting...');
+    return const Text('Waiting…');
   }
 
   @override
@@ -148,7 +148,7 @@ final class CounterState extends LiteScopeState<CounterScope, CounterState> {
   Widget build(BuildContext context) {
     if (!CounterScope.isInitializedOf(context)) {
       return const Center(
-        child: Text('State initializing...'),
+        child: Text('State initializing…'),
       );
     }
 

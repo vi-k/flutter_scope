@@ -156,7 +156,7 @@ final class CounterScope
 
   @override
   Widget buildOnWaiting(BuildContext context) {
-    return const Text('Waiting...');
+    return const Text('Waiting…');
   }
 
   @override

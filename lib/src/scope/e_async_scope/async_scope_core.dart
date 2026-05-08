@@ -200,7 +200,7 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
       }
     }
 
-    _log.i('initialize...');
+    _log.i('initialize…');
     _subscription = initAsync().asyncMap((state) {
       switch (_model.state) {
         case AsyncScopeWaiting():
@@ -320,7 +320,7 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
 
     try {
       if (model.state case AsyncScopeReady()) {
-        _log.i('dispose...');
+        _log.i('dispose…');
         final result = disposeAsync();
         if (result is Future<void>) {
           await result;

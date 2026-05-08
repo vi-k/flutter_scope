@@ -17,7 +17,7 @@ final class ChildScreen extends LiteScope<ChildScreen, ChildScreenState> {
   Widget? buildOnWaiting(BuildContext context) {
     return const Scaffold(
       body: Center(
-        child: Text('Waiting...'),
+        child: Text('Waiting…'),
       ),
     );
   }

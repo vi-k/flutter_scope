@@ -34,7 +34,7 @@ class _ScopeExample3State extends State<ScopeExample3> {
                 child: Builder(
                   builder: (context) {
                     return !CounterScope.isInitializedOf(context)
-                        ? const Text('Parent initializing...')
+                        ? const Text('Parent initializing…')
                         : CounterScope(
                             debugSource: ScopeExample3,
                             debugName: '3.$_num.child',
