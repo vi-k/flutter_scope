@@ -1,3 +1,7 @@
+## 0.9.6
+
+* Upgrade logger_builder to 0.4.0.
+
 ## 0.9.3-0.9.5
 
 * Fix some bug on dispose `AsyncScopeElementBase`.
