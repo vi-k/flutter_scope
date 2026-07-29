@@ -103,7 +103,11 @@ abstract base class ScopeAutoDependencies<T extends ScopeDependencies,
     switch (dependency) {
       case ScopeDependencyGroup():
         for (final child in dependency.dependencies) {
-          yield* _extract(child, level + 1, '$path${dependency.name}/');
+          yield* _extract(
+            child,
+            level + 1,
+            dependency.name.isEmpty ? path : '$path${dependency.name}/',
+          );
         }
       case ScopeDependency():
       // no-op

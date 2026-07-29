@@ -82,6 +82,83 @@ final class TestDependencies
   String toString() => '$TestDependencies';
 }
 
+final class TestDependenciesAnonNested
+    extends ScopeAutoDependencies<TestDependenciesAnonNested, void> {
+  static const step = Duration(milliseconds: 100);
+
+  final Set<String> failed;
+
+  TestDependenciesAnonNested({this.failed = const {}});
+
+  @override
+  bool get autoDisposeOnError => false;
+
+  FutureOr<void> Function(DepHelper) initDep(Duration delay) => (dep) async {
+        _log.v(() => 'init: ${dep.name} delay');
+        await Future<void>.delayed(delay);
+        _log.v(() => 'init: ${dep.name} after delay');
+        if (failed.contains(dep.name)) {
+          _log.d(() => 'init: ${dep.name} fail');
+          throw Exception('${dep.name} failed');
+        }
+      };
+
+  // Корень и вложенная группа — обе безымянные, чтобы проверить, что
+  // построение пути не добавляет ведущий '/' и не задваивает разделители.
+  @override
+  ScopeDependency buildDependencies(_) => sequential('', [
+        dep('depA', initDep(step)),
+        concurrent('', [
+          dep('depB', initDep(step)),
+        ]),
+      ]);
+
+  @override
+  String toString() => '$TestDependenciesAnonNested';
+}
+
+/// Копия логики `handleInit()` (см. группу `TestDependencies` ниже),
+/// параметризованная экземпляром зависимостей и `MyFakeAsync`, чтобы её можно
+/// было переиспользовать в других группах тестов этого файла.
+List<String> handleInitFor<T extends ScopeAutoDependencies<T, void>>(
+  T dependencies,
+  MyFakeAsync async, {
+  Duration? cancel,
+}) {
+  final completer = Completer<void>();
+  final progress = <String>[];
+
+  void errorToBuf(Object error) {
+    progress.add('$error');
+  }
+
+  void stateToBuf(ScopeInitState<ScopeAutoDependenciesProgress, T> state) {
+    _log.withAddedName('handleInitFor').v(() => 'state=$state');
+    progress.add(
+      switch (state) {
+        ScopeProgress(:final progress) => '$progress',
+        ScopeReady(:final dependencies) => '$dependencies',
+      },
+    );
+  }
+
+  final subscription = dependencies //
+      .init(null)
+      .handleError(errorToBuf)
+      .listen(stateToBuf, onDone: completer.complete);
+
+  if (cancel != null) {
+    Future.delayed(cancel, () async {
+      await subscription.cancel();
+      completer.complete();
+    });
+  }
+
+  async.waitFuture(completer.future);
+
+  return progress;
+}
+
 void main() {
   logInit();
 
@@ -1228,6 +1305,26 @@ void main() {
           expect(dependencies.root.isCancelled, false);
           expect(dependencies.root.isDisposed, true);
         });
+      });
+    });
+  });
+
+  group('anonymous nested group paths', () {
+    test('no leading or double slashes', () {
+      final dependencies = TestDependenciesAnonNested(failed: {'depB'});
+      myFakeAsync((async) {
+        final progress = handleInitFor(dependencies, async);
+        expect(progress, ['depA (1/2)', 'depB: Exception: depB failed']);
+        expect(
+          dependencies
+              .flattenDependencies()
+              .map((info) => '${info.path}${info.dependency.name}')
+              .toList(),
+          // Корень, лист depA, вложенная безымянная группа и лист depB —
+          // ни один сегмент не даёт ведущий '/' или '//' на любом уровне
+          // вложенности безымянных групп.
+          ['', 'depA', '', 'depB'],
+        );
       });
     });
   });
