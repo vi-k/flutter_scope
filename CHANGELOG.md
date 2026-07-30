@@ -1,3 +1,30 @@
+## 0.10.0
+
+* [breaking changes] Unify dependency path format: no leading `/` in
+  `ScopeDependencyException.name`, `ScopeDependencyInfo.path` and progress
+  paths; anonymous groups add no separator.
+* [breaking changes] Remove dead API: `LiteScopeInitState`/`Waiting`/
+  `Progress`/`Ready`, `typeToShortString`; rename
+  `ScopeDependencyNoDisposalRequred` to `ScopeDependencyNoDisposalRequired`.
+* Fix infinite recursion in `CompareUtils.identical`.
+* Fix hang in `ScopeAutoDependencies.dispose()` when no dependency requires
+  disposal.
+* Fix `ScopeNotifier.value` not subscribing to a new listenable on update.
+* Fix `LiteScope.close()` hang outside the Ready state; fix
+  `ScreenshotReplacer` completing early and leaking `ui.Image`.
+* Fix a double close() race in LiteScope orphaning the screenshot barrier;
+  cap ScreenshotReplacer retries (new public ScreenshotReplacer.maxRetries).
+* Base the disposeAsync() decision on successful initialization instead of
+  the applied model state (resources are now disposed of when the element
+  is removed in the init-completion frame).
+* Guard AsyncScope post-frame callbacks with `mounted`.
+* Log dependency disposal errors instead of swallowing them.
+* Fix unbalanced parenthesis in `AsyncScopeError.toString()`.
+* Add `repository`, `issue_tracker` and `topics` to pubspec; honest Flutter
+  constraint.
+* Switch analysis to flutter_lints in the package and demo.
+* Rewrite README; sync the pub.dev example; real `debug`/`Scope` doc pages.
+
 ## 0.9.6
 
 * Upgrade logger_builder to 0.4.0.
