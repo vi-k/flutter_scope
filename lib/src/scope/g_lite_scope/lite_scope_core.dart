@@ -259,8 +259,13 @@ abstract base class LiteScopeElementBase<
     // [AsyncScopeReady]. In any other state -- or when the element is no
     // longer in the tree -- nothing would ever release the barrier, so
     // installing it would make this future hang forever.
+    //
+    // The barrier is installed at most once per element: a repeated [close]
+    // must not replace the barrier that the already running
+    // [_performAsyncDispose] is waiting for, otherwise [_completeScreenshot]
+    // would release the new one and orphan the old one.
     if (mounted && state is AsyncScopeReady) {
-      _screenshotCompleter = Completer<void>();
+      _screenshotCompleter ??= Completer<void>();
     }
 
     await _performAsyncDispose();

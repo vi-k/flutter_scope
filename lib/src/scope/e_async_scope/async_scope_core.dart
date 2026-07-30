@@ -95,6 +95,15 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
   /// run, so that scenario doesn't leak.
   bool _initSucceeded = false;
 
+  /// Whether [_performAsyncDispose] has started.
+  ///
+  /// Disposal may begin while the callbacks that apply [AsyncScopeReady] to the
+  /// model are still pending, and `mounted` alone does not cover that: an
+  /// element that is closed via `close()` -- rather than removed from the tree
+  /// -- stays mounted while [_model] is being disposed of, so a pending
+  /// callback would use the disposed notifier.
+  bool _isDisposing = false;
+
   AsyncScopeCoordinatorEntry? _asyncScopeEntry;
 
   ScopeChildEntry? _asyncScopeParentEntry;
@@ -236,7 +245,7 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
           if (pauseAfterInitialization case final pauseAfterInitialization?
               when ScopeConfig.pauseAfterInitializationEnabled) {
             Future<void>.delayed(pauseAfterInitialization, () {
-              if (mounted) {
+              if (mounted && !_isDisposing) {
                 _model.update(state);
               }
             });
@@ -245,7 +254,7 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
             SchedulerBinding.instance
               ..scheduleFrame()
               ..addPostFrameCallback((_) {
-                if (!mounted) return;
+                if (!mounted || _isDisposing) return;
                 _model.update(state);
               });
           }
@@ -284,6 +293,8 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
   }
 
   Future<void> _performAsyncDispose() async {
+    _isDisposing = true;
+
     _log.d('prepare for disposal');
 
     // Прерываем ожидание доступа, если ещё не завершено.

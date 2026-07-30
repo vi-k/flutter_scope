@@ -12,11 +12,8 @@ void main() {
     // mounts, and `buildOnReady()` is the `AsyncScopeReady` branch of
     // `buildOnState()` -- so in any other state nothing can release it and
     // `close()` waits forever.
-    for (final (state, init, body) in <(
-      String,
-      Stream<AsyncScopeInitState> Function(),
-      String
-    )>[
+    for (final (state, init, body)
+        in <(String, Stream<AsyncScopeInitState> Function(), String)>[
       ('waiting', _neverEmits, 'waiting'),
       ('initializing', _emitsProgressOnly, 'initializing'),
       ('error', _failsImmediately, 'error'),
@@ -113,6 +110,129 @@ void main() {
         );
       },
     );
+
+    testWidgets(
+      'completes both futures when close() is called twice',
+      (tester) async {
+        await tester.pumpWidget(_app(const _CloseScope(init: _becomesReady)));
+        await tester.pumpAndSettle();
+        expect(find.text('ready'), findsOneWidget);
+
+        final element =
+            tester.element<_CloseScopeElement>(find.byType(_CloseScope));
+
+        var isFirstClosed = false;
+        var isSecondClosed = false;
+        unawaited(element.close().whenComplete(() => isFirstClosed = true));
+
+        // Build the closing frame *without* drawing it, so the
+        // `ScreenshotReplacer` that is going to release the barrier is mounted
+        // while its capture is still pending: drawing the frame here would run
+        // the capture to completion before the second `close()` arrives.
+        tester.binding.buildOwner!.buildScope(tester.binding.rootElement!);
+        expect(find.byType(ScreenshotReplacer), findsOneWidget);
+
+        // A second `close()` must not swap the barrier out from under the
+        // first one: the barrier the first `close()` is waiting for is the one
+        // the replacer releases.
+        unawaited(element.close().whenComplete(() => isSecondClosed = true));
+
+        await _settle(tester, until: () => isFirstClosed && isSecondClosed);
+
+        expect(
+          isFirstClosed,
+          isTrue,
+          reason: 'the first close() must not be orphaned by the second one',
+        );
+        expect(
+          isSecondClosed,
+          isTrue,
+          reason: 'the second close() must join the first one',
+        );
+      },
+    );
+
+    testWidgets(
+      'completes in the ready state even when the screenshot can never '
+      'be taken',
+      (tester) async {
+        // An offstage subtree is built and laid out but never painted, so the
+        // repaint boundary can never be captured.
+        await tester.pumpWidget(
+          _app(const Offstage(child: _CloseScope(init: _becomesReady))),
+        );
+        await _settle(
+          tester,
+          until: () => _scopeOf(tester).state is AsyncScopeReady,
+        );
+        expect(_scopeOf(tester).state, isA<AsyncScopeReady>());
+
+        var isClosed = false;
+        unawaited(_scopeOf(tester).close().whenComplete(() => isClosed = true));
+
+        await _settle(tester, until: () => isClosed);
+
+        expect(
+          isClosed,
+          isTrue,
+          reason: 'the capture must give up after a bounded number of retries '
+              'instead of keeping close() waiting forever',
+        );
+        expect(find.byType(RawImage, skipOffstage: false), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'does not touch the disposed model when close() wins the race with the '
+      'post-frame callback that applies the ready state',
+      (tester) async {
+        final binding = tester.binding;
+
+        // Mount by driving the build phase directly, so the post-frame
+        // callback that `_performAsyncInit` schedules for `AsyncScopeReady`
+        // stays pending -- `pumpWidget` would drain it within the very frame
+        // that schedules it (the same technique as in `async_scope_test.dart`).
+        binding.attachRootWidget(
+          binding.wrapWithDefaultView(
+            const Directionality(
+              textDirection: TextDirection.ltr,
+              child: _CloseScope(init: _becomesReady),
+            ),
+          ),
+        );
+        binding.buildOwner!.buildScope(binding.rootElement!);
+
+        // Lets `initAsync()` deliver `AsyncScopeReady` -- so `_initSucceeded`
+        // is set and the post-frame callback is scheduled -- without drawing a
+        // frame.
+        await binding.idle();
+
+        final element = _scopeOf(tester);
+        expect(
+          element.state,
+          isA<AsyncScopeWaiting>(),
+          reason: 'the ready state must still be pending for this race',
+        );
+
+        var isClosed = false;
+        unawaited(element.close().whenComplete(() => isClosed = true));
+
+        // The disposal chain runs to `_model.dispose()`, and only then is the
+        // stale post-frame callback drained by a real frame.
+        await _settle(tester, until: () => isClosed);
+
+        expect(isClosed, isTrue);
+        expect(
+          tester.takeException(),
+          isNull,
+          reason: 'the pending ready callback must not use the disposed model',
+        );
+        // The ready state was never applied, but `initAsync()` did succeed, so
+        // `disposeAsync()` still has to run exactly once (see task 7).
+        expect(element.disposeAsyncCount, 1);
+        expect(element.state, isA<AsyncScopeWaiting>());
+      },
+    );
   });
 
   group('ScreenshotReplacer', () {
@@ -173,10 +293,73 @@ void main() {
         );
       },
     );
+
+    testWidgets(
+      'retries without reporting completion, then gives up after the retry cap',
+      (tester) async {
+        var completedCount = 0;
+
+        // An offstage subtree is never painted, so `debugNeedsPaint` stays true
+        // and every attempt takes the retry path.
+        await tester.pumpWidget(
+          _app(
+            Offstage(
+              child: ScreenshotReplacer(
+                onCompleted: () => completedCount++,
+                child: const SizedBox(width: 20, height: 20),
+              ),
+            ),
+          ),
+        );
+
+        // The first attempt already ran, in the post-frame callback of the
+        // frame above.
+        expect(
+          completedCount,
+          0,
+          reason: 'the first attempt must not report completion',
+        );
+
+        // A retry must never release the barrier: there is no screenshot yet.
+        for (var i = 1; i <= 3; i++) {
+          await tester.pump();
+          expect(
+            completedCount,
+            0,
+            reason: 'retry $i must not report completion',
+          );
+        }
+
+        // The retries are capped, though, and giving up must release the
+        // barrier -- otherwise `close()` would wait forever.
+        for (var i = 0; i < 20 && completedCount == 0; i++) {
+          await tester.pump();
+        }
+
+        expect(
+          completedCount,
+          1,
+          reason: 'giving up must report completion exactly once',
+        );
+        expect(find.byType(RawImage, skipOffstage: false), findsNothing);
+
+        // Retrying must have stopped: no further frame reports again.
+        for (var i = 0; i < 3; i++) {
+          await tester.pump();
+        }
+        expect(completedCount, 1);
+      },
+    );
   });
 }
 
 Widget _app(Widget child) => MaterialApp(home: Center(child: child));
+
+/// The scope element currently in the tree, offstage or not.
+_CloseScopeElement _scopeOf(WidgetTester tester) =>
+    tester.element<_CloseScopeElement>(
+      find.byType(_CloseScope, skipOffstage: false),
+    );
 
 /// Pumps frames interleaved with slices of *real* time, until [until] holds or
 /// the budget runs out.
@@ -234,10 +417,20 @@ final class _CloseScope
 
 final class _CloseScopeElement extends LiteScopeElementBase<_CloseScope,
     _CloseScopeElement, _CloseScopeState> {
+  /// How many times [disposeAsync] ran, to prove that a disposal racing the
+  /// ready state still releases what `initAsync()` acquired.
+  int disposeAsyncCount = 0;
+
   _CloseScopeElement(super.widget);
 
   @override
   Stream<AsyncScopeInitState> initAsync() => widget.init();
+
+  @override
+  Future<void> disposeAsync() async {
+    disposeAsyncCount++;
+    await super.disposeAsync();
+  }
 
   @override
   Widget? buildOnWaiting() => const Text('waiting');

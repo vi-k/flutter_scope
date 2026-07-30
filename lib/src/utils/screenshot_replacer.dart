@@ -6,6 +6,21 @@ import 'package:flutter/rendering.dart';
 /// A widget that renders its [child] once, captures a screenshot of it,
 /// and then replaces the child with the captured image.
 class ScreenshotReplacer extends StatefulWidget {
+  /// The number of extra frames the capture waits for the [child] to be
+  /// painted before giving up.
+  ///
+  /// A child that is built but never painted -- an `Offstage` subtree, or the
+  /// unselected branch of an `IndexedStack`, for example -- can never be
+  /// captured, so the retries have to be bounded: on the last attempt
+  /// [onCompleted] is called anyway, leaving [child] in place instead of
+  /// keeping the caller waiting for a screenshot forever.
+  static const maxRetries = 5;
+
+  /// Called once the screenshot is no longer pending.
+  ///
+  /// Called exactly once per state: either after [child] has been replaced with
+  /// the captured image, or after the capture has definitively failed (see
+  /// [maxRetries]), or when this widget is removed from the tree.
   final void Function() onCompleted;
 
   /// The widget to be screenshot.
@@ -27,6 +42,7 @@ class _ScreenshotReplacerState extends State<ScreenshotReplacer> {
   ui.Image? _image;
   bool _isCaptured = false;
   bool _isCompletionReported = false;
+  int _retries = 0;
 
   @override
   void initState() {
@@ -67,6 +83,15 @@ class _ScreenshotReplacerState extends State<ScreenshotReplacer> {
           as RenderRepaintBoundary?;
 
       if (boundary == null || boundary.debugNeedsPaint) {
+        if (_retries >= ScreenshotReplacer.maxRetries) {
+          // The child is never going to be painted, so there will be no
+          // screenshot: report completion and stop, instead of rescheduling
+          // (and requesting frames) forever.
+          _reportCompleted();
+          return;
+        }
+        _retries++;
+
         // The boundary is not attached or not painted yet, which may happen if
         // the child is not ready by the end of the frame. Retry on the next
         // frame *without* reporting completion: the screenshot does not exist
