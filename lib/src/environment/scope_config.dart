@@ -2,8 +2,8 @@ import 'package:logger_builder/logger_builder.dart';
 
 part 'scope_logger.dart';
 
-// ignore: avoid_classes_with_only_static_members
 /// {@category debug}
+// ignore: avoid_classes_with_only_static_members
 abstract final class ScopeConfig {
   static final logger = ScopeLogger('scopo')..level = ScopeLogLevel.off;
 

@@ -22,7 +22,7 @@ abstract base class ScopeAutoDependencies<T extends ScopeDependencies,
   Stream<ScopeInitState<ScopeAutoDependenciesProgress, T>> init(
     C context,
   ) async* {
-    final dependencies = _root ??= this.buildDependencies(context);
+    final dependencies = _root ??= buildDependencies(context);
     final progressIterator = ProgressIterator(dependencies.count);
 
     try {

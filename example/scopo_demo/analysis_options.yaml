@@ -37,7 +37,6 @@ analyzer:
 
   errors:
     # Ignore
-    # invalid_annotation_target: ignore ???
 
     # Info
     todo: info
