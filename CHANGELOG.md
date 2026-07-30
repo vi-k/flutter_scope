@@ -30,8 +30,9 @@
 * Log dependency disposal errors instead of swallowing them.
 * Fix unbalanced parenthesis in `AsyncScopeError.toString()`.
 * Add `repository`, `issue_tracker` and `topics` to pubspec.
-* [breaking changes] Tighten the Flutter constraint to `>=3.16.0` (was
-  `>=1.17.0`), the version the package actually requires.
+* [breaking changes] Tighten the SDK constraints to Flutter `>=3.27.0` (was
+  `>=1.17.0`) and Dart `^3.6.0` (was `^3.2.0`) — the floor the package
+  actually requires, since it calls `Color.withValues`.
 * Switch analysis to flutter_lints in the package and demo.
 * Rewrite README; sync the pub.dev example; real `debug`/`Scope` doc pages.
 

@@ -269,6 +269,8 @@ to run "closing…" UI for a scope whose disposal takes a noticeable amount of
 time, instead of freezing on the last frame. Taking the screenshot is
 best-effort and currently only works in debug builds; when it fails,
 `buildOnClosing` still runs, but over the live subtree instead of a frozen one.
+The failure is not silent: the capture reports the error to the current zone,
+so release and profile builds log one per `close()`.
 
 ## Access from the subtree
 
