@@ -50,5 +50,5 @@ final class AsyncScopeError extends AsyncScopeState {
 
   @override
   String toString() => '$AsyncScopeError($error, $stackTrace'
-      '${progress == null ? '' : ', progress: $progress)'})';
+      '${progress == null ? '' : ', progress: $progress'})';
 }

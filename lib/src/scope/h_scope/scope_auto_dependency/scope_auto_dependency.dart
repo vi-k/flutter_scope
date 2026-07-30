@@ -66,7 +66,9 @@ abstract base class ScopeAutoDependencies<T extends ScopeDependencies,
       (path) {
         _log.d(path);
       },
-      onError: (Object e) {},
+      onError: (Object error, StackTrace stackTrace) {
+        _log.e('dispose error', error: error, stackTrace: stackTrace);
+      },
       onDone: completer.complete,
       cancelOnError: false,
     );
