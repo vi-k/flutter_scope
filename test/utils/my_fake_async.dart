@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:collection';
 
 import 'package:fake_async/fake_async.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:meta/meta.dart';
 
 T myFakeAsync<T>(
@@ -163,12 +164,12 @@ final class MyFakeAsync {
 
   @visibleForTesting
   void printPendingTimers() {
-    print(_pendingTimers.map((e) => e.nextCall).toList());
+    debugPrint(_pendingTimers.map((e) => e.nextCall).toList().toString());
   }
 
   @visibleForTesting
   void printFakeAsyncPendingTimers() {
-    print(pendingTimers.map((e) => e.duration).toList());
+    debugPrint(pendingTimers.map((e) => e.duration).toList().toString());
   }
 
   MyFakeTimer? _nextTimer() {

@@ -3,10 +3,17 @@ description: "A Flutter package for managing scopes and dependency injection
   within the widget tree"
 version: 0.9.6
 homepage: https://github.com/vi-k/scopo
+repository: https://github.com/vi-k/scopo
+issue_tracker: https://github.com/vi-k/scopo/issues
+topics:
+  - state-management
+  - dependency-injection
+  - scope
+  - widgets
 
 environment:
   sdk: ^3.2.0
-  flutter: ">=1.17.0"
+  flutter: ">=3.16.0"
 
 dependencies:
   flutter:
