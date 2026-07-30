@@ -2,10 +2,17 @@
 
 * Upgrade logger_builder to 0.4.0.
 
-## 0.9.3-0.9.5
+## 0.9.5
+
+* Replace ellipsis characters in log messages.
+
+## 0.9.4
+
+* Minor logging changes.
+
+## 0.9.3
 
 * Fix some bug on dispose `AsyncScopeElementBase`.
-* Minor logging changes.
 
 ## 0.9.2
 
@@ -48,33 +55,38 @@
 * minor changes
 
 ## 0.7.0
+
 * [breaking changes] rename `ScopeQueueMixin` to `ScopeAutoDependencies` and
   refactor.
 * [breaking changes] rename `waitBuilder` to `waitingBuilder`.
 * minor: add package `pkglog` for logging.
 
-
 ## 0.6.3
+
 * add timeouts for waiting for access (`scopeKey`) and waiting for children to
   complete (`AsyncScopeParent`, `waitForChildren`)
 * set default timeouts to 3 seconds.
 * add info logging (`ScopeLog.logInfo`) for important messages.
 
 ## 0.6.2
+
 * add `AsyncScopeCoordinator` for coordination of scopes with the same key.
 * minor fixes.
 
 ## 0.6.1
+
 * add `asyncScopeRoot` to register scopes that do not have a parent, so that
   you can wait for them to complete.
 
 ## 0.6.0
+
 * fix some bugs.
 * add `buildOnClosing` for `Scope`.
 * add more examples.
 * add `AsyncScope`, `AsyncDataScope`, `LiteScope` with `LiteScopeState`.
 
 ## 0.5.0
+
 * [breaking changes] refactor, rename.
 * [breaking changes] `exclusiveCoordinator` transformed to `scopeKey`.
 * parent scopes now depend on their children (`asyncInit`, `asyncDispose`).
@@ -82,20 +94,25 @@
   (`asyncInit`, `asyncDispose`).
 
 ## 0.4.1
+
 * update example's README.md.
 
 ## 0.4.0
+
 * [breaking changes] add context to init.
 * add `AsyncInitializer` and `AsyncState`.
 
 ## 0.3.3
+
 * return `child` back. by default, it is not used, but you can use it yourself.
 
 ## 0.3.2
+
 * add `ScopeDependenciesQueue` for sequiential async initialization and
   disposal from list of dependencies.
 
 ## 0.3.1
+
 * fix a serious bug: the code is built using a Flutter fork. transfer to the
   official version.
 

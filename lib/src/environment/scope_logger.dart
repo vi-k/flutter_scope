@@ -1,11 +1,22 @@
 part of 'scope_config.dart';
 
+/// The destination of the log events of a single level.
+///
+/// {@category debug}
 typedef ScopeLogPublisher = CustomLogPublisher<ScopeLog>;
+
+/// A [ScopeLogPublisher] that converts a [ScopeLog] into an [Out] and passes
+/// the result to its output function.
+///
+/// {@category debug}
 typedef ScopeLogFormatter<Out extends Object?>
     = CustomLogFormatter<ScopeLog, Out>;
 
 final ScopeLogger log = ScopeConfig.logger;
 
+/// The logging level thresholds used by the package.
+///
+/// {@category debug}
 abstract final class ScopeLogLevel {
   static const off = Levels.off;
   static const verbose = Levels.verbose;
@@ -15,12 +26,21 @@ abstract final class ScopeLogLevel {
   static const all = Levels.all;
 }
 
+/// The signature of the logging methods of a [ScopeLogger].
+///
+/// The message is evaluated lazily: a function passed as the `message` is only
+/// called when the level is enabled.
+///
+/// {@category debug}
 typedef ScopeLogFn = bool Function(
   Object? message, {
   Object? error,
   StackTrace? stackTrace,
 });
 
+/// A single log event produced by a [ScopeLogger].
+///
+/// {@category debug}
 final class ScopeLog extends CustomLog {
   final DateTime timestamp;
   final LazyString _lazyPath;
@@ -40,6 +60,12 @@ final class ScopeLog extends CustomLog {
   String? get message => _lazyMessage.value;
 }
 
+/// The logger of one level of a [ScopeLogger], available as
+/// `ScopeConfig.logger[level]`.
+///
+/// Holds that level's name and its [publisher].
+///
+/// {@category debug}
 final class ScopeLevelLogger extends CustomLevelLogger<ScopeLogger,
     ScopeLevelLogger, ScopeLogFn, ScopeLog> {
   ScopeLevelLogger({required super.level, required super.name, super.shortName})
@@ -67,6 +93,12 @@ final class ScopeLevelLogger extends CustomLevelLogger<ScopeLogger,
       };
 }
 
+/// The logger of the package, rooted at `ScopeConfig.logger`.
+///
+/// Logging is off until a threshold is assigned to `level`. Sub-loggers created
+/// with [withAddedName] extend the [path] that every [ScopeLog] carries.
+///
+/// {@category debug}
 final class ScopeLogger
     extends CustomLogger<ScopeLogger, ScopeLevelLogger, ScopeLogFn, ScopeLog> {
   final LazyString _lazyPath;

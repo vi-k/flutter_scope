@@ -23,3 +23,9 @@
 - Тест-инфра: Stream.error(...) как init-стрим не доходит до модели под AutomatedTestWidgetsFlutterBinding (state остаётся Waiting), в plain test() работает — возможно, скрывает проблему планирования в _performAsyncInit.
 - ScopeDependencyGroup.init(): та же empty-set дыра, что была в dispose (guard добавлен в 0.10.0, отдельного теста нет).
 - LiteScope: markNeedsBuild при _shouldOnlyNotify может не перемонтировать ScreenshotReplacer после notifyDependents+close — 'mounted && Ready' необходимое, но не достаточное условие рендера buildOnReady (pre-existing, воспроизведено ревью Task 8).
+
+Документация:
+- заполнить оставшиеся 7 заглушек doc/*.md: a_base, b_scope_widget, c_scope_model, d_scope_notifier, e_async_scope, f_async_data_scope, g_lite_scope (h_scope и i_debug написаны в 0.10.0).
+- скриншоты для pub.dev: секция `screenshots:` в pubspec.yaml отсутствует.
+- перевести русские комментарии в lib/ на английский: 107 строк в 9 файлах, из них 80 — dartdoc (`///`), т.е. попадают в публичную документацию.
+- в категорию Scope не попадают `ScopeState`, `ScopeDependencyException`, `ScopeDependencyInfo`, `DepHelper`, `ScopeDependenciesExtension`, `ScopeDependencyExtension` — у них нет `{@category Scope}` (аналогично проверить остальные 8 категорий).
