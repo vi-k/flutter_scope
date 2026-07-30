@@ -12,6 +12,14 @@ typedef ScopeLogPublisher = CustomLogPublisher<ScopeLog>;
 typedef ScopeLogFormatter<Out extends Object?>
     = CustomLogFormatter<ScopeLog, Out>;
 
+/// Rewrites a [ScopeLog] before it reaches the publisher, or drops it by
+/// returning `null`.
+///
+/// Assign one to [ScopeLogger.transformer].
+///
+/// {@category debug}
+typedef ScopeLogTransformer = LogTransformer<ScopeLog>;
+
 final ScopeLogger log = ScopeConfig.logger;
 
 /// The logging level thresholds used by the package.
@@ -79,7 +87,7 @@ final class ScopeLevelLogger extends CustomLevelLogger<ScopeLogger,
 
   @override
   ScopeLogFn get processLog => (message, {error, stackTrace}) {
-        publisher.publish(
+        publishLog(
           ScopeLog(
             this,
             path: logger._lazyPath,

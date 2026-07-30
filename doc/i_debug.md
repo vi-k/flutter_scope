@@ -94,6 +94,23 @@ level is enabled — which is why the calls inside the package look like
 `ScopeLevelLogger` is the object behind `ScopeConfig.logger[level]`: it holds
 that level's `name`, `shortName`, and `publisher`.
 
+### Filtering and rewriting
+
+A transformer runs on every log of every level just before it is published.
+Returning `null` drops the log, which is how noisy paths are filtered out
+without turning the level off:
+
+```dart
+ScopeConfig.logger.transformer = (log) =>
+    log.path.contains('AnimationScope') ? null : log;
+```
+
+Its signature is `ScopeLogTransformer`. Sub-loggers inherit the transformer the
+same way they inherit `level` and publishers, so assigning one on
+`ScopeConfig.logger` covers the whole package. A transformer that throws drops
+the log rather than publishing it untransformed, and reports the error to the
+current zone.
+
 ### Per-level colors
 
 The pattern used by both example applications — one ANSI printer per level:

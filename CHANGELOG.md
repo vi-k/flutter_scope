@@ -1,5 +1,8 @@
 ## 0.10.0
 
+* Upgrade logger_builder to 0.5.0: logs are published through `publishLog`, so
+  `ScopeConfig.logger.transformer` can now rewrite or drop them. Add the
+  `ScopeLogTransformer` typedef and document it on the `debug` page.
 * [breaking changes] Unify dependency path format: no leading `/` in
   `ScopeDependencyException.name`, `ScopeDependencyInfo.path` and progress
   paths; anonymous groups add no separator.
