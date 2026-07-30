@@ -20,6 +20,9 @@
   `ScreenshotReplacer` completing early and leaking `ui.Image`.
 * Fix a double close() race in LiteScope orphaning the screenshot barrier;
   cap ScreenshotReplacer retries (new public ScreenshotReplacer.maxRetries).
+* Fix the closing screenshot never being taken in release and profile builds:
+  the `debugNeedsPaint` pre-check is now assert-gated, so it no longer throws
+  a `LateInitializationError` on every `close()`.
 * Guard the Ready-state model update against running after disposal has
   started (an element closed via close() stays mounted while its model is
   being disposed of).

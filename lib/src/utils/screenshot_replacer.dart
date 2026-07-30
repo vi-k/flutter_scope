@@ -74,43 +74,74 @@ class _ScreenshotReplacerState extends State<ScreenshotReplacer> {
     widget.onCompleted();
   }
 
+  /// Schedules one more capture attempt on the next frame, or gives up once
+  /// [ScreenshotReplacer.maxRetries] attempts have been spent.
+  ///
+  /// Retrying does not report completion: the screenshot does not exist yet,
+  /// so whoever waits for it must keep waiting. Giving up does, so that the
+  /// caller is never left waiting forever; an [error] that survived every
+  /// retry is reported once, non-fatally — the screenshot is an embellishment,
+  /// and failing to take it must not bring the application down.
+  void _retryOrGiveUp({Object? error, StackTrace? stackTrace}) {
+    if (_retries >= ScreenshotReplacer.maxRetries) {
+      if (error != null) {
+        FlutterError.reportError(
+          FlutterErrorDetails(
+            exception: error,
+            stack: stackTrace,
+            library: 'scopo',
+            context: ErrorDescription('while capturing a screenshot'),
+          ),
+        );
+      }
+      _reportCompleted();
+
+      return;
+    }
+    _retries++;
+
+    WidgetsBinding.instance
+      ..scheduleFrame()
+      ..addPostFrameCallback((_) => _capture());
+  }
+
   Future<void> _capture() async {
     if (!mounted) return;
 
+    final boundary =
+        _globalKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+
+    // [RenderObject.debugNeedsPaint] only holds a value while asserts are
+    // enabled, so this pre-check exists in debug builds alone. In release and
+    // profile builds a boundary that has not been painted yet is detected by
+    // [RenderRepaintBoundary.toImage] failing below, and is retried the same
+    // way.
+    var needsPaint = false;
+    assert(() {
+      needsPaint = boundary?.debugNeedsPaint ?? false;
+
+      return true;
+    }());
+
+    if (boundary == null || needsPaint) {
+      // The boundary is not attached or not painted yet, which may happen if
+      // the child is not ready by the end of the frame.
+      _retryOrGiveUp();
+
+      return;
+    }
+
     final ui.Image image;
     try {
-      final boundary = _globalKey.currentContext?.findRenderObject()
-          as RenderRepaintBoundary?;
-
-      if (boundary == null || boundary.debugNeedsPaint) {
-        if (_retries >= ScreenshotReplacer.maxRetries) {
-          // The child is never going to be painted, so there will be no
-          // screenshot: report completion and stop, instead of rescheduling
-          // (and requesting frames) forever.
-          _reportCompleted();
-          return;
-        }
-        _retries++;
-
-        // The boundary is not attached or not painted yet, which may happen if
-        // the child is not ready by the end of the frame. Retry on the next
-        // frame *without* reporting completion: the screenshot does not exist
-        // yet, so whoever waits for it must keep waiting.
-        WidgetsBinding.instance
-          ..scheduleFrame()
-          ..addPostFrameCallback((_) => _capture());
-        return;
-      }
-
       image = await boundary.toImage(
         pixelRatio: MediaQuery.of(context).devicePixelRatio,
       );
-    } on Object {
-      // There will be no screenshot at all, so nobody may be left waiting for
-      // one. Note that this also covers `debugNeedsPaint` itself, which throws
-      // when asserts are disabled.
-      _reportCompleted();
-      rethrow;
+    } on Object catch (error, stackTrace) {
+      // In release and profile builds this is what a not-yet-painted boundary
+      // looks like, so it is retried rather than reported at once.
+      _retryOrGiveUp(error: error, stackTrace: stackTrace);
+
+      return;
     }
 
     if (!mounted) {

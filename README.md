@@ -22,9 +22,8 @@ order — after its child scopes are gone.
 - **Selective rebuilds**: `select` and `selectParam` subscribe a descendant to a
   single value; `notifyDependents` rebuilds only those descendants, never the
   scope's own subtree.
-- **Graceful closing**: `close()` freezes the subtree as a screenshot (debug
-  builds only, best-effort) and shows `buildOnClosing` while the asynchronous
-  disposal is running.
+- **Graceful closing**: `close()` freezes the subtree as a screenshot and shows
+  `buildOnClosing` while the asynchronous disposal is running.
 - **Specialized scopes**: lightweight variants for widget parameters, plain
   models, `Listenable`s, and for async work that needs no dependency container.
 - **Logging**: a built-in level logger with pluggable formatting and output.
@@ -447,9 +446,10 @@ void main() {
 - `ProgressIterator` — step counting (`1/3`, `2/3`, …) for initialization
   progress.
 - `ScreenshotReplacer` — renders a subtree once, then replaces it with the
-  captured image; used to keep the last frame while a scope is closing
-  (currently only succeeds in debug builds; elsewhere `buildOnClosing` renders
-  over the live subtree instead).
+  captured image; used to keep the last frame while a scope is closing. A
+  subtree that is never painted cannot be captured, so the attempt is bounded
+  by `ScreenshotReplacer.maxRetries`, after which `buildOnClosing` renders over
+  the live subtree instead.
 
 ## Examples
 

@@ -37,7 +37,7 @@ What the scope shows, and what it calls, in order:
 | a `ScopeProgress` arrived                                 | `buildOnInitializing(context, progress)`                                      |
 | `ScopeReady` arrived                                      | `wrapState` around the `build` of the state from `createState`                 |
 | the stream failed                                         | `buildOnError(context, error, stackTrace, progress)`                          |
-| `close()` is running                                      | `buildOnClosing`, over a frozen screenshot of the ready subtree when one can be taken (debug builds only) |
+| `close()` is running                                      | `buildOnClosing`, over a frozen screenshot of the ready subtree when one can be taken |
 
 `wrapState` wraps the ready branch only, so a widget that every branch needs (a
 `MaterialApp`, typically) is built inside each builder instead.
@@ -267,10 +267,11 @@ ready subtree is frozen into a screenshot, `buildOnClosing` is shown on top of
 it, and the returned future completes when the disposal is done. It is the way
 to run "closing…" UI for a scope whose disposal takes a noticeable amount of
 time, instead of freezing on the last frame. Taking the screenshot is
-best-effort and currently only works in debug builds; when it fails,
-`buildOnClosing` still runs, but over the live subtree instead of a frozen one.
-The failure is not silent: the capture reports the error to the current zone,
-so release and profile builds log one per `close()`.
+best-effort: a subtree that is never painted — one inside an `Offstage`, or in
+the unselected branch of an `IndexedStack` — cannot be captured. The attempt is
+bounded by `ScreenshotReplacer.maxRetries` frames, after which `close()`
+proceeds and `buildOnClosing` runs over the live subtree instead of a frozen
+one.
 
 ## Access from the subtree
 
