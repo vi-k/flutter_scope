@@ -167,8 +167,8 @@ final class ScopeDependencyDisposed extends ScopeDependencySuccessStates {
 }
 
 /// {@category Scope}
-final class ScopeDependencyNoDisposalRequred extends ScopeDependencyDisposed {
-  const ScopeDependencyNoDisposalRequred();
+final class ScopeDependencyNoDisposalRequired extends ScopeDependencyDisposed {
+  const ScopeDependencyNoDisposalRequired();
 
   @override
   String get description => 'no disposal required';

@@ -21,7 +21,6 @@ final class _ScopeDependencyImpl with ScopeDependencyMixin {
   @override
   Stream<String> init() async* {
     final helper = _helper = DepHelper._(this);
-    _helper = helper;
     final result = _init(helper);
     if (result is Future<void>) {
       await result;
