@@ -159,6 +159,25 @@ abstract base class LiteScopeElementBase<
   }
 
   @override
+  @mustCallSuper
+  void dispose() {
+    // The element is leaving the tree, so [buildOnReady] will never run again
+    // and the [ScreenshotReplacer] that releases the screenshot barrier will
+    // never be mounted (or is being unmounted right now). Release the barrier
+    // here, otherwise an in-flight [close] would wait for it forever.
+    _completeScreenshot();
+    super.dispose();
+  }
+
+  /// Releases the screenshot barrier awaited by [_performAsyncDispose].
+  void _completeScreenshot() {
+    if (_screenshotCompleter case final screenshotCompleter?
+        when !screenshotCompleter.isCompleted) {
+      screenshotCompleter.complete();
+    }
+  }
+
+  @override
   bool get autoSelfDependence => _autoSelfDependence;
 
   @override
@@ -183,14 +202,10 @@ abstract base class LiteScopeElementBase<
 
     return switch (_screenshotCompleter) {
       null => child,
-      final screenshotCompleter => Stack(
+      _ => Stack(
           children: [
             ScreenshotReplacer(
-              onCompleted: () {
-                if (!screenshotCompleter.isCompleted) {
-                  screenshotCompleter.complete();
-                }
-              },
+              onCompleted: _completeScreenshot,
               child: child,
             ),
             Positioned.fill(
@@ -239,7 +254,15 @@ abstract base class LiteScopeElementBase<
   /// Allows displaying a scope closing screen, optionally replacing the
   /// internal widget with a screenshot.
   Future<void> close() async {
-    _screenshotCompleter = Completer<void>();
+    // The screenshot barrier is released by the [ScreenshotReplacer] that
+    // [buildOnReady] mounts, and [buildOnState] only calls [buildOnReady] for
+    // [AsyncScopeReady]. In any other state -- or when the element is no
+    // longer in the tree -- nothing would ever release the barrier, so
+    // installing it would make this future hang forever.
+    if (mounted && state is AsyncScopeReady) {
+      _screenshotCompleter = Completer<void>();
+    }
+
     await _performAsyncDispose();
   }
 }
