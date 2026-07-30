@@ -170,6 +170,7 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
 
     // Register with parent scope.
     SchedulerBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       _registerWithParent();
     });
 
@@ -229,6 +230,7 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
             SchedulerBinding.instance
               ..scheduleFrame()
               ..addPostFrameCallback((_) {
+                if (!mounted) return;
                 _model.update(state);
               });
           }
