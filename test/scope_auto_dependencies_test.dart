@@ -117,6 +117,31 @@ final class TestDependenciesAnonNested
   String toString() => '$TestDependenciesAnonNested';
 }
 
+final class TestDependenciesConcurrentNoDispose
+    extends ScopeAutoDependencies<TestDependenciesConcurrentNoDispose, void> {
+  static const step = Duration(milliseconds: 10);
+
+  FutureOr<void> Function(DepHelper) initDep(Duration delay) => (dep) async {
+        _log.v(() => 'init: ${dep.name} delay');
+        await Future<void>.delayed(delay);
+        _log.v(() => 'init: ${dep.name} after delay');
+        // Намеренно НЕ назначаем dep.dispose: ни одна из зависимостей не
+        // требует disposal, поэтому у concurrent-группы при dispose()
+        // набор стримов для объединения оказывается пустым.
+      };
+
+  // Корневая группа — сама concurrent, чтобы dispose() концентрированной
+  // группы вызывался напрямую из ScopeAutoDependencies.dispose().
+  @override
+  ScopeDependency buildDependencies(_) => concurrent('g', [
+        dep('depA', initDep(step)),
+        dep('depB', initDep(step)),
+      ]);
+
+  @override
+  String toString() => '$TestDependenciesConcurrentNoDispose';
+}
+
 /// Копия логики `handleInit()` (см. группу `TestDependencies` ниже),
 /// параметризованная экземпляром зависимостей и `MyFakeAsync`, чтобы её можно
 /// было переиспользовать в других группах тестов этого файла.
@@ -1325,6 +1350,27 @@ void main() {
           // вложенности безымянных групп.
           ['', 'depA', '', 'depB'],
         );
+      });
+    });
+  });
+
+  group('concurrent group with empty stream set', () {
+    test('dispose completes when no child requires disposal', () {
+      final dependencies = TestDependenciesConcurrentNoDispose();
+      myFakeAsync((async) {
+        handleInitFor(dependencies, async);
+        expect(dependencies.root.isInitialized, isTrue);
+
+        // Ни depA, ни depB не назначили dep.dispose, поэтому у
+        // concurrent-группы 'g' при dispose() список стримов для
+        // объединения пуст. До фикса _mergeStreams() никогда не вызывает
+        // controller.close() на пустом наборе, и dispose() зависает
+        // навсегда — флаг disposed так и останется false.
+        var disposed = false;
+        unawaited(dependencies.dispose().then((_) => disposed = true));
+        async.flushMicrotasks();
+
+        expect(disposed, isTrue);
       });
     });
   });
