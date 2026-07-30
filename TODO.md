@@ -1,6 +1,5 @@
 # TODO
 
-- Update README!!!
 - ScopeAutoDependenciesProgress - добавить name (а name переименовать в path)
 - Описать все примеры.
 - Написать нормальную документацию.
