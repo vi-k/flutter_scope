@@ -362,16 +362,17 @@ class DatabaseGate extends StatelessWidget {
 
 ### LiteScope
 
-`Scope` without the dependency container: the state is created immediately and
-gets the full scope lifecycle — `initAsync`, `disposeAsync`, `notifyDependents`,
-`close`, `scopeKey`, and waiting for child scopes. A good fit for per-screen
-state that owns disposable objects.
+`Scope` without the dependency container: the state is created without an async
+dependency phase, and still gets the full scope lifecycle — `initAsync`,
+`disposeAsync`, `notifyDependents`, `close`, `scopeKey`, and waiting for child
+scopes. A good fit for per-screen state that owns disposable objects.
 
 ```dart
 final class ScreenScope extends LiteScope<ScreenScope, ScreenScopeState> {
   const ScreenScope({super.key, super.scopeKey});
 
-  /// Shown while waiting for [scopeKey] to be released.
+  /// Shown on the first frames, and while waiting for [scopeKey]. Returning
+  /// `null` here requires overriding [buildOnInitializing].
   @override
   Widget? buildOnWaiting(BuildContext context) => const SizedBox.shrink();
 
