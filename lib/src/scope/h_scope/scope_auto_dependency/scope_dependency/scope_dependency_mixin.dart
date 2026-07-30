@@ -10,26 +10,23 @@ mixin ScopeDependencyMixin implements ScopeDependency {
   ScopeDependencyState get state => _state;
   ScopeDependencyState _state = const ScopeDependencyInitial();
 
-  /// Автоматизация процесса инициализации.
+  /// Automates the initialization process.
   ///
-  /// Метод запускает [init], обрабатывает ошибки и устанавливает
-  /// соответствующее состояние.
+  /// Runs [init], handles the errors and sets the matching state.
   ///
-  /// Инициализация завершается успешно не в случае отсутствия ошибок, а только
-  /// тогда, когда генератор НЕ БУДЕТ ОТМЕНЁН. Т.е. инициатор может НЕ ПРЕРВАТЬ
-  /// стрим в случае ошибки, и тогда иницализация формально завершится
-  /// состоянием [ScopeDependencyInitialized]. А может прервать стрим без
-  /// какой-либо ошибки, и тогда иницализация завершится состоянием
-  /// [ScopeDependencyCancelled].
+  /// Initialization succeeds not when there are no errors, but only when the
+  /// generator IS NOT CANCELLED. That is, the initiator may leave the stream
+  /// running after an error, and the initialization then formally ends in
+  /// [ScopeDependencyInitialized]; or it may end the stream without any error
+  /// at all, and the initialization then ends in [ScopeDependencyCancelled].
   ///
-  /// [init] может передать несколько ошибок, т.к. за ней может скрываться не
-  /// одна зависимость, а группа зависимостей. Ранее обработанные ошибки, т.е.
-  /// ошибки дочерних зависимостей игнорируются. Ошибки текущей зависимости
-  /// приводят к состоянию [ScopeDependencyFailed] и оборачиваются в
-  /// [ScopeDependencyException] для передачи в таком виде дальше. Но в этом
-  /// случае сохраняется в состоянии только первая ошибка, т.к. предполагается,
-  /// что конкретной зависимости нет необходимости генерировать несколько
-  /// ошибок.
+  /// [init] may report several errors, because a group of dependencies rather
+  /// than a single one can hide behind it. Errors that were already handled,
+  /// that is the errors of the child dependencies, are ignored. An error of
+  /// this dependency leads to [ScopeDependencyFailed] and is wrapped into a
+  /// [ScopeDependencyException] to be passed on in that form. Only the first
+  /// such error is kept in the state, on the assumption that one dependency
+  /// has no reason to report several.
   @override
   Stream<String> runInit() async* {
     assert(_state is ScopeDependencyInitial);
@@ -44,7 +41,7 @@ mixin ScopeDependencyMixin implements ScopeDependency {
         _state = const ScopeDependencyInitialized();
       }
     } finally {
-      // Ловим отмену.
+      // Catch the cancellation.
       if (_state is ScopeDependencyInitial) {
         _state = ScopeDependencyCancelled();
       }
@@ -63,7 +60,7 @@ mixin ScopeDependencyMixin implements ScopeDependency {
         _state = const ScopeDependencyDisposed();
       }
     } finally {
-      // Ловим отмену.
+      // Catch the cancellation.
       if (_state is ScopeDependencyInitialized) {
         _state = ScopeDependencyDisposalCancelled();
       }
@@ -93,14 +90,15 @@ mixin ScopeDependencyMixin implements ScopeDependency {
   ) {
     _log.d(() => '[handleError] $wrappedName', error: error);
 
-    // Добавляем ошибку в состояние.
+    // Add the error to the state.
     _addErrorToState(error, stackTrace, defaultState);
 
-    // Отправляем ошибку дальше.
+    // Pass the error on.
     if (error is ScopeDependencyException) {
-      // Передаём ошибку, добавляя в путь к ней имя текущей зависимости.
-      // Безымянная группа (name == '') не добавляет собственный сегмент и
-      // разделитель, иначе путь получал бы ведущий или задвоенный '/'.
+      // Pass the error on, prefixing its path with the name of this
+      // dependency. An anonymous group (name == '') adds neither its own
+      // segment nor a separator, otherwise the path would gain a leading or
+      // a doubled '/'.
       Error.throwWithStackTrace(
         ScopeDependencyException(
           name.isEmpty ? error.name : '$name/${error.name}',
@@ -110,7 +108,7 @@ mixin ScopeDependencyMixin implements ScopeDependency {
         stackTrace,
       );
     } else {
-      // Свои ошибки оборачиваем, чтобы передать наверх имя.
+      // Wrap our own errors so that the name is passed upwards.
       Error.throwWithStackTrace(
         ScopeDependencyException(name, error, stackTrace),
         StackTrace.empty,
@@ -141,7 +139,7 @@ mixin ScopeDependencyMixin implements ScopeDependency {
       return;
     }
 
-    // Добавляем ошибку в состояние.
+    // Add the error to the state.
     _addErrorToState(error, stackTrace, defaultState);
   }
 

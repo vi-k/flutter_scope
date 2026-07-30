@@ -122,7 +122,7 @@ final class _ScopeDependencyConcurrent extends ScopeDependencyGroup {
 }
 
 extension<T> on Iterable<Stream<T>> {
-  /// Объединяет потоки в один, запуская их параллельно.
+  /// Merges the streams into one, running them in parallel.
   Stream<T> _mergeStreams() {
     final controller = StreamController<T>(sync: true);
 
@@ -140,10 +140,9 @@ extension<T> on Iterable<Stream<T>> {
         subscriptions.add(subscription);
       }
 
-      // Обработчики onDone навешиваются только после того, как список
-      // subscriptions полностью заполнен: иначе синхронно завершившийся
-      // стрим может вызвать onDone раньше, чем его подписка попадёт в
-      // список, и controller.close() отработает преждевременно.
+      // The onDone handlers are attached only after `subscriptions` is fully
+      // populated, so that no handler can ever observe a partially filled list
+      // and close the controller prematurely.
       for (final subscription in subscriptions) {
         subscription.onDone(() {
           subscriptions.remove(subscription);

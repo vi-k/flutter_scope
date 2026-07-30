@@ -16,11 +16,10 @@ class TestNotifier with Notifier {
 mixin Notifier implements Listenable {
   static final _emptyListeners = List<void Function()?>.filled(0, null);
 
-  /// Список слушателей.
+  /// The list of listeners.
   ///
-  /// Для производительности делаем так, чтобы он всегда был под капотом одного
-  /// типа, чтобы не был growable. Удалять слушателей в первую очередь будем
-  /// через обнуление значения.
+  /// For performance it always keeps the same underlying type and is never
+  /// growable. A listener is removed by nulling out its slot first.
   var _listeners = _emptyListeners;
   var _debugDisposed = false;
   var _count = 0;
@@ -108,11 +107,11 @@ mixin Notifier implements Listenable {
     _notifyingListeners = true;
     final counter = ++_notifyListenersCounter;
 
-    // Во время уведомления может повторно быть вызван notifyListeners.
-    // В этом случае прерываем старый цикл, т.е. новый цикл вызовет и тех,
-    // кого надо уведомить снова, и тех, кого прошлый не успел уведомить.
+    // notifyListeners can be called again while notifying. The old loop is
+    // then interrupted: the new one calls both those that have to be notified
+    // again and those the previous loop did not reach.
     //
-    // Новых подписчиков не уведомляем.
+    // Listeners added during the notification are not notified.
     final count = _count;
     for (var i = 0; i < count; i++) {
       try {

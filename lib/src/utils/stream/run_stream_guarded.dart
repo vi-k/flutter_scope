@@ -2,19 +2,18 @@ import 'dart:async';
 
 import '../../environment/scope_config.dart';
 
-/// Запускает поток в защищённой среде до получения первой ошибки.
+/// Runs a stream in a guarded environment until its first error.
 ///
-/// - Если [streamFactory] выбросит исключение, то оно будет передано в
-///   результирующий поток: функция вернёт [Stream.error].
-/// - Во время работы при получении из потока ошибки обработка завершается:
-///   подписка на поток отменяется, результирующий поток закрывается.
-/// - Все ошибки, полученные после завершения обработки, т.е. после получения
-///   ошибки или после отмены подписки на результирующий поток, будут переданы
-///   в [onPostCancelError].
+/// - If [streamFactory] throws, the exception is passed to the resulting
+///   stream: the function returns a [Stream.error].
+/// - An error coming from the stream ends the processing: the subscription is
+///   cancelled and the resulting stream is closed.
+/// - Every error received after that - after an error, or after the
+///   subscription to the resulting stream is cancelled - is passed to
+///   [onPostCancelError].
 ///
-/// Если поток закроется без ошибки, то [onPostCancelError] не будет вызван.
-/// Если поток закроется с ошибкой, то [onPostCancelError] будет вызван.
-/// Если поток будет отменён, то [onPostCancelError] будет вызван.
+/// [onPostCancelError] is not called when the stream closes without an error,
+/// and is called when the stream closes with one or is cancelled.
 Stream<T> runStreamGuarded<T>(
   Stream<T> Function() streamFactory,
   void Function(Object, StackTrace) onPostCancelError, {
@@ -44,8 +43,8 @@ Stream<T> runStreamGuarded<T>(
     subscription?.resume();
   }
 
-  /// Отменяет все подписки, ждёт их завершения и передаёт возникшие
-  /// ошибки.
+  /// Cancels every subscription, waits for them to finish and forwards the
+  /// errors that occur.
   Future<void> cancel() async {
     l.v('cancel');
 

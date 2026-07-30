@@ -82,12 +82,12 @@ final class AsyncScopeCoordinatorEntry {
 
   bool get isCancelled => _cancelCompleter.isCompleted;
 
-  /// Покинуть очередь.
+  /// Leaves the queue.
   void exit() {
     _checkQueue()._exit(this);
   }
 
-  /// Прервать ожидание доступа.
+  /// Cancels waiting for access.
   void cancel() {
     assert(isWaiting, 'Entry is not waiting');
     if (!_cancelCompleter.isCompleted) {
@@ -152,8 +152,8 @@ final class _AsyncScopeCoordinatorQueue {
       return;
     }
 
-    // Ждем, пока все предыдущие владельцы освободят контроллер,
-    // ИЛИ пока текущий не будет отменён.
+    // Wait until every previous owner releases the controller,
+    // OR until this entry is cancelled.
     entry._isWaiting = true;
     var future = Future.any([
       previous.map((entry) => entry._completer.future).wait,
@@ -164,8 +164,7 @@ final class _AsyncScopeCoordinatorQueue {
       future = future.timeout(timeout);
     }
 
-    // Если вышло время ожидания, то сообщаем об ошибке и разрешаем владельцу
-    // войти.
+    // On timeout, report the error and let the owner in anyway.
     try {
       await future;
     } on TimeoutException catch (error, stackTrace) {

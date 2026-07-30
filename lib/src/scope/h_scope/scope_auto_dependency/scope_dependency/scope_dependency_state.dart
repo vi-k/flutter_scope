@@ -35,7 +35,7 @@ sealed class _ScopeDependencyWithErrors extends ScopeDependencyState {
 
   bool get hasErrors => _errors.isNotEmpty;
 
-  /// Возвращает копию списка ошибок.
+  /// Returns a copy of the error list.
   List<AsyncError> errors() => List.of(_errors);
 
   _ScopeDependencyWithErrors addError(Object error, StackTrace stackTrace);
@@ -174,27 +174,27 @@ final class ScopeDependencyNoDisposalRequired extends ScopeDependencyDisposed {
   String get description => 'no disposal required';
 }
 
-/// Возвращает пустой неизменяемый список.
+/// Returns an empty immutable list.
 ///
-/// Используем эту функцию, чтобы:
-/// 1) предотвратить модификацию списка,
-/// 2) сделать списки внутренне идентичными.
+/// This function exists to:
+/// 1) prevent the list from being modified,
+/// 2) make such lists internally identical.
 List<T> _emptyList<T>() =>
     List<T>.generate(0, (i) => throw UnimplementedError(), growable: false);
 
-/// Возвращает неизменяемый список из одного элемента.
+/// Returns an immutable list of a single element.
 ///
-/// Используем эту функцию, чтобы:
-/// 1) предотвратить модификацию списка,
-/// 2) сделать списки внутренне идентичными.
+/// This function exists to:
+/// 1) prevent the list from being modified,
+/// 2) make such lists internally identical.
 List<T> _singleList<T>(T element) =>
     List<T>.generate(1, (i) => element, growable: false);
 
-/// Возвращает неизменяемый список, содержащий текущий список и новый элемент.
+/// Returns an immutable list holding this list and one more element.
 ///
-/// Используем эту функцию, чтобы:
-/// 1) предотвратить модификацию списка,
-/// 2) сделать списки внутренне идентичными.
+/// This function exists to:
+/// 1) prevent the list from being modified,
+/// 2) make such lists internally identical.
 extension<T> on List<T> {
   List<T> withAdded(T element) => List.generate(
         length + 1,

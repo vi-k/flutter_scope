@@ -68,7 +68,7 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
   AsyncScopeModel get model => _model.asUnmodifiable();
   final _AsyncScopeNotifier _model = _AsyncScopeNotifier();
 
-  /// Обеспечиваем доступ к виджету во время асинхронной утилизации.
+  /// Keeps the widget reachable during the asynchronous disposal.
   @override
   W get widget => _widget ?? super.widget;
   W? _widget;
@@ -162,8 +162,7 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
   @override
   void activate() {
     super.activate();
-    // При перемещении виджета в дереве с помощью GlobalKey,
-    // регистрируемся заново.
+    // Register again when the widget is moved in the tree with a GlobalKey.
     _registerWithParent();
   }
 
@@ -250,7 +249,7 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
               }
             });
           } else {
-            // Делаем так, чтобы последний прогресс успел отобразиться.
+            // Give the last progress value a chance to be displayed.
             SchedulerBinding.instance
               ..scheduleFrame()
               ..addPostFrameCallback((_) {
@@ -297,15 +296,15 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
 
     _log.d('prepare for disposal');
 
-    // Прерываем ожидание доступа, если ещё не завершено.
+    // Cancel waiting for access if it has not finished yet.
     if (_asyncScopeEntry case final entry? when entry.isWaiting) {
       _log.d(() => 'cancel waiting for access to [$scopeKey]');
       entry.cancel();
     }
 
-    // Прерываем инициализацию, если она не завершена.
+    // Cancel the initialization if it has not finished yet.
     if (_subscription case final subscription?) {
-      // TODO(nashol): сюда прилетят ошибки, возникшие уже после отмены
+      // TODO(nashol): errors raised after the cancellation land here
       await subscription.cancel();
       if (!_initCompleter.isCompleted) {
         _log.i('initialization cancelled');

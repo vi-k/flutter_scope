@@ -57,19 +57,18 @@ abstract base class ScopeWidgetElementBase<W extends ScopeWidgetCore<W, E>,
     () => widget.toStringShort(showHashCode: true),
   );
 
-  /// Список зависимостей при подписке элемента на самого себя.
+  /// The dependencies of the element on itself.
   ///
-  /// [InheritedElement] не поддерживает подписку на самого себя (блокируется
-  /// assert-ом в [notifyClients]). Обходим это ограничение через отдельное
-  /// поле.
+  /// [InheritedElement] does not support depending on itself (an assert in
+  /// [notifyClients] blocks it), so self-dependencies are kept in a separate
+  /// field.
   List<_ScopeDependency<E, Object?>>? _selfDependencies;
 
-  /// Флаг, показывающий, что во время перестроения ([performRebuild])
-  /// необходимо только уведомить подписчиков, а не перестраивать поддерево.
+  /// Whether the next rebuild ([performRebuild]) should only notify the
+  /// dependents instead of rebuilding the subtree.
   bool _shouldOnlyNotify = false;
 
-  /// Флаг, показывающий, что элемент должен принудительно перестроиться,
-  /// игнорируя флаг [_shouldOnlyNotify].
+  /// Whether the element must rebuild anyway, ignoring [_shouldOnlyNotify].
   bool _forceRebuild = true;
 
   ScopeWidgetElementBase(W super.widget) {
@@ -99,13 +98,13 @@ abstract base class ScopeWidgetElementBase<W extends ScopeWidgetCore<W, E>,
     List<_ScopeDependency<E, Object?>>? dependencies,
     Object? aspect,
   ) {
-    /// Уже подписались на все изменения.
+    // Already subscribed to every change.
     if (dependencies != null && dependencies.isEmpty) {
       return null;
     }
 
     if (aspect == null) {
-      // Подписываемся на все изменения.
+      // Subscribe to every change.
       return _createDependencies();
     }
 
@@ -195,38 +194,33 @@ abstract base class ScopeWidgetElementBase<W extends ScopeWidgetCore<W, E>,
     super.notifyClients(oldWidget);
   }
 
-  /// Уведомляет подписчиков об изменениях.
+  /// Notifies the dependents of a change.
   ///
-  /// Уведомление работает через метод [didChangeDependencies], который может
-  /// быть запущен только во время построения кадра. Поэтому единственным
-  /// вариантом остаётся принудительное обновление дерева и уведомление
-  /// подписчиков из [performRebuild].
+  /// The notification goes through [didChangeDependencies], which can only run
+  /// while a frame is being built. The only way left is therefore to mark the
+  /// element dirty and notify the dependents from [performRebuild].
   @protected
   void notifyDependents() {
     _shouldOnlyNotify = true;
     markNeedsBuild();
   }
 
-  /// Если мы находимся в режиме только уведомления ([notifyDependents]), но
-  /// элемент параллельно обновляется сверху родителем, то принудительно
-  /// перестраиваем поддерево.
+  /// Rebuilds the subtree anyway when the parent updates the element while a
+  /// notify-only rebuild ([notifyDependents]) is pending.
   @override
   void update(covariant ProxyWidget newWidget) {
     _forceRebuild = true;
     super.update(newWidget);
   }
 
-  /// Суть этого кода в том, чтобы не обновлять всё дерево (не запускать
-  /// [build]), если нужно только уведомить подписчиков об изменениях
-  /// ([notifyDependents]).
+  /// Skips rebuilding the whole subtree (skips [build]) when the dependents
+  /// only have to be notified of a change ([notifyDependents]).
   ///
-  /// Обновление принудительно срабатывает в случаях:
-  /// 1. [autoSelfDependence] - элемент объявил об автоматической подписке на
-  ///    изменения самого себя (используется в инициализаторах на этапах
-  ///    инициализации).
-  /// 2. [_forceRebuild] - принудительное перестроение поддерева, если
-  ///    элемент обновляется родителем или элемент подписался на самого
-  ///    себя.
+  /// The subtree is rebuilt anyway when:
+  /// 1. [autoSelfDependence] - the element declared an automatic dependency on
+  ///    itself (used by initializers during the initialization phases).
+  /// 2. [_forceRebuild] - the subtree must be rebuilt because the parent is
+  ///    updating the element or the element depends on itself.
   @override
   void performRebuild() {
     if (_shouldOnlyNotify) {
