@@ -22,8 +22,9 @@ order — after its child scopes are gone.
 - **Selective rebuilds**: `select` and `selectParam` subscribe a descendant to a
   single value; `notifyDependents` rebuilds only those descendants, never the
   scope's own subtree.
-- **Graceful closing**: `close()` freezes the subtree as a screenshot and shows
-  `buildOnClosing` while the asynchronous disposal is running.
+- **Graceful closing**: `close()` freezes the subtree as a screenshot (debug
+  builds only, best-effort) and shows `buildOnClosing` while the asynchronous
+  disposal is running.
 - **Specialized scopes**: lightweight variants for widget parameters, plain
   models, `Listenable`s, and for async work that needs no dependency container.
 - **Logging**: a built-in level logger with pluggable formatting and output.
@@ -313,7 +314,7 @@ class CounterText extends StatelessWidget {
 Async initialization and disposal without a dependency container: use it when
 the objects are already reachable (a singleton, a repository from a parent
 scope) and only their lifecycle has to be driven by the tree. Descendants can
-read the current state with `AsyncScope.of(context, listen: …)`.
+read the current state with `AsyncScope.of(context, listen: …).state`.
 
 ```dart
 class ConnectionGate extends StatelessWidget {
@@ -446,7 +447,9 @@ void main() {
 - `ProgressIterator` — step counting (`1/3`, `2/3`, …) for initialization
   progress.
 - `ScreenshotReplacer` — renders a subtree once, then replaces it with the
-  captured image; used to keep the last frame while a scope is closing.
+  captured image; used to keep the last frame while a scope is closing
+  (currently only succeeds in debug builds; elsewhere `buildOnClosing` renders
+  over the live subtree instead).
 
 ## Examples
 
@@ -460,5 +463,7 @@ void main() {
 ## Documentation
 
 - [API reference](https://pub.dev/documentation/scopo/latest/)
+- [Scope topic](https://pub.dev/documentation/scopo/latest/topics/Scope-topic.html)
+- [debug topic](https://pub.dev/documentation/scopo/latest/topics/debug-topic.html)
 - [pub.dev package page](https://pub.dev/packages/scopo)
 - [changelog](https://github.com/vi-k/scopo/blob/main/CHANGELOG.md)

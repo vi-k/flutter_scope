@@ -37,7 +37,7 @@ What the scope shows, and what it calls, in order:
 | a `ScopeProgress` arrived                                 | `buildOnInitializing(context, progress)`                                      |
 | `ScopeReady` arrived                                      | `wrapState` around the `build` of the state from `createState`                 |
 | the stream failed                                         | `buildOnError(context, error, stackTrace, progress)`                          |
-| `close()` is running                                      | `buildOnClosing` over a frozen screenshot of the ready subtree                 |
+| `close()` is running                                      | `buildOnClosing`, over a frozen screenshot of the ready subtree when one can be taken (debug builds only) |
 
 `wrapState` wraps the ready branch only, so a widget that every branch needs (a
 `MaterialApp`, typically) is built inside each builder instead.
@@ -212,9 +212,9 @@ sequential('', [
 ```
 
 the paths are `dep1`, `concurrent1/dep2` and `concurrent1/sequential1/dep3`.
-The same strings appear in three places: in
-`ScopeAutoDependenciesProgress.name`, in the `debug` log of the initialization
-and of the disposal, and in `ScopeDependencyException.name`.
+The same strings appear in four places: in `ScopeAutoDependenciesProgress.name`,
+in `ScopeDependencyInfo.path`, in the `debug` log of the initialization and of
+the disposal, and in `ScopeDependencyException.name`.
 
 ## Errors
 
@@ -266,7 +266,9 @@ it is awaited:
 ready subtree is frozen into a screenshot, `buildOnClosing` is shown on top of
 it, and the returned future completes when the disposal is done. It is the way
 to run "closing…" UI for a scope whose disposal takes a noticeable amount of
-time, instead of freezing on the last frame.
+time, instead of freezing on the last frame. Taking the screenshot is
+best-effort and currently only works in debug builds; when it fails,
+`buildOnClosing` still runs, but over the live subtree instead of a frozen one.
 
 ## Access from the subtree
 

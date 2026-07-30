@@ -2,6 +2,22 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:scopo/scopo.dart';
 
 void main() {
+  late int originalLevel;
+  late ScopeLogTransformer? originalTransformer;
+  late ScopeLogPublisher originalDebugPublisher;
+
+  setUp(() {
+    originalLevel = ScopeConfig.logger.level;
+    originalTransformer = ScopeConfig.logger.transformer;
+    originalDebugPublisher = ScopeConfig.logger[ScopeLogLevel.debug].publisher;
+  });
+
+  tearDown(() {
+    ScopeConfig.logger.level = originalLevel;
+    ScopeConfig.logger.transformer = originalTransformer;
+    ScopeConfig.logger[ScopeLogLevel.debug].publisher = originalDebugPublisher;
+  });
+
   test('transformer rewrites and drops logs', () {
     final out = <String>[];
     ScopeConfig.logger.level = ScopeLogLevel.debug;
@@ -29,7 +45,5 @@ void main() {
     ScopeConfig.logger.transformer = null;
     ScopeConfig.logger.d('noisy again');
     expect(out.last, 'scopo|noisy again');
-
-    ScopeConfig.logger.level = ScopeLogLevel.off;
   });
 }

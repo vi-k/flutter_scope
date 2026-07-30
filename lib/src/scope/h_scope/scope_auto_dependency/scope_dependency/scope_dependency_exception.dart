@@ -1,9 +1,10 @@
 part of '../../../scope.dart';
 
 final class ScopeDependencyException implements Exception {
-  /// Путь к зависимости, вызвавшей ошибку, без ведущего слэша.
+  /// The path of the dependency that raised the error, without a leading
+  /// slash.
   ///
-  /// Пустая строка означает ошибку самой безымянной корневой зависимости.
+  /// An empty string means the anonymous root dependency itself failed.
   final String name;
   final Object error;
   final StackTrace stackTrace;

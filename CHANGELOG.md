@@ -1,14 +1,17 @@
 ## 0.10.0
 
-* Upgrade logger_builder to 0.5.0: logs are published through `publishLog`, so
-  `ScopeConfig.logger.transformer` can now rewrite or drop them. Add the
-  `ScopeLogTransformer` typedef and document it on the `debug` page.
+* Upgrade logger_builder to 0.5.0: logs are now published through
+  `publishLog`, so `ScopeConfig.logger.transformer` can now rewrite or drop
+  them. scopo's own API is unaffected, since `ScopeLogPublisher` and
+  `ScopeLogFormatter` are unchanged in 0.5.0. Add the `ScopeLogTransformer`
+  typedef and document it on the `debug` page.
 * [breaking changes] Unify dependency path format: no leading `/` in
   `ScopeDependencyException.name`, `ScopeDependencyInfo.path` and progress
   paths; anonymous groups add no separator.
 * [breaking changes] Remove dead API: `LiteScopeInitState`/`Waiting`/
-  `Progress`/`Ready`, `typeToShortString`; rename
-  `ScopeDependencyNoDisposalRequred` to `ScopeDependencyNoDisposalRequired`.
+  `Progress`/`Ready`; rename `ScopeDependencyNoDisposalRequred` to
+  `ScopeDependencyNoDisposalRequired`.
+* Remove the internal, never-exported `typeToShortString`.
 * Fix infinite recursion in `CompareUtils.identical`.
 * Fix hang in `ScopeAutoDependencies.dispose()` when no dependency requires
   disposal.
@@ -26,8 +29,9 @@
 * Guard AsyncScope post-frame callbacks with `mounted`.
 * Log dependency disposal errors instead of swallowing them.
 * Fix unbalanced parenthesis in `AsyncScopeError.toString()`.
-* Add `repository`, `issue_tracker` and `topics` to pubspec; honest Flutter
-  constraint.
+* Add `repository`, `issue_tracker` and `topics` to pubspec.
+* [breaking changes] Tighten the Flutter constraint to `>=3.16.0` (was
+  `>=1.17.0`), the version the package actually requires.
 * Switch analysis to flutter_lints in the package and demo.
 * Rewrite README; sync the pub.dev example; real `debug`/`Scope` doc pages.
 
