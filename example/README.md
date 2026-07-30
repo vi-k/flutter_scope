@@ -1,18 +1,48 @@
-The minimal example demonstrates a simple counter app where `SharedPreferences`
-is initialized asynchronously before the UI is shown. It handles loading states
-and errors gracefully.
+For a full tour of scopo, see
+[scopo_demo](https://github.com/vi-k/scopo/tree/main/example/scopo_demo) — 9
+interactive demos covering every scope family, nested scopes, `scopeKey`,
+deferred closing, and navigation nodes.
 
-See repository for this example: [minimal](https://github.com/vi-k/scopo/tree/main/example/minimal).
-
-See also another example for a full demo:
-[scopo_demo](https://github.com/vi-k/scopo/tree/main/example/scopo_demo).
+The minimal example below demonstrates a simple counter app where
+`SharedPreferences` is initialized asynchronously before the UI is shown. It
+handles loading states and errors gracefully. Full source on GitHub:
+[minimal](https://github.com/vi-k/scopo/tree/main/example/minimal).
 
 ```dart
+import 'dart:io';
+
+import 'package:ansi_escape_codes/ansi_escape_codes.dart' as ansi;
 import 'package:flutter/material.dart';
 import 'package:scopo/scopo.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  ScopeConfig.logger.level = ScopeLogLevel.info;
+
+  void setLogPrinter(
+    int level,
+    ansi.Color foreground, {
+    ansi.Color? background,
+  }) {
+    final printer = ansi.Printer(
+      ansiCodesEnabled: !Platform.isIOS,
+      defaultStyle: ansi.Style(
+        foreground: foreground,
+        background: background,
+      ),
+    );
+
+    ScopeConfig.logger[level].publisher = ScopeLogFormatter(
+      format: ScopeLogger.defaultFormat,
+      output: printer.print,
+    );
+  }
+
+  setLogPrinter(ScopeLogLevel.verbose, ansi.Color256.gray7);
+  setLogPrinter(ScopeLogLevel.debug, ansi.Color256.gray12);
+  setLogPrinter(ScopeLogLevel.info, ansi.Color256.rgb345);
+  setLogPrinter(ScopeLogLevel.error, ansi.Color256.rgb400);
+
   runApp(App(title: 'scopo minimal demo'));
 }
 
@@ -37,7 +67,7 @@ final class App extends Scope<App, AppDependencies, AppState> {
     required this.title,
   }) : super(pauseAfterInitialization: const Duration(milliseconds: 500));
 
-  /// Метод инициализации зависимостей.
+  /// Dependencies initialization method.
   @override
   Stream<ScopeInitState<String, AppDependencies>> initDependencies(
     BuildContext context,
@@ -104,7 +134,7 @@ final class App extends Scope<App, AppDependencies, AppState> {
     BuildContext context,
     Object error,
     StackTrace stackTrace,
-    Object? progress,
+    covariant String? progress,
   ) =>
       _app(child: ErrorScreen(error: error));
 
@@ -127,7 +157,7 @@ final class App extends Scope<App, AppDependencies, AppState> {
 
 /// [AppDependencies] is the container of dependencies with asynchronous
 /// initialization.
-class AppDependencies implements ScopeDependencies {
+final class AppDependencies implements ScopeDependencies {
   final SharedPreferences sharedPreferences;
 
   AppDependencies({required this.sharedPreferences});
@@ -145,6 +175,9 @@ class AppDependencies implements ScopeDependencies {
 
     yield ScopeReady(AppDependencies(sharedPreferences: sharedPreferences));
   }
+
+  @override
+  void unmount() {}
 
   @override
   Future<void> dispose() async {}

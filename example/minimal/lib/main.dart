@@ -56,7 +56,7 @@ final class App extends Scope<App, AppDependencies, AppState> {
     required this.title,
   }) : super(pauseAfterInitialization: const Duration(milliseconds: 500));
 
-  /// Метод инициализации зависимостей.
+  /// Dependencies initialization method.
   @override
   Stream<ScopeInitState<String, AppDependencies>> initDependencies(
     BuildContext context,
