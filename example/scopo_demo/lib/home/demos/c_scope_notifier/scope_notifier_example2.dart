@@ -88,7 +88,6 @@ final class CounterScopeElement extends ScopeNotifierElementBase<CounterScope,
     CounterScopeElement, CounterModel> {
   final _CounterModelImpl _model = _CounterModelImpl();
 
-  @override
   CounterScopeElement(super.widget);
 
   @override

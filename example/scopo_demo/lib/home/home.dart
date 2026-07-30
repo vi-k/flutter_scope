@@ -15,7 +15,7 @@ import 'demos/e_async_data_scope/async_data_scope_demo.dart';
 import 'demos/f_lite_scope/lite_scope_demo.dart';
 import 'demos/g_scope/scope_demo.dart';
 import 'demos/h_navigation_node/navigation_node_demo.dart';
-import 'demos/i_deffered_closing/deffered_closing_demo.dart';
+import 'demos/i_deferred_closing/deferred_closing_demo.dart';
 import 'home_dependencies.dart';
 
 const _tabs = <(String, Widget)>[
@@ -26,7 +26,7 @@ const _tabs = <(String, Widget)>[
   ('AsyncDataScope', AsyncDataScopeDemo()),
   ('LiteScope', LiteScopeDemo()),
   ('Scope', ScopeDemo()),
-  ('Deffered closing', DefferedClosingDemo()),
+  ('Deferred closing', DeferredClosingDemo()),
   ('NavigationNode', NavigationNodeDemo()),
 ];
 

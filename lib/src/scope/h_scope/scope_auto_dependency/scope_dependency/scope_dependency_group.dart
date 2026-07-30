@@ -127,18 +127,30 @@ extension<T> on Iterable<Stream<T>> {
     final controller = StreamController<T>(sync: true);
 
     controller.onListen = () {
+      if (isEmpty) {
+        controller.close(); // ignore: discarded_futures
+        return;
+      }
+
       final subscriptions = <StreamSubscription<T>>[];
 
       for (final stream in this) {
         final subscription =
             stream.listen(controller.add, onError: controller.addError);
+        subscriptions.add(subscription);
+      }
+
+      // Обработчики onDone навешиваются только после того, как список
+      // subscriptions полностью заполнен: иначе синхронно завершившийся
+      // стрим может вызвать onDone раньше, чем его подписка попадёт в
+      // список, и controller.close() отработает преждевременно.
+      for (final subscription in subscriptions) {
         subscription.onDone(() {
           subscriptions.remove(subscription);
           if (subscriptions.isEmpty) {
             controller.close(); // ignore: discarded_futures
           }
         });
-        subscriptions.add(subscription);
       }
 
       controller

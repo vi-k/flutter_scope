@@ -83,7 +83,7 @@ final class _ScopeNotifierElement<W extends ScopeNotifierBase<W, M>,
   void update(W newWidget) {
     if (widget.value != newWidget.value) {
       widget.value?.removeListener(notifyDependents);
-      newWidget.value?.removeListener(notifyDependents);
+      newWidget.value?.addListener(notifyDependents);
     }
     super.update(newWidget);
   }

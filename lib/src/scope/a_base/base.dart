@@ -4,7 +4,6 @@ part of '../scope.dart';
 abstract base class ScopeInheritedWidget extends InheritedWidget {
   final Object? tag;
 
-  /// saaa
   const ScopeInheritedWidget({
     super.key,
     this.tag,

@@ -99,9 +99,11 @@ mixin ScopeDependencyMixin implements ScopeDependency {
     // Отправляем ошибку дальше.
     if (error is ScopeDependencyException) {
       // Передаём ошибку, добавляя в путь к ней имя текущей зависимости.
+      // Безымянная группа (name == '') не добавляет собственный сегмент и
+      // разделитель, иначе путь получал бы ведущий или задвоенный '/'.
       Error.throwWithStackTrace(
         ScopeDependencyException(
-          '$name/${error.name}',
+          name.isEmpty ? error.name : '$name/${error.name}',
           error.error,
           error.stackTrace,
         ),

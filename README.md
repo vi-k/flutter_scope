@@ -1,215 +1,469 @@
 # scopo
 
-> [!WARNING]
-> README needs updating!
+[![pub version](https://img.shields.io/pub/v/scopo)](https://pub.dev/packages/scopo)
+[![license](https://img.shields.io/github/license/vi-k/scopo)](https://github.com/vi-k/scopo/blob/main/LICENSE)
 
-A robust Flutter package for managing scopes, dependency injection, and state management within the widget tree. `scopo` provides a clean, extensive API for handling dependencies and state with a focus on lifecycle management and async initialization.
+A Flutter package for managing scopes: dependency injection, state, and
+lifecycle inside the widget tree. A scope owns its dependencies, initializes
+them asynchronously, provides them to its subtree, and disposes of them in
+order — after its child scopes are gone.
 
 ## Features
 
-- **Scope Management**: defining scopes that hold dependencies and state.
-- **Dependency Injection**: Access dependencies effortlessly down the widget tree.
-- **State Management**: Built-in state management linked to scopes.
-- **Async Initialization**: Robust handling of async dependency initialization with loading and error states.
-- **Specialized Scopes**: specialized widgets for simple values, models, and listenables.
-- **Selectors**: Efficient rebuilding of widgets by selecting specific parts of state or dependencies.
+- **Scopes**: a widget that owns dependencies and a state and provides both to
+  its descendants.
+- **Async initialization**: initialization is a `Stream`. It reports progress,
+  drives the loading and error branches, and is cancelled if the scope leaves
+  the tree before it completes.
+- **Ordered disposal**: a scope waits for its child scopes to be disposed of
+  before disposing of its own dependencies (`waitForChildrenTimeout`), and
+  `scopeKey` makes a re-created scope wait for the previous scope with the same
+  key.
+- **Selective rebuilds**: `select` and `selectParam` subscribe a descendant to a
+  single value; `notifyDependents` rebuilds only those descendants, never the
+  scope's own subtree.
+- **Graceful closing**: `close()` freezes the subtree as a screenshot (debug
+  builds only, best-effort) and shows `buildOnClosing` while the asynchronous
+  disposal is running.
+- **Specialized scopes**: lightweight variants for widget parameters, plain
+  models, `Listenable`s, and for async work that needs no dependency container.
+- **Logging**: a built-in level logger with pluggable formatting and output.
 
-## Core Concepts
+## Installation
 
-### Scope
-
-The `Scope` widget is the foundation of the package. It manages:
-1.  **Dependencies**: An extended class of `ScopeDependencies`.
-2.  **State**: An extended class of `ScopeState`.
-
-It handles the lifecycle of dependencies (initialization and disposal) and provides them to its descendants.
-
-#### 1. Define Dependencies
-
-Create a class implementing `ScopeDependencies`.
+```sh
+flutter pub add scopo
+```
 
 ```dart
-class AppDependencies implements ScopeDependencies {
+import 'package:scopo/scopo.dart';
+```
+
+## Scope
+
+`Scope` is the main building block. It has three parts:
+
+1. the scope widget (`Scope`) — its constructor parameters are the scope
+   parameters;
+2. a dependency container (`ScopeDependencies`) — initialized asynchronously
+   before the state is created;
+3. a state (`ScopeState`) — the same as `State` of a `StatefulWidget`, but with
+   direct access to the dependencies.
+
+### 1. Dependencies
+
+Implement `ScopeDependencies` and initialize it with a stream generator: this is
+what lets the scope report progress and cancel a half-finished initialization
+when the widget is removed from the tree.
+
+```dart
+final class AppDependencies implements ScopeDependencies {
   final SharedPreferences sharedPreferences;
 
   AppDependencies({required this.sharedPreferences});
 
-  // Initialization logic
   static Stream<ScopeInitState<String, AppDependencies>> init() async* {
-    yield ScopeProgress('Initializing Storage...');
+    yield ScopeProgress('Initializing storage…');
     final sharedPreferences = await SharedPreferences.getInstance();
+
     yield ScopeReady(AppDependencies(sharedPreferences: sharedPreferences));
   }
 
+  /// Called synchronously when the scope is unmounted.
   @override
-  Future<void> dispose() async {
-    // Dipose resources if needed
-  }
+  void unmount() {}
+
+  /// Called after the state has been disposed of. May be asynchronous.
+  @override
+  Future<void> dispose() async {}
 }
 ```
 
-#### 2. Define State
+### 2. State
 
-Create a class extending `ScopeState`.
+Extend `ScopeState`. The dependencies are ready by the time `initState` runs.
+`notifyDependents` updates the subscribed descendants without rebuilding the
+state's own subtree.
 
 ```dart
 final class AppState extends ScopeState<App, AppDependencies, AppState> {
-  int _counter = 0;
+  late int _counter;
   int get counter => _counter;
 
-  void increment() {
+  @override
+  void initState() {
+    super.initState();
+    _counter = dependencies.sharedPreferences.getInt('counter') ?? 0;
+  }
+
+  Future<void> increment() async {
     _counter++;
     notifyDependents();
+    await dependencies.sharedPreferences.setInt('counter', _counter);
   }
 
   @override
-  Widget build(BuildContext context) => HomeScreen();
+  Widget build(BuildContext context) => const HomeScreen();
 }
 ```
 
-#### 3. Create the Scope
+### 3. The scope widget
+
+Extend `Scope` and provide `initDependencies`, `createState`, and the widgets
+for the initializing and error branches. `wrapState` wraps the ready branch
+only, so widgets shared by all branches (such as `MaterialApp`) are usually
+created in each builder.
 
 ```dart
 final class App extends Scope<App, AppDependencies, AppState> {
-  const App({super.key});
+  final String title;
+
+  const App({super.key, required this.title});
 
   @override
-  Stream<ScopeInitState<String, AppDependencies>> init(BuildContext context) =>
+  Stream<ScopeInitState<String, AppDependencies>> initDependencies(
+    BuildContext context,
+  ) =>
       AppDependencies.init();
 
   @override
   AppState createState() => AppState();
 
-  // Initialization UI handlers
   @override
   Widget buildOnInitializing(
     BuildContext context,
     covariant String? progress,
   ) =>
-      const CircularProgressIndicator();
+      MaterialApp(home: Scaffold(body: Center(child: Text(progress ?? ''))));
 
   @override
   Widget buildOnError(
     BuildContext context,
     Object error,
-    StackTrace stack,
+    StackTrace stackTrace,
     covariant String? progress,
   ) =>
-      Text('Error: $error');
+      MaterialApp(home: Scaffold(body: Center(child: Text('$error'))));
 
-  // Helper accessors
+  /// Widgets placed between [App] and [AppState] in the ready branch.
+  @override
+  Widget wrapState(
+    BuildContext context,
+    AppDependencies dependencies,
+    Widget child,
+  ) =>
+      MaterialApp(title: title, home: child);
+
+  /// Access helpers for descendants.
   static AppState of(BuildContext context) =>
       Scope.of<App, AppDependencies, AppState>(context);
 
-  static V select<V>(BuildContext context, V Function(AppState state) selector) =>
+  static V select<V>(
+    BuildContext context,
+    V Function(AppState state) selector,
+  ) =>
       Scope.select<App, AppDependencies, AppState, V>(context, selector);
+
+  static V selectParam<V>(
+    BuildContext context,
+    V Function(App widget) selector,
+  ) =>
+      Scope.selectParam<App, AppDependencies, AppState, V>(context, selector);
 }
 ```
 
-## Specialized Scopes
+### 4. Access from descendants
 
-`scopo` provides lightweight alternatives for specific use cases.
-
-### ScopeWidget
-
-Inject a simple generic value or widget-specific data down the tree.
+`Scope.of` never subscribes — use it for calling methods. To rebuild on
+changes, subscribe to a single value with `select` (state) or `selectParam`
+(scope parameters). `Scope.paramsOf` and `Scope.maybeOf` are available too.
 
 ```dart
-class MyConfig extends ScopeWidgetBase<MyConfig> {
-  final String apiKey;
-  final Widget child;
+class HomeScreen extends StatelessWidget {
+  const HomeScreen({super.key});
 
-  const MyConfig({required this.apiKey, required this.child});
+  @override
+  Widget build(BuildContext context) {
+    // Subscribes to a single value: rebuilt only when `counter` changes.
+    final counter = App.select(context, (state) => state.counter);
+
+    // Subscribes to a scope parameter.
+    final title = App.selectParam(context, (widget) => widget.title);
+
+    return Scaffold(
+      appBar: AppBar(title: Text(title)),
+      body: Center(child: Text('$counter')),
+      floatingActionButton: FloatingActionButton(
+        // Reads the state without subscribing to it.
+        onPressed: () => App.of(context).increment(),
+        child: const Icon(Icons.add),
+      ),
+    );
+  }
+}
+```
+
+## Specialized scopes
+
+Lightweight alternatives for cases where a full `Scope` is too much.
+
+### ScopeWidgetBase
+
+Provides the widget's own parameters to its subtree. Descendants subscribe per
+parameter, so an unrelated parameter change does not rebuild them.
+
+```dart
+final class ApiConfig extends ScopeWidgetBase<ApiConfig> {
+  final String apiKey;
+
+  const ApiConfig({
+    super.key,
+    required this.apiKey,
+    required super.child,
+  });
+
+  static String apiKeyOf(BuildContext context) =>
+      ScopeWidgetBase.select<ApiConfig, String>(
+        context,
+        (widget) => widget.apiKey,
+      );
 
   @override
   Widget build(BuildContext context) => child;
-
-  static MyConfig of(BuildContext context) =>
-      ScopeWidgetBase.of<MyConfig>(context, listen: false);
 }
 ```
 
 ### ScopeModel
 
-Inject a pure Dart class (Model) that doesn't need the full overhead of a `Scope`.
+Owns a plain Dart object: `create` builds it, `dispose` releases it. The model
+is not observable, so descendants are notified when the `ScopeModel` widget
+itself is rebuilt, and a selector then filters out the unchanged values.
+Subclass `ScopeModelBase` to get a named scope with its own static accessors.
 
 ```dart
-class UserModel {
-  final String name;
+class UserGate extends StatelessWidget {
+  const UserGate({super.key});
 
-  UserModel(this.name);
-
-  void dispose() {
-    // Dipose resources if needed
-  }
+  @override
+  Widget build(BuildContext context) => ScopeModel<UserModel>(
+        create: (context) => UserModel('Alice'),
+        dispose: (model) => model.dispose(),
+        builder: (context) => const UserView(),
+      );
 }
 
-// In widget tree
-ScopeModel<UserModel>(
-  create: (context) => UserModel('Alice'),
-  dispose: (model) => model.dispose(),
-  builder: (context) => ConsumerWidget(),
-)
+class UserView extends StatelessWidget {
+  const UserView({super.key});
 
-// Access
-final user = ScopeModel.of<UserModel>(context, listen: true);
+  @override
+  Widget build(BuildContext context) {
+    // Without a subscription:
+    final user = ScopeModel.of<UserModel>(context, listen: false);
+
+    // With a subscription to the selected value:
+    final name = ScopeModel.select<UserModel, String>(
+      context,
+      (model) => model.name,
+    );
+
+    return Text('$name (${user.name})');
+  }
+}
 ```
 
 ### ScopeNotifier
 
-Automatically manage `Listenable`s (like `ChangeNotifier` or `ValueNotifier`).
+The same as `ScopeModel`, but for a `Listenable` (`ChangeNotifier`,
+`ValueNotifier`, …): the scope subscribes to the model and rebuilds the
+descendants whose selected value has changed. `ScopeNotifierBase` is the
+subclassable variant.
 
 ```dart
-class Counter extends ValueNotifier<int> {
-  Counter() : super(0);
+class CounterGate extends StatelessWidget {
+  const CounterGate({super.key});
+
+  @override
+  Widget build(BuildContext context) => ScopeNotifier<Counter>(
+        create: (context) => Counter(),
+        dispose: (counter) => counter.dispose(),
+        builder: (context) => const CounterText(),
+      );
 }
 
-// In widget tree
-ScopeNotifier<Counter>(
-  create: (context) => Counter(),
-  dispose: (model) => model.dispose(),
-  builder: (context) => CounterView(),
-)
+class CounterText extends StatelessWidget {
+  const CounterText({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    // Rebuilt on `notifyListeners`, and only if the selected value changed.
+    final value = ScopeNotifier.select<Counter, int>(
+      context,
+      (counter) => counter.value,
+    );
+
+    return TextButton(
+      onPressed: ScopeNotifier.of<Counter>(context, listen: false).increment,
+      child: Text('$value'),
+    );
+  }
+}
 ```
 
-### ScopeAsyncInitializer
+### AsyncScope
 
-Handle single-shot asynchronous initialization.
+Async initialization and disposal without a dependency container: use it when
+the objects are already reachable (a singleton, a repository from a parent
+scope) and only their lifecycle has to be driven by the tree. Descendants can
+read the current state with `AsyncScope.of(context, listen: …).state`.
 
 ```dart
-ScopeAsyncInitializer<Database>(
-  init: () async => await openDatabase(),
-  buildOnInitializing: (context) => LoadingScreen(),
-  buildOnReady: (context, database) => AppContent(database: database),
-)
+class ConnectionGate extends StatelessWidget {
+  const ConnectionGate({super.key});
+
+  @override
+  Widget build(BuildContext context) => AsyncScope(
+        init: (context) async* {
+          yield AsyncScopeProgress('connecting');
+          await connection.open();
+
+          yield AsyncScopeReady();
+        },
+        dispose: () => connection.close(),
+        initBuilder: (context) => const CircularProgressIndicator(),
+        errorBuilder: (context, error, stackTrace) => Text('$error'),
+        builder: (context) => const HomeScreen(),
+      );
+}
 ```
 
-### ScopeStreamInitializer
+### AsyncDataScope
 
-Handle stream-based initialization, useful for reporting progress during startup.
+`AsyncScope` plus one value: the data produced by `init` is passed to `builder`
+and to `dispose`. Descendants read it with
+`AsyncDataScope.of<Database>(context, listen: false).data`.
 
 ```dart
-ScopeStreamInitializer<AppDeps>(
-  init: () async* {
-    yield ScopeProgress('Loading...');
-    // ... load resources
-    yield ScopeReady(deps);
-  },
-  buildOnInitializing: (context, progress) => LoadingScreen(msg: progress),
-  buildOnReady: (context, deps) => AppHome(),
-)
+class DatabaseGate extends StatelessWidget {
+  const DatabaseGate({super.key});
+
+  @override
+  Widget build(BuildContext context) => AsyncDataScope<Database>(
+        init: (context) async* {
+          yield AsyncDataScopeProgress('opening the database');
+
+          yield AsyncDataScopeReady(await Database.open());
+        },
+        dispose: (database) => database.close(),
+        initBuilder: (context, progress) => Text('$progress'),
+        errorBuilder: (context, error, stackTrace, progress) => Text('$error'),
+        builder: (context, database) => DatabaseView(database: database),
+      );
+}
 ```
 
-## Usage
+### LiteScope
 
-### Accessing Data
-
-You can access the Scope's State or Dependencies using `Scope.of` or static helpers you define.
+`Scope` without the dependency container: the state is created without an async
+dependency phase, and still gets the full scope lifecycle — `initAsync`,
+`disposeAsync`, `notifyDependents`, `close`, `scopeKey`, and waiting for child
+scopes. A good fit for per-screen state that owns disposable objects.
 
 ```dart
-// Get State (listen: true by default)
-final appState = App.of(context);
+final class ScreenScope extends LiteScope<ScreenScope, ScreenScopeState> {
+  const ScreenScope({super.key, super.scopeKey});
 
-// Select specific value to minimize rebuilds
-final counter = App.select(context, (state) => state.counter);
+  /// Shown on the first frames, and while waiting for [scopeKey]. Returning
+  /// `null` here requires overriding [buildOnInitializing].
+  @override
+  Widget? buildOnWaiting(BuildContext context) => const SizedBox.shrink();
+
+  @override
+  ScreenScopeState createState() => ScreenScopeState();
+
+  static ScreenScopeState of(BuildContext context) =>
+      LiteScope.of<ScreenScope, ScreenScopeState>(context);
+}
+
+final class ScreenScopeState
+    extends LiteScopeState<ScreenScope, ScreenScopeState> {
+  final controller = ScrollController();
+
+  /// Awaited before the scope leaves the tree.
+  @override
+  Future<void> disposeAsync() async => controller.dispose();
+
+  @override
+  Widget build(BuildContext context) =>
+      ListView(controller: controller, children: const [Text('item')]);
+}
 ```
+
+Every family above is demonstrated side by side, with a live log of each
+lifecycle call, in the
+[scopo_demo](https://github.com/vi-k/scopo/tree/main/example/scopo_demo) app.
+
+## scopeKey
+
+`scopeKey` serializes scopes that must not overlap: a new scope with the same
+key waits until the previous one has finished disposing of its dependencies.
+It requires an `AsyncScopeCoordinator` above the scopes that use it — the most
+universal place is above `MaterialApp`:
+
+```dart
+AsyncScopeCoordinator(child: MaterialApp(home: HomeScreen()))
+```
+
+## Logging and configuration
+
+Logging is off by default. Levels are `verbose`, `debug`, `info`, `error`, and
+each level has its own publisher, so formatting and output can be replaced per
+level.
+
+```dart
+void main() {
+  ScopeConfig.logger.level = ScopeLogLevel.info;
+
+  ScopeConfig.logger[ScopeLogLevel.debug].publisher = ScopeLogFormatter(
+    format: ScopeLogger.defaultFormat,
+    output: debugPrint,
+  );
+
+  // How long a scope waits for its `scopeKey` and for its children to be
+  // disposed of (3 seconds each by default; `null` means no timeout).
+  ScopeConfig.defaultScopeKeysTimeout = const Duration(seconds: 5);
+  ScopeConfig.defaultWaitForChildrenTimeout = null;
+
+  runApp(const App(title: 'scopo'));
+}
+```
+
+`ScopeConfig.pauseAfterInitializationEnabled = false` disables the artificial
+`pauseAfterInitialization` delays — useful in tests.
+
+## Also in the box
+
+- `NavigationNode` — a nested `Navigator` that keeps dialogs, bottom sheets and
+  pushed screens inside the current scope.
+- `ProgressIterator` — step counting (`1/3`, `2/3`, …) for initialization
+  progress.
+- `ScreenshotReplacer` — renders a subtree once, then replaces it with the
+  captured image; used to keep the last frame while a scope is closing
+  (currently only succeeds in debug builds; elsewhere `buildOnClosing` renders
+  over the live subtree instead).
+
+## Examples
+
+- [minimal](https://github.com/vi-k/scopo/tree/main/example/minimal) — one
+  scope, `SharedPreferences` initialized asynchronously, loading and error
+  screens, a counter.
+- [scopo_demo](https://github.com/vi-k/scopo/tree/main/example/scopo_demo) — a
+  demo of every scope family with a console showing the lifecycle events, plus
+  nested scopes, `scopeKey`, deferred closing, and navigation nodes.
+
+## Documentation
+
+- [API reference](https://pub.dev/documentation/scopo/latest/)
+- [Scope topic](https://pub.dev/documentation/scopo/latest/topics/Scope-topic.html)
+- [debug topic](https://pub.dev/documentation/scopo/latest/topics/debug-topic.html)
+- [pub.dev package page](https://pub.dev/packages/scopo)
+- [changelog](https://github.com/vi-k/scopo/blob/main/CHANGELOG.md)

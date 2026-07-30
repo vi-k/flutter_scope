@@ -22,7 +22,7 @@ abstract base class ScopeAutoDependencies<T extends ScopeDependencies,
   Stream<ScopeInitState<ScopeAutoDependenciesProgress, T>> init(
     C context,
   ) async* {
-    final dependencies = _root ??= this.buildDependencies(context);
+    final dependencies = _root ??= buildDependencies(context);
     final progressIterator = ProgressIterator(dependencies.count);
 
     try {
@@ -66,7 +66,9 @@ abstract base class ScopeAutoDependencies<T extends ScopeDependencies,
       (path) {
         _log.d(path);
       },
-      onError: (Object e) {},
+      onError: (Object error, StackTrace stackTrace) {
+        _log.e('dispose error', error: error, stackTrace: stackTrace);
+      },
       onDone: completer.complete,
       cancelOnError: false,
     );
@@ -103,7 +105,11 @@ abstract base class ScopeAutoDependencies<T extends ScopeDependencies,
     switch (dependency) {
       case ScopeDependencyGroup():
         for (final child in dependency.dependencies) {
-          yield* _extract(child, level + 1, '$path${dependency.name}/');
+          yield* _extract(
+            child,
+            level + 1,
+            dependency.name.isEmpty ? path : '$path${dependency.name}/',
+          );
         }
       case ScopeDependency():
       // no-op

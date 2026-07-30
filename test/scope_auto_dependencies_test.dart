@@ -82,6 +82,108 @@ final class TestDependencies
   String toString() => '$TestDependencies';
 }
 
+final class TestDependenciesAnonNested
+    extends ScopeAutoDependencies<TestDependenciesAnonNested, void> {
+  static const step = Duration(milliseconds: 100);
+
+  final Set<String> failed;
+
+  TestDependenciesAnonNested({this.failed = const {}});
+
+  @override
+  bool get autoDisposeOnError => false;
+
+  FutureOr<void> Function(DepHelper) initDep(Duration delay) => (dep) async {
+        _log.v(() => 'init: ${dep.name} delay');
+        await Future<void>.delayed(delay);
+        _log.v(() => 'init: ${dep.name} after delay');
+        if (failed.contains(dep.name)) {
+          _log.d(() => 'init: ${dep.name} fail');
+          throw Exception('${dep.name} failed');
+        }
+      };
+
+  // Корень и вложенная группа — обе безымянные, чтобы проверить, что
+  // построение пути не добавляет ведущий '/' и не задваивает разделители.
+  @override
+  ScopeDependency buildDependencies(_) => sequential('', [
+        dep('depA', initDep(step)),
+        concurrent('', [
+          dep('depB', initDep(step)),
+        ]),
+      ]);
+
+  @override
+  String toString() => '$TestDependenciesAnonNested';
+}
+
+final class TestDependenciesConcurrentNoDispose
+    extends ScopeAutoDependencies<TestDependenciesConcurrentNoDispose, void> {
+  static const step = Duration(milliseconds: 10);
+
+  FutureOr<void> Function(DepHelper) initDep(Duration delay) => (dep) async {
+        _log.v(() => 'init: ${dep.name} delay');
+        await Future<void>.delayed(delay);
+        _log.v(() => 'init: ${dep.name} after delay');
+        // Намеренно НЕ назначаем dep.dispose: ни одна из зависимостей не
+        // требует disposal, поэтому у concurrent-группы при dispose()
+        // набор стримов для объединения оказывается пустым.
+      };
+
+  // Корневая группа — сама concurrent, чтобы dispose() концентрированной
+  // группы вызывался напрямую из ScopeAutoDependencies.dispose().
+  @override
+  ScopeDependency buildDependencies(_) => concurrent('g', [
+        dep('depA', initDep(step)),
+        dep('depB', initDep(step)),
+      ]);
+
+  @override
+  String toString() => '$TestDependenciesConcurrentNoDispose';
+}
+
+/// Копия логики `handleInit()` (см. группу `TestDependencies` ниже),
+/// параметризованная экземпляром зависимостей и `MyFakeAsync`, чтобы её можно
+/// было переиспользовать в других группах тестов этого файла.
+List<String> handleInitFor<T extends ScopeAutoDependencies<T, void>>(
+  T dependencies,
+  MyFakeAsync async, {
+  Duration? cancel,
+}) {
+  final completer = Completer<void>();
+  final progress = <String>[];
+
+  void errorToBuf(Object error) {
+    progress.add('$error');
+  }
+
+  void stateToBuf(ScopeInitState<ScopeAutoDependenciesProgress, T> state) {
+    _log.withAddedName('handleInitFor').v(() => 'state=$state');
+    progress.add(
+      switch (state) {
+        ScopeProgress(:final progress) => '$progress',
+        ScopeReady(:final dependencies) => '$dependencies',
+      },
+    );
+  }
+
+  final subscription = dependencies //
+      .init(null)
+      .handleError(errorToBuf)
+      .listen(stateToBuf, onDone: completer.complete);
+
+  if (cancel != null) {
+    Future.delayed(cancel, () async {
+      await subscription.cancel();
+      completer.complete();
+    });
+  }
+
+  async.waitFuture(completer.future);
+
+  return progress;
+}
+
 void main() {
   logInit();
 
@@ -161,20 +263,20 @@ void main() {
         final dependencies = TestDependencies();
         final progress = fakeAsync.waitFuture(handleInit(dependencies)).result;
         expect(progress, [
-          '/dep1 (1/10)',
-          '/concurrent1/dep2 (2/10)',
-          '/concurrent1/sequential1/dep3 (3/10)',
-          '/concurrent1/dep4 (4/10)',
-          '/concurrent1/sequential1/concurrent2/dep5 (5/10)',
-          '/concurrent1/sequential1/concurrent2/dep6 (6/10)',
-          '/concurrent1/sequential1/concurrent2/sequential2/dep7 (7/10)',
-          '/concurrent1/sequential1/concurrent2/sequential2/dep8 (8/10)',
-          '/concurrent1/sequential1/dep9 (9/10)',
-          '/dep10 (10/10)',
+          'dep1 (1/10)',
+          'concurrent1/dep2 (2/10)',
+          'concurrent1/sequential1/dep3 (3/10)',
+          'concurrent1/dep4 (4/10)',
+          'concurrent1/sequential1/concurrent2/dep5 (5/10)',
+          'concurrent1/sequential1/concurrent2/dep6 (6/10)',
+          'concurrent1/sequential1/concurrent2/sequential2/dep7 (7/10)',
+          'concurrent1/sequential1/concurrent2/sequential2/dep8 (8/10)',
+          'concurrent1/sequential1/dep9 (9/10)',
+          'dep10 (10/10)',
           'TestDependencies',
         ]);
         expect(states(dependencies), [
-          '[root] initialized',
+          '[group] initialized',
           '  "dep1" initialized',
           '  [concurrent1] initialized',
           '    "dep4" initialized',
@@ -197,7 +299,7 @@ void main() {
 
         fakeAsync.waitFuture(dependencies.dispose());
         expect(states(dependencies), [
-          '[root] disposed',
+          '[group] disposed',
           '  "dep1" disposed',
           '  [concurrent1] disposed',
           '    "dep4" disposed',
@@ -263,9 +365,9 @@ void main() {
           final dependencies = TestDependencies(failed: {'dep1'});
           final progress =
               fakeAsync.waitFuture(handleInit(dependencies)).result;
-          expect(progress, ['/dep1: Exception: dep1 failed']);
+          expect(progress, ['dep1: Exception: dep1 failed']);
           expect(states(dependencies), [
-            '[root] failed: dep1',
+            '[group] failed: dep1',
             '  "dep1" failed: Exception: dep1 failed',
             '  [concurrent1] not initialized',
             '    "dep4" not initialized',
@@ -282,7 +384,7 @@ void main() {
             '  "dep10" not initialized',
           ]);
           expect(failedDependencies(dependencies), [
-            '/dep1 failed: Exception: dep1 failed',
+            'dep1 failed: Exception: dep1 failed',
           ]);
           expect(dependencies.root.state, isA<ScopeDependencyFailed>());
           expect(dependencies.root.isInitialized, false);
@@ -292,7 +394,7 @@ void main() {
 
           fakeAsync.waitFuture(dependencies.dispose());
           expect(states(dependencies), [
-            '[root] disposed',
+            '[group] disposed',
             '  "dep1" failed: Exception: dep1 failed',
             '  [concurrent1] not initialized',
             '    "dep4" not initialized',
@@ -322,11 +424,11 @@ void main() {
           final progress =
               fakeAsync.waitFuture(handleInit(dependencies)).result;
           expect(progress, [
-            '/dep1 (1/10)',
-            '/concurrent1/dep2: Exception: dep2 failed',
+            'dep1 (1/10)',
+            'concurrent1/dep2: Exception: dep2 failed',
           ]);
           expect(states(dependencies), [
-            '[root] failed: concurrent1/dep2',
+            '[group] failed: concurrent1/dep2',
             '  "dep1" initialized',
             '  [concurrent1] failed: dep2',
             '    "dep4" cancelled',
@@ -343,7 +445,7 @@ void main() {
             '  "dep10" not initialized',
           ]);
           expect(failedDependencies(dependencies), [
-            '/concurrent1/dep2 failed: Exception: dep2 failed',
+            'concurrent1/dep2 failed: Exception: dep2 failed',
           ]);
           expect(dependencies.root.state, isA<ScopeDependencyFailed>());
           expect(dependencies.root.isInitialized, false);
@@ -353,7 +455,7 @@ void main() {
 
           fakeAsync.waitFuture(dependencies.dispose());
           expect(states(dependencies), [
-            '[root] disposed',
+            '[group] disposed',
             '  "dep1" disposed',
             '  [concurrent1] disposed',
             '    "dep4" cancelled',
@@ -383,12 +485,12 @@ void main() {
           final progress =
               fakeAsync.waitFuture(handleInit(dependencies)).result;
           expect(progress, [
-            '/dep1 (1/10)',
-            '/concurrent1/dep2 (2/10)',
-            '/concurrent1/sequential1/dep3: Exception: dep3 failed',
+            'dep1 (1/10)',
+            'concurrent1/dep2 (2/10)',
+            'concurrent1/sequential1/dep3: Exception: dep3 failed',
           ]);
           expect(states(dependencies), [
-            '[root] failed: concurrent1/sequential1/dep3',
+            '[group] failed: concurrent1/sequential1/dep3',
             '  "dep1" initialized',
             '  [concurrent1] failed: sequential1/dep3',
             '    "dep4" cancelled',
@@ -405,7 +507,7 @@ void main() {
             '  "dep10" not initialized',
           ]);
           expect(failedDependencies(dependencies), [
-            '/concurrent1/sequential1/dep3 failed: Exception: dep3 failed',
+            'concurrent1/sequential1/dep3 failed: Exception: dep3 failed',
           ]);
           expect(dependencies.root.state, isA<ScopeDependencyFailed>());
           expect(dependencies.root.isInitialized, false);
@@ -415,7 +517,7 @@ void main() {
 
           fakeAsync.waitFuture(dependencies.dispose());
           expect(states(dependencies), [
-            '[root] disposed',
+            '[group] disposed',
             '  "dep1" disposed',
             '  [concurrent1] disposed',
             '    "dep4" cancelled',
@@ -445,13 +547,13 @@ void main() {
           final progress =
               fakeAsync.waitFuture(handleInit(dependencies)).result;
           expect(progress, [
-            '/dep1 (1/10)',
-            '/concurrent1/dep2 (2/10)',
-            '/concurrent1/sequential1/dep3 (3/10)',
-            '/concurrent1/dep4: Exception: dep4 failed',
+            'dep1 (1/10)',
+            'concurrent1/dep2 (2/10)',
+            'concurrent1/sequential1/dep3 (3/10)',
+            'concurrent1/dep4: Exception: dep4 failed',
           ]);
           expect(states(dependencies), [
-            '[root] failed: concurrent1/dep4',
+            '[group] failed: concurrent1/dep4',
             '  "dep1" initialized',
             '  [concurrent1] failed: dep4',
             '    "dep4" failed: Exception: dep4 failed',
@@ -468,7 +570,7 @@ void main() {
             '  "dep10" not initialized',
           ]);
           expect(failedDependencies(dependencies), [
-            '/concurrent1/dep4 failed: Exception: dep4 failed',
+            'concurrent1/dep4 failed: Exception: dep4 failed',
           ]);
           expect(dependencies.root.state, isA<ScopeDependencyFailed>());
           expect(dependencies.root.isInitialized, false);
@@ -478,7 +580,7 @@ void main() {
 
           fakeAsync.waitFuture(dependencies.dispose());
           expect(states(dependencies), [
-            '[root] disposed',
+            '[group] disposed',
             '  "dep1" disposed',
             '  [concurrent1] disposed',
             '    "dep4" failed: Exception: dep4 failed',
@@ -508,14 +610,14 @@ void main() {
           final progress =
               fakeAsync.waitFuture(handleInit(dependencies)).result;
           expect(progress, [
-            '/dep1 (1/10)',
-            '/concurrent1/dep2 (2/10)',
-            '/concurrent1/sequential1/dep3 (3/10)',
-            '/concurrent1/dep4 (4/10)',
-            '/concurrent1/sequential1/concurrent2/dep5: Exception: dep5 failed',
+            'dep1 (1/10)',
+            'concurrent1/dep2 (2/10)',
+            'concurrent1/sequential1/dep3 (3/10)',
+            'concurrent1/dep4 (4/10)',
+            'concurrent1/sequential1/concurrent2/dep5: Exception: dep5 failed',
           ]);
           expect(states(dependencies), [
-            '[root] failed: concurrent1/sequential1/concurrent2/dep5',
+            '[group] failed: concurrent1/sequential1/concurrent2/dep5',
             '  "dep1" initialized',
             '  [concurrent1] failed: sequential1/concurrent2/dep5',
             '    "dep4" initialized',
@@ -532,7 +634,7 @@ void main() {
             '  "dep10" not initialized',
           ]);
           expect(failedDependencies(dependencies), [
-            '/concurrent1/sequential1/concurrent2/dep5 failed: Exception: dep5 failed',
+            'concurrent1/sequential1/concurrent2/dep5 failed: Exception: dep5 failed',
           ]);
           expect(dependencies.root.state, isA<ScopeDependencyFailed>());
           expect(dependencies.root.isInitialized, false);
@@ -542,7 +644,7 @@ void main() {
 
           fakeAsync.waitFuture(dependencies.dispose());
           expect(states(dependencies), [
-            '[root] disposed',
+            '[group] disposed',
             '  "dep1" disposed',
             '  [concurrent1] disposed',
             '    "dep4" disposed',
@@ -572,15 +674,15 @@ void main() {
           final progress =
               fakeAsync.waitFuture(handleInit(dependencies)).result;
           expect(progress, [
-            '/dep1 (1/10)',
-            '/concurrent1/dep2 (2/10)',
-            '/concurrent1/sequential1/dep3 (3/10)',
-            '/concurrent1/dep4 (4/10)',
-            '/concurrent1/sequential1/concurrent2/dep5 (5/10)',
-            '/concurrent1/sequential1/concurrent2/dep6: Exception: dep6 failed',
+            'dep1 (1/10)',
+            'concurrent1/dep2 (2/10)',
+            'concurrent1/sequential1/dep3 (3/10)',
+            'concurrent1/dep4 (4/10)',
+            'concurrent1/sequential1/concurrent2/dep5 (5/10)',
+            'concurrent1/sequential1/concurrent2/dep6: Exception: dep6 failed',
           ]);
           expect(states(dependencies), [
-            '[root] failed: concurrent1/sequential1/concurrent2/dep6',
+            '[group] failed: concurrent1/sequential1/concurrent2/dep6',
             '  "dep1" initialized',
             '  [concurrent1] failed: sequential1/concurrent2/dep6',
             '    "dep4" initialized',
@@ -597,7 +699,7 @@ void main() {
             '  "dep10" not initialized',
           ]);
           expect(failedDependencies(dependencies), [
-            '/concurrent1/sequential1/concurrent2/dep6 failed: Exception: dep6 failed',
+            'concurrent1/sequential1/concurrent2/dep6 failed: Exception: dep6 failed',
           ]);
           expect(dependencies.root.state, isA<ScopeDependencyFailed>());
           expect(dependencies.root.isInitialized, false);
@@ -607,7 +709,7 @@ void main() {
 
           fakeAsync.waitFuture(dependencies.dispose());
           expect(states(dependencies), [
-            '[root] disposed',
+            '[group] disposed',
             '  "dep1" disposed',
             '  [concurrent1] disposed',
             '    "dep4" disposed',
@@ -637,16 +739,16 @@ void main() {
           final progress =
               fakeAsync.waitFuture(handleInit(dependencies)).result;
           expect(progress, [
-            '/dep1 (1/10)',
-            '/concurrent1/dep2 (2/10)',
-            '/concurrent1/sequential1/dep3 (3/10)',
-            '/concurrent1/dep4 (4/10)',
-            '/concurrent1/sequential1/concurrent2/dep5 (5/10)',
-            '/concurrent1/sequential1/concurrent2/dep6 (6/10)',
-            '/concurrent1/sequential1/concurrent2/sequential2/dep7: Exception: dep7 failed',
+            'dep1 (1/10)',
+            'concurrent1/dep2 (2/10)',
+            'concurrent1/sequential1/dep3 (3/10)',
+            'concurrent1/dep4 (4/10)',
+            'concurrent1/sequential1/concurrent2/dep5 (5/10)',
+            'concurrent1/sequential1/concurrent2/dep6 (6/10)',
+            'concurrent1/sequential1/concurrent2/sequential2/dep7: Exception: dep7 failed',
           ]);
           expect(states(dependencies), [
-            '[root] failed: concurrent1/sequential1/concurrent2/sequential2/dep7',
+            '[group] failed: concurrent1/sequential1/concurrent2/sequential2/dep7',
             '  "dep1" initialized',
             '  [concurrent1] failed: sequential1/concurrent2/sequential2/dep7',
             '    "dep4" initialized',
@@ -663,7 +765,7 @@ void main() {
             '  "dep10" not initialized',
           ]);
           expect(failedDependencies(dependencies), [
-            '/concurrent1/sequential1/concurrent2/sequential2/dep7 failed: Exception: dep7 failed',
+            'concurrent1/sequential1/concurrent2/sequential2/dep7 failed: Exception: dep7 failed',
           ]);
           expect(dependencies.root.state, isA<ScopeDependencyFailed>());
           expect(dependencies.root.isInitialized, false);
@@ -673,7 +775,7 @@ void main() {
 
           fakeAsync.waitFuture(dependencies.dispose());
           expect(states(dependencies), [
-            '[root] disposed',
+            '[group] disposed',
             '  "dep1" disposed',
             '  [concurrent1] disposed',
             '    "dep4" disposed',
@@ -703,17 +805,17 @@ void main() {
           final progress =
               fakeAsync.waitFuture(handleInit(dependencies)).result;
           expect(progress, [
-            '/dep1 (1/10)',
-            '/concurrent1/dep2 (2/10)',
-            '/concurrent1/sequential1/dep3 (3/10)',
-            '/concurrent1/dep4 (4/10)',
-            '/concurrent1/sequential1/concurrent2/dep5 (5/10)',
-            '/concurrent1/sequential1/concurrent2/dep6 (6/10)',
-            '/concurrent1/sequential1/concurrent2/sequential2/dep7 (7/10)',
-            '/concurrent1/sequential1/concurrent2/sequential2/dep8: Exception: dep8 failed',
+            'dep1 (1/10)',
+            'concurrent1/dep2 (2/10)',
+            'concurrent1/sequential1/dep3 (3/10)',
+            'concurrent1/dep4 (4/10)',
+            'concurrent1/sequential1/concurrent2/dep5 (5/10)',
+            'concurrent1/sequential1/concurrent2/dep6 (6/10)',
+            'concurrent1/sequential1/concurrent2/sequential2/dep7 (7/10)',
+            'concurrent1/sequential1/concurrent2/sequential2/dep8: Exception: dep8 failed',
           ]);
           expect(states(dependencies), [
-            '[root] failed: concurrent1/sequential1/concurrent2/sequential2/dep8',
+            '[group] failed: concurrent1/sequential1/concurrent2/sequential2/dep8',
             '  "dep1" initialized',
             '  [concurrent1] failed: sequential1/concurrent2/sequential2/dep8',
             '    "dep4" initialized',
@@ -730,7 +832,7 @@ void main() {
             '  "dep10" not initialized',
           ]);
           expect(failedDependencies(dependencies), [
-            '/concurrent1/sequential1/concurrent2/sequential2/dep8 failed: Exception: dep8 failed',
+            'concurrent1/sequential1/concurrent2/sequential2/dep8 failed: Exception: dep8 failed',
           ]);
           expect(dependencies.root.state, isA<ScopeDependencyFailed>());
           expect(dependencies.root.isInitialized, false);
@@ -740,7 +842,7 @@ void main() {
 
           fakeAsync.waitFuture(dependencies.dispose());
           expect(states(dependencies), [
-            '[root] disposed',
+            '[group] disposed',
             '  "dep1" disposed',
             '  [concurrent1] disposed',
             '    "dep4" disposed',
@@ -770,18 +872,18 @@ void main() {
           final progress =
               fakeAsync.waitFuture(handleInit(dependencies)).result;
           expect(progress, [
-            '/dep1 (1/10)',
-            '/concurrent1/dep2 (2/10)',
-            '/concurrent1/sequential1/dep3 (3/10)',
-            '/concurrent1/dep4 (4/10)',
-            '/concurrent1/sequential1/concurrent2/dep5 (5/10)',
-            '/concurrent1/sequential1/concurrent2/dep6 (6/10)',
-            '/concurrent1/sequential1/concurrent2/sequential2/dep7 (7/10)',
-            '/concurrent1/sequential1/concurrent2/sequential2/dep8 (8/10)',
-            '/concurrent1/sequential1/dep9: Exception: dep9 failed',
+            'dep1 (1/10)',
+            'concurrent1/dep2 (2/10)',
+            'concurrent1/sequential1/dep3 (3/10)',
+            'concurrent1/dep4 (4/10)',
+            'concurrent1/sequential1/concurrent2/dep5 (5/10)',
+            'concurrent1/sequential1/concurrent2/dep6 (6/10)',
+            'concurrent1/sequential1/concurrent2/sequential2/dep7 (7/10)',
+            'concurrent1/sequential1/concurrent2/sequential2/dep8 (8/10)',
+            'concurrent1/sequential1/dep9: Exception: dep9 failed',
           ]);
           expect(states(dependencies), [
-            '[root] failed: concurrent1/sequential1/dep9',
+            '[group] failed: concurrent1/sequential1/dep9',
             '  "dep1" initialized',
             '  [concurrent1] failed: sequential1/dep9',
             '    "dep4" initialized',
@@ -798,7 +900,7 @@ void main() {
             '  "dep10" not initialized',
           ]);
           expect(failedDependencies(dependencies), [
-            '/concurrent1/sequential1/dep9 failed: Exception: dep9 failed',
+            'concurrent1/sequential1/dep9 failed: Exception: dep9 failed',
           ]);
           expect(dependencies.root.state, isA<ScopeDependencyFailed>());
           expect(dependencies.root.isInitialized, false);
@@ -808,7 +910,7 @@ void main() {
 
           fakeAsync.waitFuture(dependencies.dispose());
           expect(states(dependencies), [
-            '[root] disposed',
+            '[group] disposed',
             '  "dep1" disposed',
             '  [concurrent1] disposed',
             '    "dep4" disposed',
@@ -838,19 +940,19 @@ void main() {
           final progress =
               fakeAsync.waitFuture(handleInit(dependencies)).result;
           expect(progress, [
-            '/dep1 (1/10)',
-            '/concurrent1/dep2 (2/10)',
-            '/concurrent1/sequential1/dep3 (3/10)',
-            '/concurrent1/dep4 (4/10)',
-            '/concurrent1/sequential1/concurrent2/dep5 (5/10)',
-            '/concurrent1/sequential1/concurrent2/dep6 (6/10)',
-            '/concurrent1/sequential1/concurrent2/sequential2/dep7 (7/10)',
-            '/concurrent1/sequential1/concurrent2/sequential2/dep8 (8/10)',
-            '/concurrent1/sequential1/dep9 (9/10)',
-            '/dep10: Exception: dep10 failed',
+            'dep1 (1/10)',
+            'concurrent1/dep2 (2/10)',
+            'concurrent1/sequential1/dep3 (3/10)',
+            'concurrent1/dep4 (4/10)',
+            'concurrent1/sequential1/concurrent2/dep5 (5/10)',
+            'concurrent1/sequential1/concurrent2/dep6 (6/10)',
+            'concurrent1/sequential1/concurrent2/sequential2/dep7 (7/10)',
+            'concurrent1/sequential1/concurrent2/sequential2/dep8 (8/10)',
+            'concurrent1/sequential1/dep9 (9/10)',
+            'dep10: Exception: dep10 failed',
           ]);
           expect(states(dependencies), [
-            '[root] failed: dep10',
+            '[group] failed: dep10',
             '  "dep1" initialized',
             '  [concurrent1] initialized',
             '    "dep4" initialized',
@@ -867,7 +969,7 @@ void main() {
             '  "dep10" failed: Exception: dep10 failed',
           ]);
           expect(failedDependencies(dependencies), [
-            '/dep10 failed: Exception: dep10 failed',
+            'dep10 failed: Exception: dep10 failed',
           ]);
           expect(dependencies.root.state, isA<ScopeDependencyFailed>());
           expect(dependencies.root.isInitialized, false);
@@ -877,7 +979,7 @@ void main() {
 
           fakeAsync.waitFuture(dependencies.dispose());
           expect(states(dependencies), [
-            '[root] disposed',
+            '[group] disposed',
             '  "dep1" disposed',
             '  [concurrent1] disposed',
             '    "dep4" disposed',
@@ -909,12 +1011,12 @@ void main() {
           final progress =
               fakeAsync.waitFuture(handleInit(dependencies)).result;
           expect(progress, [
-            '/dep1 (1/10)',
-            '/concurrent1/dep2 (2/10)',
-            '/concurrent1/sequential1/dep3: Exception: dep3 failed',
+            'dep1 (1/10)',
+            'concurrent1/dep2 (2/10)',
+            'concurrent1/sequential1/dep3: Exception: dep3 failed',
           ]);
           expect(states(dependencies), [
-            '[root] failed: concurrent1/sequential1/dep3',
+            '[group] failed: concurrent1/sequential1/dep3',
             '  "dep1" initialized',
             '  [concurrent1] failed: sequential1/dep3',
             '    "dep4" cancelled with error: Exception: dep4 failed',
@@ -931,8 +1033,8 @@ void main() {
             '  "dep10" not initialized',
           ]);
           expect(failedDependencies(dependencies), [
-            '/concurrent1/dep4 cancelled with error: Exception: dep4 failed',
-            '/concurrent1/sequential1/dep3 failed: Exception: dep3 failed',
+            'concurrent1/dep4 cancelled with error: Exception: dep4 failed',
+            'concurrent1/sequential1/dep3 failed: Exception: dep3 failed',
           ]);
           expect(dependencies.root.state, isA<ScopeDependencyFailed>());
           expect(dependencies.root.isInitialized, false);
@@ -942,7 +1044,7 @@ void main() {
 
           fakeAsync.waitFuture(dependencies.dispose());
           expect(states(dependencies), [
-            '[root] disposed',
+            '[group] disposed',
             '  "dep1" disposed',
             '  [concurrent1] disposed',
             '    "dep4" cancelled with error: Exception: dep4 failed',
@@ -972,13 +1074,13 @@ void main() {
           final progress =
               fakeAsync.waitFuture(handleInit(dependencies)).result;
           expect(progress, [
-            '/dep1 (1/10)',
-            '/concurrent1/dep2 (2/10)',
-            '/concurrent1/sequential1/dep3 (3/10)',
-            '/concurrent1/dep4: Exception: dep4 failed',
+            'dep1 (1/10)',
+            'concurrent1/dep2 (2/10)',
+            'concurrent1/sequential1/dep3 (3/10)',
+            'concurrent1/dep4: Exception: dep4 failed',
           ]);
           expect(states(dependencies), [
-            '[root] failed: concurrent1/dep4',
+            '[group] failed: concurrent1/dep4',
             '  "dep1" initialized',
             '  [concurrent1] failed: dep4',
             '    "dep4" failed: Exception: dep4 failed',
@@ -995,8 +1097,8 @@ void main() {
             '  "dep10" not initialized',
           ]);
           expect(failedDependencies(dependencies), [
-            '/concurrent1/dep4 failed: Exception: dep4 failed',
-            '/concurrent1/sequential1/concurrent2/sequential2/dep7 cancelled with error: Exception: dep7 failed',
+            'concurrent1/dep4 failed: Exception: dep4 failed',
+            'concurrent1/sequential1/concurrent2/sequential2/dep7 cancelled with error: Exception: dep7 failed',
           ]);
           expect(dependencies.root.state, isA<ScopeDependencyFailed>());
           expect(dependencies.root.isInitialized, false);
@@ -1006,7 +1108,7 @@ void main() {
 
           fakeAsync.waitFuture(dependencies.dispose());
           expect(states(dependencies), [
-            '[root] disposed',
+            '[group] disposed',
             '  "dep1" disposed',
             '  [concurrent1] disposed',
             '    "dep4" failed: Exception: dep4 failed',
@@ -1038,13 +1140,13 @@ void main() {
           final progress =
               fakeAsync.waitFuture(handleInit(dependencies)).result;
           expect(progress, [
-            '/dep1 (1/10)',
-            '/concurrent1/dep2 (2/10)',
-            '/concurrent1/sequential1/dep3 (3/10)',
-            '/concurrent1/dep4: Exception: dep4 failed',
+            'dep1 (1/10)',
+            'concurrent1/dep2 (2/10)',
+            'concurrent1/sequential1/dep3 (3/10)',
+            'concurrent1/dep4: Exception: dep4 failed',
           ]);
           expect(states(dependencies), [
-            '[root] failed: concurrent1/dep4',
+            '[group] failed: concurrent1/dep4',
             '  "dep1" initialized',
             '  [concurrent1] failed: dep4',
             '    "dep4" failed: Exception: dep4 failed',
@@ -1061,9 +1163,9 @@ void main() {
             '  "dep10" not initialized',
           ]);
           expect(failedDependencies(dependencies), [
-            '/concurrent1/dep4 failed: Exception: dep4 failed',
-            '/concurrent1/sequential1/concurrent2/dep5 cancelled with error: Exception: dep5 failed',
-            '/concurrent1/sequential1/concurrent2/sequential2/dep7 cancelled with error: Exception: dep7 failed',
+            'concurrent1/dep4 failed: Exception: dep4 failed',
+            'concurrent1/sequential1/concurrent2/dep5 cancelled with error: Exception: dep5 failed',
+            'concurrent1/sequential1/concurrent2/sequential2/dep7 cancelled with error: Exception: dep7 failed',
           ]);
           expect(dependencies.root.state, isA<ScopeDependencyFailed>());
           expect(dependencies.root.isInitialized, false);
@@ -1073,7 +1175,7 @@ void main() {
 
           fakeAsync.waitFuture(dependencies.dispose());
           expect(states(dependencies), [
-            '[root] disposed',
+            '[group] disposed',
             '  "dep1" disposed',
             '  [concurrent1] disposed',
             '    "dep4" failed: Exception: dep4 failed',
@@ -1103,14 +1205,14 @@ void main() {
           final progress =
               fakeAsync.waitFuture(handleInit(dependencies)).result;
           expect(progress, [
-            '/dep1 (1/10)',
-            '/concurrent1/dep2 (2/10)',
-            '/concurrent1/sequential1/dep3 (3/10)',
-            '/concurrent1/dep4 (4/10)',
-            '/concurrent1/sequential1/concurrent2/dep5: Exception: dep5 failed',
+            'dep1 (1/10)',
+            'concurrent1/dep2 (2/10)',
+            'concurrent1/sequential1/dep3 (3/10)',
+            'concurrent1/dep4 (4/10)',
+            'concurrent1/sequential1/concurrent2/dep5: Exception: dep5 failed',
           ]);
           expect(states(dependencies), [
-            '[root] failed: concurrent1/sequential1/concurrent2/dep5',
+            '[group] failed: concurrent1/sequential1/concurrent2/dep5',
             '  "dep1" initialized',
             '  [concurrent1] failed: sequential1/concurrent2/dep5',
             '    "dep4" initialized',
@@ -1127,8 +1229,8 @@ void main() {
             '  "dep10" not initialized',
           ]);
           expect(failedDependencies(dependencies), [
-            '/concurrent1/sequential1/concurrent2/dep5 failed: Exception: dep5 failed',
-            '/concurrent1/sequential1/concurrent2/dep6 cancelled with error: Exception: dep6 failed',
+            'concurrent1/sequential1/concurrent2/dep5 failed: Exception: dep5 failed',
+            'concurrent1/sequential1/concurrent2/dep6 cancelled with error: Exception: dep6 failed',
           ]);
           expect(dependencies.root.state, isA<ScopeDependencyFailed>());
           expect(dependencies.root.isInitialized, false);
@@ -1138,7 +1240,7 @@ void main() {
 
           fakeAsync.waitFuture(dependencies.dispose());
           expect(states(dependencies), [
-            '[root] disposed',
+            '[group] disposed',
             '  "dep1" disposed',
             '  [concurrent1] disposed',
             '    "dep4" disposed',
@@ -1170,14 +1272,14 @@ void main() {
           final progress =
               fakeAsync.waitFuture(handleInit(dependencies)).result;
           expect(progress, [
-            '/dep1 (1/10)',
-            '/concurrent1/dep2 (2/10)',
-            '/concurrent1/sequential1/dep3 (3/10)',
-            '/concurrent1/dep4 (4/10)',
-            '/concurrent1/sequential1/concurrent2/dep5: Exception: dep5 failed',
+            'dep1 (1/10)',
+            'concurrent1/dep2 (2/10)',
+            'concurrent1/sequential1/dep3 (3/10)',
+            'concurrent1/dep4 (4/10)',
+            'concurrent1/sequential1/concurrent2/dep5: Exception: dep5 failed',
           ]);
           expect(states(dependencies), [
-            '[root] failed: concurrent1/sequential1/concurrent2/dep5',
+            '[group] failed: concurrent1/sequential1/concurrent2/dep5',
             '  "dep1" initialized',
             '  [concurrent1] failed: sequential1/concurrent2/dep5',
             '    "dep4" initialized',
@@ -1194,9 +1296,9 @@ void main() {
             '  "dep10" not initialized',
           ]);
           expect(failedDependencies(dependencies), [
-            '/concurrent1/sequential1/concurrent2/dep5 failed: Exception: dep5 failed',
-            '/concurrent1/sequential1/concurrent2/sequential2/dep7 cancelled with error: Exception: dep7 failed',
-            '/concurrent1/sequential1/concurrent2/dep6 cancelled with error: Exception: dep6 failed',
+            'concurrent1/sequential1/concurrent2/dep5 failed: Exception: dep5 failed',
+            'concurrent1/sequential1/concurrent2/sequential2/dep7 cancelled with error: Exception: dep7 failed',
+            'concurrent1/sequential1/concurrent2/dep6 cancelled with error: Exception: dep6 failed',
           ]);
           expect(dependencies.root.state, isA<ScopeDependencyFailed>());
           expect(dependencies.root.isInitialized, false);
@@ -1206,7 +1308,7 @@ void main() {
 
           fakeAsync.waitFuture(dependencies.dispose());
           expect(states(dependencies), [
-            '[root] disposed',
+            '[group] disposed',
             '  "dep1" disposed',
             '  [concurrent1] disposed',
             '    "dep4" disposed',
@@ -1228,6 +1330,47 @@ void main() {
           expect(dependencies.root.isCancelled, false);
           expect(dependencies.root.isDisposed, true);
         });
+      });
+    });
+  });
+
+  group('anonymous nested group paths', () {
+    test('no leading or double slashes', () {
+      final dependencies = TestDependenciesAnonNested(failed: {'depB'});
+      myFakeAsync((async) {
+        final progress = handleInitFor(dependencies, async);
+        expect(progress, ['depA (1/2)', 'depB: Exception: depB failed']);
+        expect(
+          dependencies
+              .flattenDependencies()
+              .map((info) => '${info.path}${info.dependency.name}')
+              .toList(),
+          // Корень, лист depA, вложенная безымянная группа и лист depB —
+          // ни один сегмент не даёт ведущий '/' или '//' на любом уровне
+          // вложенности безымянных групп.
+          ['', 'depA', '', 'depB'],
+        );
+      });
+    });
+  });
+
+  group('concurrent group with empty stream set', () {
+    test('dispose completes when no child requires disposal', () {
+      final dependencies = TestDependenciesConcurrentNoDispose();
+      myFakeAsync((async) {
+        handleInitFor(dependencies, async);
+        expect(dependencies.root.isInitialized, isTrue);
+
+        // Ни depA, ни depB не назначили dep.dispose, поэтому у
+        // concurrent-группы 'g' при dispose() список стримов для
+        // объединения пуст. До фикса _mergeStreams() никогда не вызывает
+        // controller.close() на пустом наборе, и dispose() зависает
+        // навсегда — флаг disposed так и останется false.
+        var disposed = false;
+        unawaited(dependencies.dispose().then((_) => disposed = true));
+        async.flushMicrotasks();
+
+        expect(disposed, isTrue);
       });
     });
   });

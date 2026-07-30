@@ -38,7 +38,6 @@ part 'f_async_data_scope/async_data_scope_core.dart';
 part 'f_async_data_scope/async_data_scope_init_state.dart';
 part 'g_lite_scope/lite_scope_base.dart';
 part 'g_lite_scope/lite_scope_core.dart';
-part 'g_lite_scope/lite_scope_init_state.dart';
 part 'h_scope/scope_base.dart';
 part 'h_scope/scope_core.dart';
 part 'h_scope/scope_dependencies.dart';

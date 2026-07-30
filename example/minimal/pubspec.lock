@@ -132,10 +132,10 @@ packages:
     dependency: transitive
     description:
       name: logger_builder
-      sha256: "692d32dd4de4907902ee0d02b88e9ab02a833c32e823dfa7ce2f1083240f3374"
+      sha256: b2ea30c9d3db68fd94a917fab0a9f0ffe7a3b82e93901d705fc7f453a5645e6f
       url: "https://pub.dev"
     source: hosted
-    version: "0.4.0"
+    version: "0.5.0"
   matcher:
     dependency: transitive
     description:
@@ -214,7 +214,7 @@ packages:
       path: "../.."
       relative: true
     source: path
-    version: "0.9.6"
+    version: "0.10.0"
   shared_preferences:
     dependency: "direct main"
     description:
