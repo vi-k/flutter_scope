@@ -14,6 +14,9 @@
   `ScreenshotReplacer` completing early and leaking `ui.Image`.
 * Fix a double close() race in LiteScope orphaning the screenshot barrier;
   cap ScreenshotReplacer retries (new public ScreenshotReplacer.maxRetries).
+* Guard the Ready-state model update against running after disposal has
+  started (an element closed via close() stays mounted while its model is
+  being disposed of).
 * Base the disposeAsync() decision on successful initialization instead of
   the applied model state (resources are now disposed of when the element
   is removed in the init-completion frame).
