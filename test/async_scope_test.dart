@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:scopo/scopo.dart';
@@ -63,45 +65,96 @@ void main() {
       },
     );
 
-    // A regression test for the second unguarded callback --
-    // `addPostFrameCallback((_) { _model.update(state); })`, scheduled in
-    // the `AsyncScopeReady` branch of `_performAsyncInit` once
-    // `initAsync()` completes -- was deliberately NOT added here. It could
-    // not be made to fail deterministically, despite trying the same
-    // "drive `BuildOwner` directly" technique used above, plus
-    // `TestWidgetsFlutterBinding.idle()` (which flushes microtasks/timers
-    // without drawing a frame) to let the element's disposal progress as
-    // far as possible before the pending callback is drained:
-    //
-    // - `SchedulerBinding.addPostFrameCallback` callbacks always run
-    //   during the very next `handleDrawFrame()` after being scheduled
-    //   (this code path also calls `scheduleFrame()`), and
-    //   `handleDrawFrame()` performs build, `finalizeTree()` (which
-    //   unmounts removed elements) and post-frame-callback draining
-    //   synchronously, with no yield point in between.
-    // - `AsyncScopeElementBase.dispose()` -- invoked from that same
-    //   synchronous `finalizeTree()` when the element is removed --
-    //   removes the `_model` listener immediately
-    //   (`ScopeNotifierElementBase.dispose()`), but only *starts* the
-    //   async `_performAsyncDispose()` chain (it suspends at its first
-    //   `await`, on `subscription.cancel()`).
-    // - Experimentally, even after repeatedly calling `binding.idle()`
-    //   between removal and the draining frame, `_model.dispose()` (the
-    //   call that would make a subsequent `notifyListeners()` throw) was
-    //   only reached *after* `tester.pump()` drained the stale callback,
-    //   never before it -- so whenever this callback is removed and
-    //   drained in the same frame, `notifyListeners()` from
-    //   `_model.update(state)` reliably finds the listener already
-    //   detached and `_model` not yet disposed, i.e. becomes a silent
-    //   no-op rather than a crash.
-    //
-    // So this exact "removed before its post-frame callback runs" race
-    // could not be observed to fail before the fix. The guard is still
-    // added defensively, mirroring the existing `mounted` check in the
-    // adjacent `pauseAfterInitialization` branch a few lines above it,
-    // since relying on `_model`/`this` being safely usable from a
-    // post-frame callback registered before disposal completes is not an
-    // invariant worth depending on.
+    testWidgets(
+      'does not throw when the element is removed before the post-frame '
+      'callback that applies the ready state runs, and still runs '
+      'disposeAsync for the resources initAsync acquired',
+      (tester) async {
+        final binding = tester.binding;
+
+        // Mount, again by driving `BuildOwner.buildScope` directly instead
+        // of `pumpWidget`, for the same reason as above: this callback
+        // (`addPostFrameCallback((_) { _model.update(state); })` in the
+        // `AsyncScopeReady` branch of `_performAsyncInit`) is only
+        // scheduled once `initAsync()` completes, which -- unlike the
+        // `_registerWithParent` callback -- does not happen synchronously
+        // during `mount()`. `pumpWidget`/`pump` would drain it within the
+        // very same call that schedules it, so we drive things by hand.
+        binding.attachRootWidget(
+          binding.wrapWithDefaultView(
+            const Directionality(
+              textDirection: TextDirection.ltr,
+              child: _ReadyRaceScope(),
+            ),
+          ),
+        );
+        binding.buildOwner!.buildScope(binding.rootElement!);
+
+        // Captured before removal, so the assertion below can inspect the
+        // (by-then-defunct, but still perfectly readable) element instance
+        // directly instead of relying on a static/global counter.
+        final element = tester.element(find.byType(_ReadyRaceScope))
+            as _ReadyRaceScopeElement;
+
+        // `TestWidgetsFlutterBinding.idle()` runs `FakeAsync.elapse
+        // (Duration.zero)`: it flushes pending microtasks/zero-duration
+        // timers *without* drawing a frame. This lets `initAsync()`
+        // (`Stream.value(AsyncScopeReady())`) deliver its value and the
+        // `AsyncScopeReady` branch run -- scheduling the post-frame
+        // callback and calling `scheduleFrame()` -- while leaving that
+        // callback pending, since nothing has drawn a frame yet.
+        await binding.idle();
+
+        // Remove the scope the same way as above: swap the root widget,
+        // rebuild, and finalize -- all without drawing a frame, so the
+        // post-frame callback scheduled above is still pending. This
+        // starts `_performAsyncDispose()` (async, `dispose()` returns as
+        // soon as it hits its first `await`).
+        binding.attachRootWidget(
+          binding.wrapWithDefaultView(
+            const Directionality(
+              textDirection: TextDirection.ltr,
+              child: SizedBox.shrink(),
+            ),
+          ),
+        );
+        binding.buildOwner!.buildScope(binding.rootElement!);
+        binding.buildOwner!.finalizeTree();
+
+        // `idle()`/`FakeAsync.elapse` alone was not enough to let
+        // `_performAsyncDispose()`'s chain (await subscription.cancel(),
+        // then eventually `_model.dispose()`) run to completion in this
+        // scenario -- verified experimentally, even after repeated
+        // `idle()` calls. `runAsync` escapes the fake-async zone and runs
+        // a real `Future.delayed` on the real event loop, which lets that
+        // chain -- and any real microtask/timer continuations it depends
+        // on -- actually finish before we drain the stale callback below.
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 20)),
+        );
+
+        // Now draw the first real frame. It drains the pending post-frame
+        // callback, which calls `_model.update(state)`. Without the
+        // `mounted` guard, this throws "A _AsyncScopeNotifier was used
+        // after being disposed." (verified to fail with exactly that
+        // message before the guard was added).
+        await tester.pump();
+
+        expect(tester.takeException(), isNull);
+
+        // Guarding this callback with `mounted` must not come at the cost
+        // of skipping `disposeAsync()`: since the callback never runs,
+        // `model.state` never becomes `AsyncScopeReady`, so
+        // `_performAsyncDispose` cannot rely on `model.state` to decide
+        // whether `initAsync()` succeeded -- it must track that
+        // separately. `initAsync()` did complete successfully here (it
+        // acquired whatever `disposeAsync()` is meant to release), so
+        // `disposeAsync()` must still run exactly once despite the
+        // element having been removed in the same frame that would have
+        // applied the ready state.
+        expect(element.disposeCount, 1);
+      },
+    );
   });
 }
 
@@ -119,6 +172,37 @@ final class _RegisterRaceScope
 final class _RegisterRaceScopeElement extends AsyncScopeElementBase<
     _RegisterRaceScope, _RegisterRaceScopeElement> {
   _RegisterRaceScopeElement(super.widget);
+
+  @override
+  Widget buildOnState(AsyncScopeState state) => const SizedBox.shrink();
+}
+
+/// Minimal [AsyncScopeCore] used to test the `_model.update(state)`
+/// post-frame callback scheduled once `initAsync()` completes
+/// (async_scope_core.dart, in `_performAsyncInit`'s `AsyncScopeReady`
+/// case), and the corresponding `disposeAsync()` call in
+/// `_performAsyncDispose`. Uses the default `initAsync()`
+/// (`Stream.value(AsyncScopeReady())`) and default `pauseAfterInitialization`
+/// (`null`), so it takes the immediate `scheduleFrame()` +
+/// `addPostFrameCallback` branch rather than the delayed one.
+final class _ReadyRaceScope
+    extends AsyncScopeCore<_ReadyRaceScope, _ReadyRaceScopeElement> {
+  const _ReadyRaceScope();
+
+  @override
+  _ReadyRaceScopeElement createScopeElement() => _ReadyRaceScopeElement(this);
+}
+
+final class _ReadyRaceScopeElement
+    extends AsyncScopeElementBase<_ReadyRaceScope, _ReadyRaceScopeElement> {
+  int disposeCount = 0;
+
+  _ReadyRaceScopeElement(super.widget);
+
+  @override
+  FutureOr<void> disposeAsync() {
+    disposeCount++;
+  }
 
   @override
   Widget buildOnState(AsyncScopeState state) => const SizedBox.shrink();

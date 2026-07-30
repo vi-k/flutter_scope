@@ -80,6 +80,21 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
   /// Therefore, we use [_initCompleter] for synchronization.
   final _initCompleter = Completer<void>();
 
+  /// Whether [initAsync] has definitively completed successfully (reached
+  /// [AsyncScopeReady]).
+  ///
+  /// This is tracked separately from `model.state`, because the
+  /// `_model.update(state)` call that applies [AsyncScopeReady] to the
+  /// model happens inside a `mounted`-guarded post-frame callback (or a
+  /// `mounted`-guarded delayed callback, for [pauseAfterInitialization]):
+  /// if the element is removed from the tree before that callback runs,
+  /// `model.state` never becomes [AsyncScopeReady], even though
+  /// [initAsync] itself already succeeded and may have acquired resources
+  /// that [disposeAsync] must release. [_performAsyncDispose] uses this
+  /// flag instead of `model.state` to decide whether [disposeAsync] must
+  /// run, so that scenario doesn't leak.
+  bool _initSucceeded = false;
+
   AsyncScopeCoordinatorEntry? _asyncScopeEntry;
 
   ScopeChildEntry? _asyncScopeParentEntry;
@@ -234,6 +249,7 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
                 _model.update(state);
               });
           }
+          _initSucceeded = true;
           _log.i('initialized');
           _initCompleter.complete();
       }
@@ -321,7 +337,7 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
     }
 
     try {
-      if (model.state case AsyncScopeReady()) {
+      if (_initSucceeded) {
         _log.i('dispose…');
         final result = disposeAsync();
         if (result is Future<void>) {
