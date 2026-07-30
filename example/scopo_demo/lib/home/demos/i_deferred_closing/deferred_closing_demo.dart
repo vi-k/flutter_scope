@@ -4,8 +4,8 @@ import 'package:scopo_demo/utils/console/console_view.dart';
 import '../../../utils/console/console.dart';
 import 'screen_scope.dart';
 
-class DefferedClosingDemo extends StatelessWidget {
-  const DefferedClosingDemo({super.key});
+class DeferredClosingDemo extends StatelessWidget {
+  const DeferredClosingDemo({super.key});
 
   @override
   Widget build(BuildContext context) {
