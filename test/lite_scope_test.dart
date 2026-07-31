@@ -153,6 +153,62 @@ void main() {
     );
 
     testWidgets(
+      'hands the same disposal failure to every close() caller',
+      (tester) async {
+        await tester.pumpWidget(
+          _app(const _CloseScope(init: _becomesReady, failStateDispose: true)),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('ready'), findsOneWidget);
+
+        final element =
+            tester.element<_CloseScopeElement>(find.byType(_CloseScope));
+
+        Object? firstError;
+        Object? secondError;
+        var isFirstSettled = false;
+        var isSecondSettled = false;
+
+        // The first caller starts the disposal; the second one, issued before
+        // the first can settle, joins the very same run.
+        unawaited(
+          element.close().then(
+            (_) => isFirstSettled = true,
+            onError: (Object error) {
+              firstError = error;
+              isFirstSettled = true;
+            },
+          ),
+        );
+        unawaited(
+          element.close().then(
+            (_) => isSecondSettled = true,
+            onError: (Object error) {
+              secondError = error;
+              isSecondSettled = true;
+            },
+          ),
+        );
+
+        await _settle(tester, until: () => isFirstSettled && isSecondSettled);
+
+        expect(isFirstSettled, isTrue, reason: 'both calls must settle');
+        expect(isSecondSettled, isTrue, reason: 'both calls must settle');
+        expect(
+          firstError,
+          isA<StateError>(),
+          reason: 'the caller that started the disposal sees it fail',
+        );
+        expect(
+          secondError,
+          same(firstError),
+          reason: 'a caller that joined the run in flight must be told the '
+              'same thing, not that the disposal succeeded',
+        );
+      },
+    );
+
+    testWidgets(
       'completes in the ready state even when the screenshot can never '
       'be taken',
       (tester) async {
@@ -484,10 +540,15 @@ final class _CloseScope
   /// returns a `FutureOr<void>`, so both are ordinary user code).
   final bool failStateInitAsync;
 
+  /// Makes [_CloseScopeState.disposeAsync] fail, the way a resource that
+  /// refuses to be released does.
+  final bool failStateDispose;
+
   const _CloseScope({
     required this.init,
     this.failStateInit = false,
     this.failStateInitAsync = false,
+    this.failStateDispose = false,
   });
 
   @override
@@ -552,6 +613,12 @@ final class _CloseScopeState extends LiteScopeCoreState<_CloseScope,
   @override
   FutureOr<void> disposeAsync() {
     disposeAsyncCount++;
+    if (!params.failStateDispose) return null;
+
+    // A real asynchronous failure, delivered through an awaited future one
+    // microtask later, so it takes the same propagation path a resource that
+    // refuses to be released would.
+    return Future<void>.error(StateError('state disposeAsync failed'));
   }
 
   @override

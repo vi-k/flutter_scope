@@ -228,25 +228,34 @@ abstract base class LiteScopeElementBase<
   S _createState() => _state = createState().._scopeElement = this as E;
 
   @override
-  Future<void> _performAsyncDispose() async {
+  Future<void> _performAsyncDispose() {
+    // There is one disposal run per element, and every caller -- an explicit
+    // [close], a concurrent one, the implicit disposal on unmount -- must
+    // observe its outcome. Completing the shared completer *with the run
+    // itself* hands the same value, or the same error and stack trace, to all
+    // of them alike: a failure the first caller sees is never reported as a
+    // success to the next one.
     if (_closeCompleter case final closeCompleter?) {
       return closeCompleter.future;
     }
 
+    // Installed before the run starts, so a caller arriving while the run is
+    // still synchronous joins it instead of starting a second one.
     final closeCompleter = Completer<void>();
     _closeCompleter = closeCompleter;
+    closeCompleter.complete(_runAsyncDispose());
 
+    return closeCompleter.future;
+  }
+
+  Future<void> _runAsyncDispose() async {
     markNeedsBuild();
 
     if (_screenshotCompleter case final screenshotCompleter?) {
       await screenshotCompleter.future;
     }
 
-    try {
-      await super._performAsyncDispose();
-    } finally {
-      closeCompleter.complete();
-    }
+    await super._performAsyncDispose();
   }
 
   /// Closes the scope before the disposal occurs.
