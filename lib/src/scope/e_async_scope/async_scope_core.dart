@@ -172,16 +172,26 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
       _asyncScopeParentEntry = null;
     }
 
-    AsyncScopeParent? parent;
+    // A parent scope always wins: the coordinator is the wait root only for a
+    // scope that has no scope above it at all. A coordinator placed between
+    // two scopes -- the shape of `AsyncScopeCoordinator(child: MaterialApp(…))`
+    // inside a root scope -- must not take the parent's place, or the parent
+    // would stop waiting for its child.
+    AsyncScopeParent? parentScope;
+    AsyncScopeParent? coordinator;
     visitAncestorElements((e) {
-      if (e case final AsyncScopeParent e) {
-        parent = e;
+      if (e case final AsyncScopeParent parent) {
+        if (e is _AsyncScopeCoordinatorElement) {
+          coordinator ??= parent;
+          return true;
+        }
+        parentScope = parent;
         return false;
       }
       return true;
     });
 
-    _asyncScopeParentEntry = parent?.registerChild(
+    _asyncScopeParentEntry = (parentScope ?? coordinator)?.registerChild(
       widget.toStringShort(showHashCode: true),
     );
   }

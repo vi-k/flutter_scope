@@ -22,11 +22,11 @@ final class AsyncScopeCoordinator extends ScopeWidgetCore<AsyncScopeCoordinator,
       ) ??
       (throw FlutterError(
         'No `$AsyncScopeCoordinator`.\n'
-        'You are trying to use `scopeKey`, but the `$AsyncScopeCoordinator`'
-        ' is missing in the context. Add it to the widget tree so that'
-        ' all your scopes that need coordination by `scopeKey` can access'
-        ' it. The most universal solution is to place it above'
-        ' `$MaterialApp`.',
+        'The `$AsyncScopeCoordinator` is missing in the context. Add it to'
+        ' the widget tree so that all your scopes that need it can access it.'
+        ' The most universal solution is to place it above `$MaterialApp`.'
+        ' A scope with a `scopeKey` needs it to be coordinated with the other'
+        ' scopes that share the key.',
       ));
 
   /// Takes [entry] into the queue of [key] of the nearest coordinator.

@@ -73,9 +73,95 @@ void main() {
 
     expect(errors, hasLength(1));
     expect(errors.single, isA<FlutterError>());
+    expect(
+      errors.single.toString(),
+      contains('No `AsyncScopeCoordinator`'),
+    );
+  });
+
+  testWidgets('a scope with no parent scope registers with the coordinator',
+      (tester) async {
+    await tester.pumpWidget(
+      const Directionality(
+        textDirection: TextDirection.ltr,
+        child: AsyncScopeCoordinator(child: _TestScope()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(_coordinatorOf(tester).childrenCount, 1);
+  });
+
+  testWidgets(
+      'a coordinator between two scopes does not take the place of the parent',
+      (tester) async {
+    await tester.pumpWidget(
+      const Directionality(
+        textDirection: TextDirection.ltr,
+        child: _TestScope(
+          disposeLabel: 'parent',
+          child: AsyncScopeCoordinator(
+            child: _TestScope(
+              disposeLabel: 'child',
+              disposeDelay: Duration(milliseconds: 50),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      _coordinatorOf(tester).childrenCount,
+      0,
+      reason: 'the child registered with the parent scope, not the coordinator',
+    );
+
+    await tester.pumpWidget(
+      const Directionality(
+        textDirection: TextDirection.ltr,
+        child: SizedBox.shrink(),
+      ),
+    );
+    await _settle(
+      tester,
+      until: () => _TestScopeElement.disposalOrder.length == 2,
+    );
+
+    expect(_TestScopeElement.disposalOrder, ['child', 'parent']);
   });
 
   testWidgets('a parent scope waits for the scope below it', (tester) async {
+    await tester.pumpWidget(
+      const Directionality(
+        textDirection: TextDirection.ltr,
+        child: _TestScope(
+          disposeLabel: 'parent',
+          child: _TestScope(
+            disposeLabel: 'child',
+            disposeDelay: Duration(milliseconds: 50),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.pumpWidget(
+      const Directionality(
+        textDirection: TextDirection.ltr,
+        child: SizedBox.shrink(),
+      ),
+    );
+    await _settle(
+      tester,
+      until: () => _TestScopeElement.disposalOrder.length == 2,
+    );
+
+    expect(_TestScopeElement.disposalOrder, ['child', 'parent']);
+  });
+
+  testWidgets('a coordinator above a parent scope leaves the pair alone',
+      (tester) async {
     await tester.pumpWidget(
       const Directionality(
         textDirection: TextDirection.ltr,
@@ -131,6 +217,11 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 }
+
+/// The coordinator's element, seen through the public half of its wait-root
+/// role.
+AsyncScopeParent _coordinatorOf(WidgetTester tester) =>
+    tester.element(find.byType(AsyncScopeCoordinator)) as AsyncScopeParent;
 
 /// Pumps frames interleaved with slices of *real* time, until [until] holds or
 /// the budget runs out.
