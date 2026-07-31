@@ -15,7 +15,11 @@ mixin AsyncScopeParent on Diagnosticable {
 
   int get childrenCount => _childRegistry.childrenCount;
 
-  /// Completes once every child registered with this parent has finished.
+  /// Completes once the children registered with this parent at the time of
+  /// the call have finished.
+  ///
+  /// A child that registers while the wait is already running is not awaited
+  /// by it.
   ///
   /// On [timeout] the children left behind are dropped and [onTimeout] is
   /// called; the future completes normally either way.

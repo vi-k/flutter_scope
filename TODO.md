@@ -11,7 +11,8 @@
   фризит старого родителя.
 
 Известные проблемы (0.10.x):
-- AsyncScopeElementBase: окно между enter() и присвоением _subscription — dispose() в этом окне не отменяет инициализацию (см. TODO(nashol) в async_scope_core.dart:279).
+- AsyncScopeElementBase: окно между enter() и присвоением _subscription — dispose() в этом окне не отменяет инициализацию (см. TODO(nashol) в async_scope_core.dart:326).
+- AsyncScopeElementBase: post-frame регистрация у родителя проверяет mounted, но не _isDisposing — скоуп, закрытый через close() до первого кадра, регистрирует ChildEntry, который никто не снимет. С редизайном запись попадает в реестр координатора, а не в процесс-глобальный корень, но всё ещё способна выжечь весь таймаут ожидания детей.
 - ScopeAutoDependencies: _root не сбрасывается после dispose() — повторный init() падает на assert; при autoDisposeOnError runDispose затирает ScopeDependencyFailed → ошибки группы теряются.
 - Покрытие тестами: a_base, b_scope_widget, c_scope_model, d_scope_notifier, e_async_scope (особенно AsyncScopeCoordinator), f_async_data_scope, g_lite_scope — ноль тестов (частично закрывается регрессионными тестами 0.10.0).
 - test/utils/logging.dart безусловно включает debug-уровень (шум ~15 строк на тест) — сделать opt-in; в my_fake_async.dart тела printPendingTimers/printFakeAsyncPendingTimers перепутаны местами.

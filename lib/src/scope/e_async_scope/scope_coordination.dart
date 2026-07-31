@@ -165,7 +165,11 @@ final class ChildRegistry {
     return entry;
   }
 
-  /// Completes once every registered child has unregistered.
+  /// Completes once the children registered at the time of the call have
+  /// unregistered.
+  ///
+  /// The children are snapshotted when the wait starts, so one that registers
+  /// while the wait is already running is not awaited by it.
   ///
   /// Completes at once when there are no children. When [timeout] elapses,
   /// [onTimeout] is called, the children left behind are dropped and the

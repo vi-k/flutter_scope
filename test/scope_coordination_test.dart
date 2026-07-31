@@ -129,6 +129,18 @@ void main() {
         expect(reported, isNotNull);
         expect(reported!.message, contains('second'));
         expect(reported!.message, contains('key'));
+
+        expect(
+          second.isCompleted,
+          isFalse,
+          reason: 'being let in is not leaving',
+        );
+        expect(
+          queues.length,
+          1,
+          reason: 'a timed-out entry keeps its slot, so exit() is still'
+              ' required',
+        );
       });
     });
 

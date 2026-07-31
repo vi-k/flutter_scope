@@ -4,8 +4,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:scopo/scopo.dart';
 
+final _defaultScopeKeysTimeout = ScopeConfig.defaultScopeKeysTimeout;
+final _defaultWaitForChildrenTimeout =
+    ScopeConfig.defaultWaitForChildrenTimeout;
+
 void main() {
   setUp(_TestScopeElement.reset);
+
+  tearDown(() {
+    ScopeConfig.defaultScopeKeysTimeout = _defaultScopeKeysTimeout;
+    ScopeConfig.defaultWaitForChildrenTimeout = _defaultWaitForChildrenTimeout;
+  });
 
   testWidgets('two coordinators do not share a key', (tester) async {
     await tester.pumpWidget(
@@ -76,6 +85,11 @@ void main() {
     expect(
       errors.single.toString(),
       contains('No `AsyncScopeCoordinator`'),
+    );
+    expect(
+      errors.single.toString(),
+      contains('`scopeKey`'),
+      reason: 'the message says what the missing coordinator was needed for',
     );
   });
 
@@ -246,6 +260,167 @@ void main() {
     expect(_TestScopeElement.disposalOrder, ['lonely']);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('waitForChildren completes only after disposeAsync has finished',
+      (tester) async {
+    final gate = Completer<void>();
+    late BuildContext context;
+
+    Widget build({required bool withScope}) => Directionality(
+          textDirection: TextDirection.ltr,
+          child: AsyncScopeCoordinator(
+            child: Column(
+              children: [
+                if (withScope)
+                  _TestScope(disposeLabel: 'top', disposeGate: gate),
+                Builder(
+                  builder: (builderContext) {
+                    // Stays in the tree after the scope is removed, so the
+                    // context passed to `waitForChildren` is still valid then.
+                    context = builderContext;
+
+                    return const SizedBox.shrink();
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+
+    await tester.pumpWidget(build(withScope: true));
+    await tester.pumpAndSettle();
+
+    expect(_coordinatorOf(tester).childrenCount, 1);
+
+    await tester.pumpWidget(build(withScope: false));
+
+    var waited = false;
+    unawaited(
+      AsyncScopeCoordinator.waitForChildren(context).then((_) => waited = true),
+    );
+    await _settle(tester, until: () => waited);
+
+    expect(waited, isFalse, reason: 'disposeAsync has not finished yet');
+    expect(_TestScopeElement.disposalOrder, isEmpty);
+
+    gate.complete();
+    await _settle(tester, until: () => waited);
+
+    expect(_TestScopeElement.disposalOrder, ['top']);
+    expect(waited, isTrue);
+    expect(_coordinatorOf(tester).childrenCount, 0);
+  });
+
+  testWidgets('waitForChildren without a coordinator is an error',
+      (tester) async {
+    late BuildContext context;
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: Builder(
+          builder: (builderContext) {
+            context = builderContext;
+
+            return const SizedBox.shrink();
+          },
+        ),
+      ),
+    );
+
+    expect(
+      () => AsyncScopeCoordinator.waitForChildren(context),
+      throwsA(
+        isA<FlutterError>().having(
+          (error) => error.toString(),
+          'toString()',
+          contains('No `AsyncScopeCoordinator`'),
+        ),
+      ),
+    );
+  });
+
+  // The two tests below pin the reporting of an expired wait. The core is
+  // silent by design -- it only calls the `onTimeout` it is given -- so
+  // `FlutterError.reportError` survives solely because both call sites in
+  // `async_scope_core.dart` pass a callback that does it.
+  testWidgets('an expired wait for a scopeKey is reported', (tester) async {
+    ScopeConfig.defaultScopeKeysTimeout = const Duration(milliseconds: 50);
+
+    await tester.pumpWidget(
+      const Directionality(
+        textDirection: TextDirection.ltr,
+        child: AsyncScopeCoordinator(
+          child: Column(
+            children: [
+              _TestScope(testKey: 'shared'),
+              _TestScope(testKey: 'shared'),
+            ],
+          ),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.pumpAndSettle();
+
+    final exception = tester.takeException();
+    expect(exception, isA<TimeoutException>());
+    expect(
+      (exception as TimeoutException).message,
+      contains("couldn't wait to get access to [shared]"),
+    );
+    expect(
+      _TestScopeElement.initialized,
+      2,
+      reason: 'the scope that timed out was let in anyway',
+    );
+  });
+
+  testWidgets('an expired wait for children is reported', (tester) async {
+    ScopeConfig.defaultWaitForChildrenTimeout =
+        const Duration(milliseconds: 50);
+    final gate = Completer<void>();
+
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: _TestScope(
+          disposeLabel: 'parent',
+          child: _TestScope(disposeLabel: 'child', disposeGate: gate),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.pumpWidget(
+      const Directionality(
+        textDirection: TextDirection.ltr,
+        child: SizedBox.shrink(),
+      ),
+    );
+    await _settle(
+      tester,
+      until: () => _TestScopeElement.disposalOrder.contains('parent'),
+    );
+
+    expect(
+      _TestScopeElement.disposalOrder,
+      ['parent'],
+      reason: 'the parent gave up on the child and disposed of itself',
+    );
+
+    final exception = tester.takeException();
+    expect(exception, isA<TimeoutException>());
+    expect(
+      (exception as TimeoutException).message,
+      contains("couldn't wait for the children to complete"),
+    );
+
+    gate.complete();
+    await _settle(
+      tester,
+      until: () => _TestScopeElement.disposalOrder.length == 2,
+    );
+  });
 }
 
 /// The coordinator's element, seen through the public half of its wait-root
@@ -278,10 +453,18 @@ final class _TestScope extends AsyncScopeCore<_TestScope, _TestScopeElement> {
   final String? disposeLabel;
   final Duration disposeDelay;
 
+  /// Holds [_TestScopeElement.disposeAsync] until it is completed.
+  ///
+  /// A gate keeps a disposal pending without leaving a timer behind, which a
+  /// long [disposeDelay] would (the binding fails the test for a timer that
+  /// outlives the widget tree).
+  final Completer<void>? disposeGate;
+
   const _TestScope({
     this.testKey,
     this.disposeLabel,
     this.disposeDelay = Duration.zero,
+    this.disposeGate,
     // `child` is inherited from `ProxyWidget`; declaring it again here would
     // shadow it (`overridden_fields`).
     super.child = const SizedBox.shrink(),
@@ -314,6 +497,9 @@ final class _TestScopeElement
 
   @override
   FutureOr<void> disposeAsync() async {
+    if (widget.disposeGate case final gate?) {
+      await gate.future;
+    }
     if (widget.disposeDelay > Duration.zero) {
       await Future<void>.delayed(widget.disposeDelay);
     }

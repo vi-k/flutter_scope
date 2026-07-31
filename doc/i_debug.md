@@ -37,9 +37,9 @@ cancellation of an interrupted initialization.
 
 `debug` is what to turn on when a scope hangs, initializes in an unexpected
 order, or is disposed of too late. On top of the `info` messages it reports
-preparation for initialization and disposal, waiting for a `scopeKey` and the
-queues of the `AsyncScopeCoordinator`, waiting for child scopes, and every
-dependency of a `ScopeAutoDependencies` as it is initialized or disposed of.
+preparation for initialization and disposal, waiting for a `scopeKey`, waiting
+for child scopes, and every dependency of a `ScopeAutoDependencies` as it is
+initialized or disposed of.
 
 `error` reports `initialization failed`, `disposal failed`, and the errors
 raised while disposing of dependencies — each with its `error` and
