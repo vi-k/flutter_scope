@@ -6,7 +6,7 @@ import 'dart:async';
 /// waits until every entry that came before it has left. The queue of a key is
 /// discarded as soon as its last entry leaves, so a key costs nothing while
 /// nobody holds it.
-class KeyedAccessQueues {
+final class KeyedAccessQueues {
   final _queues = <Object, _AccessQueue>{};
 
   /// The number of keys currently held.
@@ -36,7 +36,7 @@ class KeyedAccessQueues {
 }
 
 /// A place in the queue of one key.
-class AccessEntry {
+final class AccessEntry {
   final String _debugName;
   _AccessQueue? _queue;
   final _completer = Completer<void>();
@@ -78,7 +78,7 @@ class AccessEntry {
               isCancelled ? 'cancelled' : 'not completed'}';
 }
 
-class _AccessQueue {
+final class _AccessQueue {
   final Object key;
   void Function()? onEmpty;
 
@@ -148,4 +148,77 @@ class _AccessQueue {
 
   @override
   String toString() => 'queue[$key]';
+}
+
+/// The children one parent waits for before disposing of itself.
+final class ChildRegistry {
+  final _children = <ChildEntry>[];
+
+  bool get hasChildren => _children.isNotEmpty;
+
+  int get childrenCount => _children.length;
+
+  ChildEntry registerChild(String debugName) {
+    final entry = ChildEntry._(debugName, this);
+    _children.add(entry);
+
+    return entry;
+  }
+
+  /// Completes once every registered child has unregistered.
+  ///
+  /// Completes at once when there are no children. When [timeout] elapses,
+  /// [onTimeout] is called, the children left behind are dropped and the
+  /// future completes normally: a child that never finishes must not keep its
+  /// parent from being disposed of.
+  Future<void> waitForChildren({
+    Duration? timeout,
+    void Function(TimeoutException error, StackTrace stackTrace)? onTimeout,
+  }) async {
+    if (_children.isEmpty) {
+      return;
+    }
+
+    var future = _children.map((e) => e._completer.future).wait;
+    if (timeout != null) {
+      future = future.timeout(timeout);
+    }
+
+    try {
+      await future;
+    } on TimeoutException catch (_, stackTrace) {
+      onTimeout?.call(
+        TimeoutException(
+          "couldn't wait for the children to complete: $_children",
+          timeout,
+        ),
+        stackTrace,
+      );
+      // Only the children that never finished are still here; dropping them
+      // keeps a second wait from hanging on entries nobody will complete.
+      _children.clear();
+    }
+  }
+}
+
+/// A child registered in a [ChildRegistry].
+final class ChildEntry {
+  final String _debugName;
+  ChildRegistry? _registry;
+  final _completer = Completer<void>();
+
+  ChildEntry._(this._debugName, this._registry);
+
+  void unregister() {
+    assert(_registry != null, 'Entry is already unregistered');
+    assert(!_completer.isCompleted, 'Entry is already completed');
+
+    _completer.complete();
+    _registry?._children.remove(this);
+    _registry = null;
+  }
+
+  @override
+  String toString() => '$_debugName'
+      ' ${_completer.isCompleted ? 'completed' : 'not completed'}';
 }

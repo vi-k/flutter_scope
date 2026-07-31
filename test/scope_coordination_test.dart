@@ -158,4 +158,64 @@ void main() {
       expect(queues.length, 2);
     });
   });
+
+  group('ChildRegistry', () {
+    test('waiting with no children completes at once', () async {
+      final registry = ChildRegistry();
+
+      await registry.waitForChildren().timeout(const Duration(seconds: 1));
+
+      expect(registry.hasChildren, isFalse);
+    });
+
+    test('waiting completes when every child has unregistered', () async {
+      final registry = ChildRegistry();
+      final first = registry.registerChild('first');
+      final second = registry.registerChild('second');
+
+      expect(registry.childrenCount, 2);
+
+      var done = false;
+      unawaited(registry.waitForChildren().then((_) => done = true));
+      await pumpEvents();
+      expect(done, isFalse);
+
+      first.unregister();
+      await pumpEvents();
+      expect(done, isFalse, reason: 'the second child is still registered');
+
+      second.unregister();
+      await pumpEvents();
+      expect(done, isTrue);
+      expect(registry.hasChildren, isFalse);
+    });
+
+    test('a timeout reports and gives up on the children left', () {
+      fakeAsync((async) {
+        final registry = ChildRegistry()..registerChild('slow');
+        TimeoutException? reported;
+
+        var done = false;
+        unawaited(
+          registry
+              .waitForChildren(
+                timeout: const Duration(seconds: 3),
+                onTimeout: (error, _) => reported = error,
+              )
+              .then((_) => done = true),
+        );
+
+        async.elapse(const Duration(seconds: 4));
+
+        expect(done, isTrue, reason: 'the wait must not hang');
+        expect(reported, isNotNull);
+        expect(reported!.message, contains('slow'));
+        expect(
+          registry.hasChildren,
+          isFalse,
+          reason: 'the children left behind are dropped',
+        );
+      });
+    });
+  });
 }
