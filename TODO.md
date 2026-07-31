@@ -4,8 +4,6 @@
 - Описать все примеры.
 - Написать нормальную документацию.
 - example для `ScopeWidgetCore`.
-- `waitForChildren`, `asyncScopeRoot` - переделать. `asyncScopeRoot` перенести
-  логику в `AsyncScopeCoordinator`. timeout перенести внутрь `waitForChildren`.
 
 Тесты:
 - одновременно `notifyDependents` и перестроение дерева сверху (`setState`).
@@ -13,7 +11,6 @@
   фризит старого родителя.
 
 Известные проблемы (0.10.x):
-- AsyncScopeCoordinator: глобальный static _queues без очистки; _AsyncScopeCoordinatorQueue.close() не вызывается нигде; два координатора с одним scopeKey делят очередь (в т.ч. между widget-тестами).
 - AsyncScopeElementBase: окно между enter() и присвоением _subscription — dispose() в этом окне не отменяет инициализацию (см. TODO(nashol) в async_scope_core.dart:279).
 - ScopeAutoDependencies: _root не сбрасывается после dispose() — повторный init() падает на assert; при autoDisposeOnError runDispose затирает ScopeDependencyFailed → ошибки группы теряются.
 - Покрытие тестами: a_base, b_scope_widget, c_scope_model, d_scope_notifier, e_async_scope (особенно AsyncScopeCoordinator), f_async_data_scope, g_lite_scope — ноль тестов (частично закрывается регрессионными тестами 0.10.0).

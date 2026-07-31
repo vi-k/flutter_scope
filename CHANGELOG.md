@@ -1,5 +1,10 @@
 ## 0.10.0
 
+* [breaking changes] `AsyncScopeCoordinator` now owns the `scopeKey` queues of
+  its own subtree instead of a process-wide map, and is what scopes without a
+  parent scope register with. The global `asyncScopeRoot`, `AsyncScopeRoot`,
+  `AsyncScopeCoordinatorEntry` and `ScopeChildEntry` are gone, and
+  `AsyncScopeParent.waitForChildren` takes `timeout` and `onTimeout`.
 * Upgrade logger_builder to 0.5.0: logs are now published through
   `publishLog`, so `ScopeConfig.logger.transformer` can now rewrite or drop
   them. scopo's own API is unaffected, since `ScopeLogPublisher` and

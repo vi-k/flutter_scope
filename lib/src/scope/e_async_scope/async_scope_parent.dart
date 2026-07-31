@@ -25,6 +25,6 @@ mixin AsyncScopeParent on Diagnosticable {
   }) =>
       _childRegistry.waitForChildren(timeout: timeout, onTimeout: onTimeout);
 
-  ChildEntry registerChild(String debugName) =>
+  ChildEntry _registerChild(String debugName) =>
       _childRegistry.registerChild(debugName);
 }

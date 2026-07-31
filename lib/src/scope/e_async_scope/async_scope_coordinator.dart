@@ -1,5 +1,16 @@
 part of '../scope.dart';
 
+/// Owns the `scopeKey` queues of its subtree, and is the wait root for the
+/// scopes in it that have no parent scope above them.
+///
+/// A scope with a `scopeKey` waits on the queue owned by the nearest
+/// [AsyncScopeCoordinator] above it, so two scopes under different
+/// coordinators never wait for one another even when their `scopeKey`s are
+/// equal. Independently, a scope also registers with the nearest
+/// [AsyncScopeParent] above it — a parent scope if there is one, or this
+/// coordinator otherwise — so that something waits for it to finish disposing
+/// of itself; [waitForChildren] waits for exactly those scopes.
+///
 /// {@category AsyncScope}
 final class AsyncScopeCoordinator extends ScopeWidgetCore<AsyncScopeCoordinator,
     _AsyncScopeCoordinatorElement> {
@@ -33,7 +44,7 @@ final class AsyncScopeCoordinator extends ScopeWidgetCore<AsyncScopeCoordinator,
   ///
   /// Each coordinator keeps its own keys: scopes under different coordinators
   /// never wait for one another, even when their keys are equal.
-  static Future<void> enter(
+  static Future<void> _enter(
     BuildContext context,
     Object key,
     AccessEntry entry, {

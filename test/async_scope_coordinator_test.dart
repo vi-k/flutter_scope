@@ -93,6 +93,36 @@ void main() {
   });
 
   testWidgets(
+      'a scope under nested coordinators registers with the nearest one',
+      (tester) async {
+    await tester.pumpWidget(
+      const Directionality(
+        textDirection: TextDirection.ltr,
+        child: AsyncScopeCoordinator(
+          child: AsyncScopeCoordinator(child: _TestScope()),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final [outer, inner] = tester
+        .elementList(find.byType(AsyncScopeCoordinator))
+        .cast<AsyncScopeParent>()
+        .toList();
+
+    expect(
+      inner.childrenCount,
+      1,
+      reason: 'the scope registered with the nearest coordinator',
+    );
+    expect(
+      outer.childrenCount,
+      0,
+      reason: 'the outer coordinator never sees a child of the inner one',
+    );
+  });
+
+  testWidgets(
       'a coordinator between two scopes does not take the place of the parent',
       (tester) async {
     await tester.pumpWidget(

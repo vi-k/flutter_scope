@@ -412,6 +412,19 @@ universal place is above `MaterialApp`:
 AsyncScopeCoordinator(child: MaterialApp(home: HomeScreen()))
 ```
 
+Each coordinator scopes `scopeKey` to its own subtree: two scopes with the
+same key under different coordinators never wait for one another, and it is
+always the nearest coordinator above a scope that serves it.
+
+A coordinator is also the wait root for the scopes in its subtree that have no
+scope above them, so `AsyncScopeCoordinator.waitForChildren(context)` is the
+way to await those top-level scopes — for example before tearing down a test
+or finishing a splash screen:
+
+```dart
+await AsyncScopeCoordinator.waitForChildren(context);
+```
+
 ## Logging and configuration
 
 Logging is off by default. Levels are `verbose`, `debug`, `info`, `error`, and

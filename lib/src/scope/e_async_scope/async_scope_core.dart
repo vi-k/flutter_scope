@@ -191,7 +191,7 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
       return true;
     });
 
-    _asyncScopeParentEntry = (parentScope ?? coordinator)?.registerChild(
+    _asyncScopeParentEntry = (parentScope ?? coordinator)?._registerChild(
       widget.toStringShort(showHashCode: true),
     );
   }
@@ -214,7 +214,7 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
       );
       _asyncScopeEntry = entry;
       _log.d(() => 'wait for access to [$scopeKey]');
-      await AsyncScopeCoordinator.enter(
+      await AsyncScopeCoordinator._enter(
         this,
         scopeKey,
         entry,
