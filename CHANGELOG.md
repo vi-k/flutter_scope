@@ -56,6 +56,12 @@
   never awaited by design — was silently unregistered, and the next
   `waitForChildren()` returned at once while it was still disposing of itself.
   The children are now dropped even when the `onTimeout` reporter throws.
+* `AsyncScopeParent.waitForChildren` now defaults `onTimeout` to reporting the
+  `TimeoutException` through `FlutterError.reportError` (library `scopo`),
+  prefixed with the parent's short description — the same default
+  `AsyncScopeCoordinator.waitForChildren` already applied. Calling the mixin
+  method directly on a scope element used to drop the children and complete
+  with nothing reported at all.
 * Fix `ScopeNotifier.value` not subscribing to a new listenable on update.
 * Fix `LiteScope.close()` hang outside the Ready state; fix
   `ScreenshotReplacer` completing early and leaking `ui.Image`.

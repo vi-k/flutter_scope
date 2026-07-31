@@ -419,6 +419,65 @@ void main() {
     );
   });
 
+  // `AsyncScopeParent.waitForChildren` is public API in its own right, not
+  // just the plumbing behind the static helper: `AsyncScopeCore.of` hands out
+  // the element, and every custom `AsyncScopeElementBase` exposes the method.
+  // Called without an `onTimeout` it must report the expiry itself, or a
+  // dropped child is total silence.
+  testWidgets('the mixin waitForChildren reports an expiry by default',
+      (tester) async {
+    await tester.pumpWidget(
+      const Directionality(
+        textDirection: TextDirection.ltr,
+        child: _TestScope(
+          disposeLabel: 'parent',
+          child: _TestScope(disposeLabel: 'child'),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // The very object `AsyncScopeCore.of<_TestScope, _TestScopeElement>(
+    // context, listen: false)` returns for the outer scope.
+    final parent =
+        tester.element<_TestScopeElement>(find.byType(_TestScope).first);
+    expect(parent.childrenCount, 1);
+
+    Object? error;
+    var waited = false;
+    unawaited(
+      // No `onTimeout`: its default is what is under test. The child scope is
+      // still mounted and never unregisters, so the wait can only expire.
+      parent.waitForChildren(timeout: const Duration(milliseconds: 50)).then(
+            (_) => waited = true,
+            onError: (Object failure) => error = failure,
+          ),
+    );
+    await _settle(tester, until: () => waited || error != null);
+
+    expect(error, isNull, reason: 'an expiry completes the future normally');
+    expect(waited, isTrue);
+
+    final exception = tester.takeException();
+    expect(
+      exception,
+      isA<TimeoutException>(),
+      reason: 'an expiry is reported even without an onTimeout callback',
+    );
+    expect(
+      (exception as TimeoutException).message,
+      startsWith('$_TestScope'),
+      reason: 'the element puts its own short description in front of the '
+          'message the registry builds',
+    );
+    expect(
+      find.byType(_TestScope),
+      findsNWidgets(2),
+      reason: 'the child that was dropped is still mounted -- nothing was '
+          'really waited for, so the silence would have been the whole story',
+    );
+  });
+
   testWidgets('waitForChildren without a coordinator is an error',
       (tester) async {
     late BuildContext context;
