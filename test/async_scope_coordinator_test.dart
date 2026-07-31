@@ -646,6 +646,89 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  // A place in a queue is taken once and cannot be moved, so the pair
+  // (`scopeKey`, owning coordinator) is fixed for the lifetime of the element.
+  // Both ways of breaking that -- a `scopeKey` that starts returning something
+  // else, and a `GlobalKey` move under a different coordinator -- used to leave
+  // the entry parked on the old queue in silence, and the mutual exclusion the
+  // key exists for simply stopped working. The violation is now loud in debug
+  // builds.
+  group('the scopeKey of a live scope', () {
+    testWidgets('cannot change', (tester) async {
+      Widget build(Object key) => Directionality(
+            textDirection: TextDirection.ltr,
+            child: AsyncScopeCoordinator(child: _TestScope(testKey: key)),
+          );
+
+      await tester.pumpWidget(build('first'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+
+      await tester.pumpWidget(build('second'));
+
+      final exception = tester.takeException();
+      expect(exception, isA<FlutterError>());
+      expect(
+        exception.toString(),
+        contains('`scopeKey`'),
+        reason: 'the report says what happened',
+      );
+      expect(
+        exception.toString(),
+        contains('different `key`'),
+        reason: 'and what to do instead',
+      );
+    });
+
+    testWidgets('cannot move under another coordinator', (tester) async {
+      // The very same widget instance on both sides of the move, so the
+      // framework takes the `child.widget == newWidget` shortcut in
+      // `updateChild` and never rebuilds the element it just reactivated:
+      // `activate()` is then the only place left to notice the new
+      // coordinator.
+      final scope = _TestScope(key: GlobalKey(), testKey: 'shared');
+      // `Expanded`, so the `ErrorWidget` the framework substitutes for the
+      // failed build has bounded constraints: an unbounded one overflows the
+      // `Column` and buries the report under a second, unrelated exception.
+      Widget build({required bool moved}) => Directionality(
+            textDirection: TextDirection.ltr,
+            child: Column(
+              children: [
+                Expanded(
+                  child: AsyncScopeCoordinator(
+                    child: moved ? const SizedBox.shrink() : scope,
+                  ),
+                ),
+                Expanded(
+                  child: AsyncScopeCoordinator(
+                    child: moved ? scope : const SizedBox.shrink(),
+                  ),
+                ),
+              ],
+            ),
+          );
+
+      await tester.pumpWidget(build(moved: false));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+
+      await tester.pumpWidget(build(moved: true));
+
+      final exception = tester.takeException();
+      expect(exception, isA<FlutterError>());
+      expect(
+        exception.toString(),
+        contains('$AsyncScopeCoordinator'),
+        reason: 'the report names the coordinator the entry is parked on',
+      );
+      expect(
+        exception.toString(),
+        contains('different `key`'),
+        reason: 'and says what to do instead',
+      );
+    });
+  });
+
   testWidgets('an expired wait for children is reported', (tester) async {
     ScopeConfig.defaultWaitForChildrenTimeout =
         const Duration(milliseconds: 50);
@@ -765,6 +848,7 @@ final class _TestScope extends AsyncScopeCore<_TestScope, _TestScopeElement> {
   final Completer<void>? disposeGate;
 
   const _TestScope({
+    super.key,
     this.testKey,
     this.disposeLabel,
     this.disposeDelay = Duration.zero,

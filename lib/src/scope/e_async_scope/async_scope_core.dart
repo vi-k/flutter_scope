@@ -42,6 +42,27 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
   // Overriding block
   //
 
+  /// The key this scope must hold alone, or `null` when it needs none.
+  ///
+  /// A scope with a key waits, before it initializes, until every scope that
+  /// asked for the same key from the same [AsyncScopeCoordinator] has finished
+  /// disposing of itself, and holds it until its own disposal is over. Two
+  /// scopes under different coordinators never wait for one another, even when
+  /// their keys are equal.
+  ///
+  /// **The key, together with the coordinator above the scope, is fixed for
+  /// the lifetime of the element.** The place in the queue is taken once, and
+  /// it cannot be moved: a key that starts returning something else -- or a
+  /// scope moved with a [GlobalKey] under a different coordinator -- leaves the
+  /// entry parked where it was, so the old key is held by a scope that no
+  /// longer claims it while the new key excludes nobody. A change is reported
+  /// in debug builds; there is no re-acquisition, because releasing and taking
+  /// a key again is asynchronous and a rebuild is not.
+  ///
+  /// To switch a scope to another key, or to move it under another
+  /// coordinator, give the widget a different [Widget.key] instead: the
+  /// framework then builds a new element, which takes the new key from scratch
+  /// and releases the old one on its way out.
   Object? get scopeKey => null;
 
   Duration? get pauseAfterInitialization => null;
@@ -106,6 +127,16 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
 
   AccessEntry? _asyncScopeEntry;
 
+  /// The [scopeKey] and the [AsyncScopeCoordinator] element [_asyncScopeEntry]
+  /// took its place on.
+  ///
+  /// An entry lives in the queue of one key of one coordinator and there is no
+  /// way to move it, so the pair is fixed once the entry exists. It is
+  /// remembered here to be able to say so out loud when it changes, instead of
+  /// letting the mutual exclusion the key exists for quietly stop working.
+  Object? _acquiredScopeKey;
+  _AsyncScopeCoordinatorElement? _acquiredCoordinator;
+
   ChildEntry? _asyncScopeParentEntry;
 
   @override
@@ -163,6 +194,10 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
   void activate() {
     super.activate();
 
+    // A move with a `GlobalKey` is one of the two ways the (`scopeKey`,
+    // coordinator) pair can change under a live element.
+    assert(_debugCheckScopeKeyOwnership());
+
     // A `close()`d element stays mounted, so it can still be moved in the
     // tree with a `GlobalKey` -- and it comes back here with its disposal
     // already over. Registering it with its new parent would hand that parent
@@ -172,6 +207,68 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
 
     // Register again when the widget is moved in the tree with a GlobalKey.
     _registerWithParent();
+  }
+
+  @override
+  void performRebuild() {
+    // The other way: a `scopeKey` getter that starts returning something else
+    // -- a new widget with a different key, or a value read from the element's
+    // own state.
+    assert(_debugCheckScopeKeyOwnership());
+    super.performRebuild();
+  }
+
+  /// Fails when the (`scopeKey`, coordinator) pair this element took its place
+  /// on is no longer the pair it would ask for now.
+  ///
+  /// Called from an `assert`, so it costs nothing in release builds -- which
+  /// is also why it raises rather than returning `false`: the message is worth
+  /// more than the line number.
+  bool _debugCheckScopeKeyOwnership() {
+    if (_asyncScopeEntry == null) {
+      return true;
+    }
+
+    final currentScopeKey = scopeKey;
+    final currentCoordinator = ScopeWidgetCore.maybeOf<AsyncScopeCoordinator,
+        _AsyncScopeCoordinatorElement>(this, listen: false);
+
+    if (currentScopeKey == _acquiredScopeKey &&
+        identical(currentCoordinator, _acquiredCoordinator)) {
+      return true;
+    }
+
+    final acquiredCoordinator =
+        _acquiredCoordinator?.toStringShort() ?? 'no $AsyncScopeCoordinator';
+    final coordinator =
+        currentCoordinator?.toStringShort() ?? 'no $AsyncScopeCoordinator';
+
+    throw FlutterError.fromParts([
+      ErrorSummary(
+        'The `scopeKey` of ${widget.toStringShort()} changed while it was'
+        ' holding one.',
+      ),
+      ErrorDescription(
+        'It took its place in the queue of [$_acquiredScopeKey] of'
+        ' $acquiredCoordinator, and is now asking for the queue of'
+        ' [$currentScopeKey] of $coordinator.',
+      ),
+      ErrorDescription(
+        'The entry it is holding cannot follow it: it stays where it was, so'
+        ' the key it still holds is never released for the scope it was meant'
+        ' to keep out, and the key it appears to hold now keeps nobody out.'
+        ' Releasing a key and taking another one is asynchronous, and a'
+        ' rebuild is not, so there is nothing to do about it here.',
+      ),
+      ErrorHint(
+        'A `scopeKey` and the `$AsyncScopeCoordinator` above the scope are'
+        ' fixed for the lifetime of the element. To use another key, or to'
+        ' move the scope under another coordinator, give the widget a'
+        ' different `key`: the framework then builds a new element, which'
+        ' takes the new key from scratch and releases the old one on its way'
+        ' out.',
+      ),
+    ]);
   }
 
   void _registerWithParent() {
@@ -248,6 +345,8 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
           widget.toStringShort(showHashCode: true),
         );
         _asyncScopeEntry = entry;
+        _acquiredScopeKey = scopeKey;
+        _acquiredCoordinator = coordinator;
         _log.d(() => 'wait for access to [$scopeKey]');
         await coordinator.enter(
           scopeKey,
