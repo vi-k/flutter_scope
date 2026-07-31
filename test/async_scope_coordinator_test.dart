@@ -542,6 +542,110 @@ void main() {
     );
   });
 
+  // An expired `scopeKey` wait lets the scope in anyway and reports the
+  // expiry, so `onScopeKeyTimeout()` -- ordinary user code -- runs with the
+  // entry already in the queue. A failure there used to drop the entry from
+  // the element, and the disposal's `exit()` then never released the key: the
+  // queue kept an entry nobody would ever complete, and every later scope on
+  // that key waited for it with no way out.
+  //
+  // The assertion is about effects, never about timings: what proves it is
+  // that a later scope on the same key gets in and initializes, without
+  // having had to give up on the wait (`keyTimedOut`), and its own limit is
+  // set far beyond what the test can advance, so an expiry cannot be what let
+  // it in.
+  testWidgets('a failing onScopeKeyTimeout does not leak the scopeKey',
+      (tester) async {
+    Widget build({
+      required bool holder,
+      required bool waiter,
+      required bool successor,
+    }) =>
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: AsyncScopeCoordinator(
+            child: Column(
+              children: [
+                if (holder)
+                  const _TestScope(testKey: 'shared', disposeLabel: 'holder'),
+                if (waiter)
+                  const _TestScope(
+                    testKey: 'shared',
+                    keyTimeout: Duration(milliseconds: 50),
+                    throwOnKeyTimeout: true,
+                  ),
+                if (successor)
+                  const _TestScope(
+                    testKey: 'shared',
+                    disposeLabel: 'successor',
+                    keyTimeout: Duration(days: 1),
+                  ),
+              ],
+            ),
+          ),
+        );
+
+    // The hook's failure surfaces as an uncaught error of the zone the mount
+    // ran in -- `_performAsyncInit()`'s future is discarded -- so a guarded
+    // child zone catches it before `flutter_test` ends the test on it.
+    // Nothing inside that zone may throw, so every `expect` is made once it
+    // is gone.
+    final errors = <Object>[];
+    await runZonedGuarded(
+      () async {
+        await tester.pumpWidget(
+          build(holder: true, waiter: false, successor: false),
+        );
+        await tester.pumpAndSettle();
+
+        // The waiter queues up behind the holder and its limit expires: it is
+        // let in anyway, the expiry is reported, and `onScopeKeyTimeout()`
+        // throws.
+        await tester
+            .pumpWidget(build(holder: true, waiter: true, successor: false));
+        await tester.pump(const Duration(milliseconds: 100));
+      },
+      (error, stackTrace) => errors.add(error),
+    );
+
+    expect(errors, hasLength(1));
+    expect(errors.single, isA<StateError>());
+    expect(
+      tester.takeException(),
+      isA<TimeoutException>(),
+      reason: 'the expiry itself is still reported',
+    );
+
+    // Both scopes leave; the holder releases the key on the way out, and so
+    // must the waiter whose hook threw.
+    await tester
+        .pumpWidget(build(holder: false, waiter: false, successor: false));
+    await _settle(
+      tester,
+      until: () => _TestScopeElement.disposalOrder.contains('holder'),
+    );
+    expect(_TestScopeElement.disposalOrder, ['holder']);
+
+    await tester
+        .pumpWidget(build(holder: false, waiter: false, successor: true));
+    await tester.pumpAndSettle();
+
+    final successor =
+        tester.element<_TestScopeElement>(find.byType(_TestScope));
+
+    expect(
+      successor.state,
+      isA<AsyncScopeReady>(),
+      reason: 'the key was released, so the next scope got in at once',
+    );
+    expect(
+      successor.keyTimedOut,
+      isFalse,
+      reason: 'it got the key, it was not let in on an expired wait',
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('an expired wait for children is reported', (tester) async {
     ScopeConfig.defaultWaitForChildrenTimeout =
         const Duration(milliseconds: 50);
@@ -645,6 +749,14 @@ final class _TestScope extends AsyncScopeCore<_TestScope, _TestScopeElement> {
   final String? disposeLabel;
   final Duration disposeDelay;
 
+  /// Overrides [AsyncScopeElementBase.scopeKeyTimeout] for this scope only,
+  /// so one scope in a tree can expire while another one cannot.
+  final Duration? keyTimeout;
+
+  /// Makes [AsyncScopeElementBase.onScopeKeyTimeout] fail, the way a plain
+  /// user error in an overridden hook does.
+  final bool throwOnKeyTimeout;
+
   /// Holds [_TestScopeElement.disposeAsync] until it is completed.
   ///
   /// A gate keeps a disposal pending without leaving a timer behind, which a
@@ -656,6 +768,8 @@ final class _TestScope extends AsyncScopeCore<_TestScope, _TestScopeElement> {
     this.testKey,
     this.disposeLabel,
     this.disposeDelay = Duration.zero,
+    this.keyTimeout,
+    this.throwOnKeyTimeout = false,
     this.disposeGate,
     // `child` is inherited from `ProxyWidget`; declaring it again here would
     // shadow it (`overridden_fields`).
@@ -668,6 +782,9 @@ final class _TestScope extends AsyncScopeCore<_TestScope, _TestScopeElement> {
 
 final class _TestScopeElement
     extends AsyncScopeElementBase<_TestScope, _TestScopeElement> {
+  /// Whether this scope had to be let into its key without ever getting it.
+  bool keyTimedOut = false;
+
   _TestScopeElement(super.widget);
 
   static int initialized = 0;
@@ -680,6 +797,17 @@ final class _TestScopeElement
 
   @override
   Object? get scopeKey => widget.testKey;
+
+  @override
+  Duration? get scopeKeyTimeout => widget.keyTimeout ?? super.scopeKeyTimeout;
+
+  @override
+  void onScopeKeyTimeout() {
+    keyTimedOut = true;
+    if (widget.throwOnKeyTimeout) {
+      throw StateError('onScopeKeyTimeout failed');
+    }
+  }
 
   @override
   Stream<AsyncScopeInitState> initAsync() async* {

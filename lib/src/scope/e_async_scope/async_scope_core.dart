@@ -218,36 +218,37 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
     try {
       // Wait for access.
       if (scopeKey case final scopeKey?) {
+        // The coordinator is looked up *before* the entry exists: the lookup
+        // is the one step here that can fail without the entry ever reaching
+        // a queue, and an entry that reached one has to be released by the
+        // `exit()` in `_performAsyncDispose` no matter how the rest goes.
+        // Everything below attaches the entry before it awaits anything, so
+        // once it is in `_asyncScopeEntry` it is in a queue too, and a
+        // failure -- `onScopeKeyTimeout()`, ordinary user code, throwing on
+        // an expiry, say -- must not drop it: nothing else would ever release
+        // the key, and every later scope on it would wait for an entry nobody
+        // completes.
+        final coordinator = AsyncScopeCoordinator._elementOf(this);
         final entry = AccessEntry(
           widget.toStringShort(showHashCode: true),
         );
         _asyncScopeEntry = entry;
         _log.d(() => 'wait for access to [$scopeKey]');
-        try {
-          await AsyncScopeCoordinator._enter(
-            this,
-            scopeKey,
-            entry,
-            timeout: scopeKeyTimeout ?? ScopeConfig.defaultScopeKeysTimeout,
-            onTimeout: (error, stackTrace) {
-              FlutterError.reportError(
-                FlutterErrorDetails(
-                  exception: error,
-                  stack: stackTrace,
-                  library: 'scopo',
-                ),
-              );
-              onScopeKeyTimeout();
-            },
-          );
-        } on Object {
-          // The entry never made it into a queue -- the lookup of the
-          // coordinator that owns the queues is what failed -- so there is
-          // nothing to release, and the `exit()` in `_performAsyncDispose`
-          // would throw on an entry that was never attached.
-          _asyncScopeEntry = null;
-          rethrow;
-        }
+        await coordinator.enter(
+          scopeKey,
+          entry,
+          timeout: scopeKeyTimeout ?? ScopeConfig.defaultScopeKeysTimeout,
+          onTimeout: (error, stackTrace) {
+            FlutterError.reportError(
+              FlutterErrorDetails(
+                exception: error,
+                stack: stackTrace,
+                library: 'scopo',
+              ),
+            );
+            onScopeKeyTimeout();
+          },
+        );
         if (entry.isCancelled) {
           _log.d(() => 'access to [$scopeKey] cancelled');
         } else {

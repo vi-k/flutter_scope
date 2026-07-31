@@ -25,6 +25,15 @@ final class AsyncScopeCoordinator extends ScopeWidgetCore<AsyncScopeCoordinator,
   _AsyncScopeCoordinatorElement createScopeElement() =>
       _AsyncScopeCoordinatorElement(this);
 
+  /// The nearest coordinator above [context], the one whose queues a scope
+  /// with a `scopeKey` takes its place in.
+  ///
+  /// Each coordinator keeps its own keys: scopes under different coordinators
+  /// never wait for one another, even when their keys are equal.
+  ///
+  /// A scope resolves this *before* it creates its [AccessEntry], so the one
+  /// failure that can happen while the entry does not yet exist stays where
+  /// there is nothing to release.
   static _AsyncScopeCoordinatorElement _elementOf(BuildContext context) =>
       ScopeWidgetCore.maybeOf<AsyncScopeCoordinator,
           _AsyncScopeCoordinatorElement>(
@@ -39,20 +48,6 @@ final class AsyncScopeCoordinator extends ScopeWidgetCore<AsyncScopeCoordinator,
         ' A scope with a `scopeKey` needs it to be coordinated with the other'
         ' scopes that share the key.',
       ));
-
-  /// Takes [entry] into the queue of [key] of the nearest coordinator.
-  ///
-  /// Each coordinator keeps its own keys: scopes under different coordinators
-  /// never wait for one another, even when their keys are equal.
-  static Future<void> _enter(
-    BuildContext context,
-    Object key,
-    AccessEntry entry, {
-    Duration? timeout,
-    void Function(TimeoutException error, StackTrace stackTrace)? onTimeout,
-  }) =>
-      _elementOf(context)
-          .enter(key, entry, timeout: timeout, onTimeout: onTimeout);
 
   /// Waits for the scopes registered with the nearest coordinator at the time
   /// of the call.

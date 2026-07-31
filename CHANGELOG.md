@@ -62,6 +62,14 @@
   whether the initialization succeeded instead of the applied model state, so
   a second `AsyncScopeReady` arriving before the post-frame callback that
   applies the first one no longer re-runs the whole ready branch.
+* Fix a `scopeKey` held forever when `onScopeKeyTimeout()` throws: an expired
+  wait lets the scope into the key anyway and then calls that hook, so by the
+  time it ran the entry was already in the queue — and a failure there made
+  the scope forget the entry, so its disposal never released the key. Every
+  later scope on that key then waited for an entry nobody would ever
+  complete, with no way out. The coordinator is now resolved before the entry
+  is created, which is what the blanket handler existed for, and an attached
+  entry is never dropped.
 * Fix an expired `waitForChildren` forgetting the children registered after it
   started: the wait dropped the whole live registry instead of only the
   snapshot it was awaiting, so a scope that registered mid-wait — one the wait

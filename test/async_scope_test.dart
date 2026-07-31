@@ -271,7 +271,8 @@ void main() {
               const Directionality(
                 textDirection: TextDirection.ltr,
                 // No `AsyncScopeCoordinator` anywhere above: the lookup in
-                // `AsyncScopeCoordinator._enter` throws, and it throws before
+                // `AsyncScopeCoordinator._elementOf` throws, and it throws
+                // before
                 // `_subscription` exists.
                 child: _WaitingParentScope(
                   child: _FailingInitScope(testKey: 'shared'),
