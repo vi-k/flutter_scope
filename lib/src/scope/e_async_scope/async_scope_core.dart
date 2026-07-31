@@ -104,9 +104,9 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
   /// callback would use the disposed notifier.
   bool _isDisposing = false;
 
-  AsyncScopeCoordinatorEntry? _asyncScopeEntry;
+  AccessEntry? _asyncScopeEntry;
 
-  ScopeChildEntry? _asyncScopeParentEntry;
+  ChildEntry? _asyncScopeParentEntry;
 
   @override
   bool get autoSelfDependence => true;
@@ -167,7 +167,7 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
   }
 
   void _registerWithParent() {
-    if (_asyncScopeParentEntry case final ScopeChildEntry entry) {
+    if (_asyncScopeParentEntry case final ChildEntry entry) {
       entry.unregister();
       _asyncScopeParentEntry = null;
     }
@@ -181,7 +181,7 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
       return true;
     });
 
-    _asyncScopeParentEntry = (parent ?? asyncScopeRoot).registerChild(
+    _asyncScopeParentEntry = parent?.registerChild(
       widget.toStringShort(showHashCode: true),
     );
   }
@@ -199,7 +199,7 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
 
     // Wait for access.
     if (scopeKey case final scopeKey?) {
-      final entry = AsyncScopeCoordinatorEntry(
+      final entry = AccessEntry(
         widget.toStringShort(showHashCode: true),
       );
       _asyncScopeEntry = entry;
@@ -209,7 +209,16 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
         scopeKey,
         entry,
         timeout: scopeKeyTimeout ?? ScopeConfig.defaultScopeKeysTimeout,
-        onTimeout: onScopeKeyTimeout,
+        onTimeout: (error, stackTrace) {
+          FlutterError.reportError(
+            FlutterErrorDetails(
+              exception: error,
+              stack: stackTrace,
+              library: 'scopo',
+            ),
+          );
+          onScopeKeyTimeout();
+        },
       );
       if (entry.isCancelled) {
         _log.d(() => 'access to [$scopeKey] cancelled');
@@ -319,31 +328,25 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
 
     if (hasChildren) {
       _log.d(() => 'wait for children (count: $childrenCount)');
-      var future = waitForChildren();
-      final timeout =
-          waitForChildrenTimeout ?? ScopeConfig.defaultWaitForChildrenTimeout;
-      if (timeout != null) {
-        future = future.timeout(timeout);
-      }
-
-      try {
-        await future;
-      } on TimeoutException catch (error, stackTrace) {
-        FlutterError.reportError(
-          FlutterErrorDetails(
-            exception: TimeoutException(
-              '${widget.toStringShort(showHashCode: true)}'
-              " couldn't wait for the children to complete: $_children",
-              timeout,
+      await waitForChildren(
+        timeout:
+            waitForChildrenTimeout ?? ScopeConfig.defaultWaitForChildrenTimeout,
+        onTimeout: (error, stackTrace) {
+          FlutterError.reportError(
+            FlutterErrorDetails(
+              // The message the registry builds knows nothing about the widget
+              // tree, so the scope puts its own name in front of it.
+              exception: TimeoutException(
+                '${widget.toStringShort(showHashCode: true)} ${error.message}',
+                error.duration,
+              ),
+              stack: stackTrace,
+              library: 'scopo',
             ),
-            stack: stackTrace,
-            library: 'scopo',
-          ),
-        );
-        onWaitForChildrenTimeout();
-      } finally {
-        _children.clear();
-      }
+          );
+          onWaitForChildrenTimeout();
+        },
+      );
     }
 
     try {

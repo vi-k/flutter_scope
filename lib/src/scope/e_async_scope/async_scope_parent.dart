@@ -1,41 +1,30 @@
 part of '../scope.dart';
 
-/// {@category AsyncScope}
-final class ScopeChildEntry {
-  final String _debugName;
-  AsyncScopeParent? _parent;
-  final _completer = Completer<void>();
-
-  ScopeChildEntry(this._debugName, this._parent);
-
-  void unregister() {
-    assert(_parent != null);
-    assert(!_completer.isCompleted);
-
-    _completer.complete();
-    _parent?._children.remove(this);
-    _parent = null;
-  }
-
-  @override
-  String toString() => '$_debugName'
-      ' ${_completer.isCompleted ? 'completed' : 'not completed'}';
-}
-
+/// A scope that waits for the scopes below it before disposing of itself.
+///
+/// The nearest ancestor with this mixin — a parent scope, or the
+/// [AsyncScopeCoordinator] when there is no parent scope — is what a scope
+/// registers with. A scope with neither above it registers nowhere and nobody
+/// waits for it.
+///
 /// {@category AsyncScope}
 mixin AsyncScopeParent on Diagnosticable {
-  final _children = <ScopeChildEntry>[];
+  final _childRegistry = ChildRegistry();
 
-  bool get hasChildren => _children.isNotEmpty;
+  bool get hasChildren => _childRegistry.hasChildren;
 
-  int get childrenCount => _children.length;
+  int get childrenCount => _childRegistry.childrenCount;
 
-  Future<void> waitForChildren() =>
-      _children.map((e) => e._completer.future).wait;
+  /// Completes once every child registered with this parent has finished.
+  ///
+  /// On [timeout] the children left behind are dropped and [onTimeout] is
+  /// called; the future completes normally either way.
+  Future<void> waitForChildren({
+    Duration? timeout,
+    void Function(TimeoutException error, StackTrace stackTrace)? onTimeout,
+  }) =>
+      _childRegistry.waitForChildren(timeout: timeout, onTimeout: onTimeout);
 
-  ScopeChildEntry registerChild(String debugName) {
-    final entry = ScopeChildEntry(debugName, this);
-    _children.add(entry);
-    return entry;
-  }
+  ChildEntry registerChild(String debugName) =>
+      _childRegistry.registerChild(debugName);
 }
