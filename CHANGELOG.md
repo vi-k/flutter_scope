@@ -50,6 +50,18 @@
   same way, and a scope whose initialization never happened is still not
   disposed of. The same failure in `LiteScopeCoreState.initAsync()` no longer
   keeps `close()` waiting forever either.
+* Fix a failure raised after `initAsync()` had already reached
+  `AsyncScopeReady` crashing with `Bad state: Future already completed`
+  instead of being reported: the stream's error handler completed the
+  initialization completer a second time, and that crash replaced the failure
+  it was handling, so the real error reached nobody. Such a failure is now
+  reported through `FlutterError.reportError` (library `scopo`) and the scope
+  stays ready — it is no longer flipped into `AsyncScopeError`, which would
+  have replaced the widgets already on screen with `buildOnError` while
+  `disposeAsync()` still ran. The `already initialized` diagnostic now checks
+  whether the initialization succeeded instead of the applied model state, so
+  a second `AsyncScopeReady` arriving before the post-frame callback that
+  applies the first one no longer re-runs the whole ready branch.
 * Fix an expired `waitForChildren` forgetting the children registered after it
   started: the wait dropped the whole live registry instead of only the
   snapshot it was awaiting, so a scope that registered mid-wait — one the wait

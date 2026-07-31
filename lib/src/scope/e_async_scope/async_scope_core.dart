@@ -263,14 +263,17 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
 
       _log.i('initialize…');
       _subscription = initAsync().asyncMap((state) {
-        switch (_model.state) {
-          case AsyncScopeWaiting():
-          case AsyncScopeProgress():
-            break;
-          case AsyncScopeReady():
-            throw StateError('$W already initialized');
-          case AsyncScopeError():
-            throw StateError('$W initialization failed');
+        // `_initSucceeded`, not `_model.state`: the model only becomes
+        // `AsyncScopeReady` inside the post-frame (or delayed) callback
+        // scheduled below, so a second `AsyncScopeReady` that arrives before
+        // that callback runs would slip past a check on the model and
+        // initialize the scope all over again -- a second `_initSucceeded`, a
+        // second pending update, and a second `_initCompleter.complete()`.
+        if (_initSucceeded) {
+          throw StateError('$W already initialized');
+        }
+        if (_model.state case AsyncScopeError()) {
+          throw StateError('$W initialization failed');
         }
 
         switch (state) {
@@ -296,12 +299,37 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
             }
             _initSucceeded = true;
             _log.i('initialized');
-            _initCompleter.complete();
+            if (!_initCompleter.isCompleted) {
+              _initCompleter.complete();
+            }
         }
       }).listen(
         (_) {},
         onError: (Object error, StackTrace stackTrace) {
           _log.e('initialization failed', error: error, stackTrace: stackTrace);
+
+          // A failure that arrives *after* [AsyncScopeReady] -- a stream that
+          // keeps working once the scope is usable and then raises, or the
+          // `already initialized` diagnostic above -- reaches a scope that is
+          // initialized: [disposeAsync] will have to release what
+          // [initAsync] acquired, and the widgets built for the ready state
+          // are the ones on screen. Flipping the model into [AsyncScopeError]
+          // now would swap them for `buildOnError` behind the user's back,
+          // and completing [_initCompleter] a second time would raise `Bad
+          // state: Future already completed` *on top of* the failure being
+          // reported -- which is how the real one used to get lost. The
+          // failure is reported instead, and the scope is left as it is.
+          if (_initSucceeded) {
+            FlutterError.reportError(
+              FlutterErrorDetails(
+                exception: error,
+                stack: stackTrace,
+                library: 'scopo',
+              ),
+            );
+
+            return;
+          }
 
           _model.update(
             AsyncScopeError(
@@ -314,7 +342,9 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
             ),
           );
 
-          _initCompleter.complete();
+          if (!_initCompleter.isCompleted) {
+            _initCompleter.complete();
+          }
         },
         onDone: () {
           if (!_initCompleter.isCompleted) {
