@@ -77,18 +77,20 @@ final class AsyncScopeCoordinator extends ScopeWidgetCore<AsyncScopeCoordinator,
     void Function(TimeoutException error, StackTrace stackTrace)? onTimeout,
   }) {
     final element = _elementOf(context);
+    // The message the registry builds knows nothing about the widget tree, so
+    // the coordinator puts its own name in front of it. The name is read here,
+    // while the element is still mounted: the wait outlives the tree in the
+    // very cases this helper exists for, and `Element.widget` throws once the
+    // element has been unmounted.
+    final name = element.widget.toStringShort(showHashCode: true);
 
     return element.waitForChildren(
       timeout: timeout ?? ScopeConfig.defaultWaitForChildrenTimeout,
       onTimeout: onTimeout ??
           (error, stackTrace) => FlutterError.reportError(
                 FlutterErrorDetails(
-                  // The message the registry builds knows nothing about the
-                  // widget tree, so the coordinator puts its own name in front
-                  // of it.
                   exception: TimeoutException(
-                    '${element.widget.toStringShort(showHashCode: true)}'
-                    ' ${error.message}',
+                    '$name ${error.message}',
                     error.duration,
                   ),
                   stack: stackTrace,

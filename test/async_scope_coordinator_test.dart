@@ -4,16 +4,23 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:scopo/scopo.dart';
 
-final _defaultScopeKeysTimeout = ScopeConfig.defaultScopeKeysTimeout;
-final _defaultWaitForChildrenTimeout =
-    ScopeConfig.defaultWaitForChildrenTimeout;
-
 void main() {
+  // Captured eagerly, before any test can change them: a lazy top-level
+  // `final` initializes on its first read -- inside the first `tearDown` --
+  // so it would capture whatever the test that ran first left behind.
+  late final Duration? defaultScopeKeysTimeout;
+  late final Duration? defaultWaitForChildrenTimeout;
+
+  setUpAll(() {
+    defaultScopeKeysTimeout = ScopeConfig.defaultScopeKeysTimeout;
+    defaultWaitForChildrenTimeout = ScopeConfig.defaultWaitForChildrenTimeout;
+  });
+
   setUp(_TestScopeElement.reset);
 
   tearDown(() {
-    ScopeConfig.defaultScopeKeysTimeout = _defaultScopeKeysTimeout;
-    ScopeConfig.defaultWaitForChildrenTimeout = _defaultWaitForChildrenTimeout;
+    ScopeConfig.defaultScopeKeysTimeout = defaultScopeKeysTimeout;
+    ScopeConfig.defaultWaitForChildrenTimeout = defaultWaitForChildrenTimeout;
   });
 
   testWidgets('two coordinators do not share a key', (tester) async {
@@ -265,26 +272,10 @@ void main() {
       (tester) async {
     final gate = Completer<void>();
     late BuildContext context;
-
-    Widget build({required bool withScope}) => Directionality(
-          textDirection: TextDirection.ltr,
-          child: AsyncScopeCoordinator(
-            child: Column(
-              children: [
-                if (withScope)
-                  _TestScope(disposeLabel: 'top', disposeGate: gate),
-                Builder(
-                  builder: (builderContext) {
-                    // Stays in the tree after the scope is removed, so the
-                    // context passed to `waitForChildren` is still valid then.
-                    context = builderContext;
-
-                    return const SizedBox.shrink();
-                  },
-                ),
-              ],
-            ),
-          ),
+    Widget build({required bool withScope}) => _coordinatorTree(
+          withScope: withScope,
+          gate: gate,
+          onContext: (builderContext) => context = builderContext,
         );
 
     await tester.pumpWidget(build(withScope: true));
@@ -309,6 +300,123 @@ void main() {
     expect(_TestScopeElement.disposalOrder, ['top']);
     expect(waited, isTrue);
     expect(_coordinatorOf(tester).childrenCount, 0);
+  });
+
+  // The two tests below pin the defaults of the public `waitForChildren`:
+  // without them the wait is unbounded again, or silent again, and the suite
+  // stays green.
+  testWidgets('waitForChildren gives up on time and reports the expiry',
+      (tester) async {
+    ScopeConfig.defaultWaitForChildrenTimeout =
+        const Duration(milliseconds: 50);
+    final gate = Completer<void>();
+    late BuildContext context;
+    Widget build({required bool withScope}) => _coordinatorTree(
+          withScope: withScope,
+          gate: gate,
+          onContext: (builderContext) => context = builderContext,
+        );
+
+    await tester.pumpWidget(build(withScope: true));
+    await tester.pumpAndSettle();
+    // The scope leaves the tree and hangs in `disposeAsync`; the coordinator
+    // stays mounted and keeps waiting for it.
+    await tester.pumpWidget(build(withScope: false));
+
+    Object? error;
+    var waited = false;
+    unawaited(
+      // No `timeout` and no `onTimeout`: both defaults are what is under test.
+      AsyncScopeCoordinator.waitForChildren(context).then(
+        (_) => waited = true,
+        onError: (Object failure) => error = failure,
+      ),
+    );
+    await _settle(tester, until: () => waited || error != null);
+
+    expect(error, isNull, reason: 'an expiry completes the future normally');
+    expect(
+      waited,
+      isTrue,
+      reason:
+          'the wait is bounded by ScopeConfig.defaultWaitForChildrenTimeout',
+    );
+    expect(
+      _TestScopeElement.disposalOrder,
+      isEmpty,
+      reason: 'the scope never finished; the wait gave up on it',
+    );
+
+    final exception = tester.takeException();
+    expect(
+      exception,
+      isA<TimeoutException>(),
+      reason: 'an expiry is reported even without an onTimeout callback',
+    );
+    expect(
+      (exception as TimeoutException).message,
+      startsWith('$AsyncScopeCoordinator'),
+      reason: 'the coordinator puts its own name in front of the message',
+    );
+
+    gate.complete();
+    await _settle(
+      tester,
+      until: () => _TestScopeElement.disposalOrder.isNotEmpty,
+    );
+  });
+
+  testWidgets('waitForChildren reports an expiry that outlives the coordinator',
+      (tester) async {
+    ScopeConfig.defaultWaitForChildrenTimeout =
+        const Duration(milliseconds: 50);
+    final gate = Completer<void>();
+    late BuildContext context;
+
+    await tester.pumpWidget(
+      _coordinatorTree(
+        withScope: true,
+        gate: gate,
+        onContext: (builderContext) => context = builderContext,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    Object? error;
+    var waited = false;
+    unawaited(
+      AsyncScopeCoordinator.waitForChildren(context).then(
+        (_) => waited = true,
+        onError: (Object failure) => error = failure,
+      ),
+    );
+
+    // The whole tree goes away while the wait is running -- "before tearing
+    // down a test" is the documented use case -- so the coordinator's element
+    // is unmounted by the time the timeout fires and its widget is gone.
+    await tester.pumpWidget(
+      const Directionality(
+        textDirection: TextDirection.ltr,
+        child: SizedBox.shrink(),
+      ),
+    );
+    await _settle(tester, until: () => waited || error != null);
+
+    expect(error, isNull, reason: 'an expiry completes the future normally');
+    expect(waited, isTrue);
+
+    final exception = tester.takeException();
+    expect(exception, isA<TimeoutException>());
+    expect(
+      (exception as TimeoutException).message,
+      startsWith('$AsyncScopeCoordinator'),
+    );
+
+    gate.complete();
+    await _settle(
+      tester,
+      until: () => _TestScopeElement.disposalOrder.isNotEmpty,
+    );
   });
 
   testWidgets('waitForChildren without a coordinator is an error',
@@ -422,6 +530,31 @@ void main() {
     );
   });
 }
+
+/// A coordinator over an optional gated scope, plus a [Builder] whose context
+/// stays valid after that scope has left the tree.
+Widget _coordinatorTree({
+  required bool withScope,
+  required Completer<void> gate,
+  required ValueSetter<BuildContext> onContext,
+}) =>
+    Directionality(
+      textDirection: TextDirection.ltr,
+      child: AsyncScopeCoordinator(
+        child: Column(
+          children: [
+            if (withScope) _TestScope(disposeLabel: 'top', disposeGate: gate),
+            Builder(
+              builder: (context) {
+                onContext(context);
+
+                return const SizedBox.shrink();
+              },
+            ),
+          ],
+        ),
+      ),
+    );
 
 /// The coordinator's element, seen through the public half of its wait-root
 /// role.
