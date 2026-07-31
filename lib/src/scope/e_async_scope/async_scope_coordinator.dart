@@ -59,14 +59,16 @@ final class AsyncScopeCoordinator extends ScopeWidgetCore<AsyncScopeCoordinator,
   ///
   /// These are the scopes that have no parent scope above them; a scope with a
   /// parent scope is awaited by that parent instead. A scope that registers
-  /// while the wait is already running is not awaited by it.
+  /// while the wait is already running is not awaited by it, and is still
+  /// registered once it is over.
   ///
   /// [timeout] defaults to [ScopeConfig.defaultWaitForChildrenTimeout], the
   /// same default the scopes themselves use; pass a [Duration] to override it
-  /// for this call only. An expiry is not fatal: the scopes left behind are
-  /// dropped and the future completes normally, so a scope that never finishes
-  /// disposing of itself degrades into a delay instead of a deadlock. Removing
-  /// the limit entirely is done through [ScopeConfig], not here.
+  /// for this call only. An expiry is not fatal: the awaited scopes that never
+  /// finished are dropped and the future completes normally, so a scope that
+  /// never finishes disposing of itself degrades into a delay instead of a
+  /// deadlock. Removing the limit entirely is done through [ScopeConfig], not
+  /// here.
   ///
   /// [onTimeout] defaults to reporting the [TimeoutException] through
   /// [FlutterError.reportError], so an expiry is never silent; pass a callback

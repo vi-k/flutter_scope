@@ -19,10 +19,10 @@ mixin AsyncScopeParent on Diagnosticable {
   /// the call have finished.
   ///
   /// A child that registers while the wait is already running is not awaited
-  /// by it.
+  /// by it, and is still registered once it is over.
   ///
-  /// On [timeout] the children left behind are dropped and [onTimeout] is
-  /// called; the future completes normally either way.
+  /// On [timeout] the awaited children that never finished are dropped and
+  /// [onTimeout] is called; the future completes normally either way.
   Future<void> waitForChildren({
     Duration? timeout,
     void Function(TimeoutException error, StackTrace stackTrace)? onTimeout,

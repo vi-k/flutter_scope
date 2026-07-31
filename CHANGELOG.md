@@ -50,6 +50,12 @@
   same way, and a scope whose initialization never happened is still not
   disposed of. The same failure in `LiteScopeCoreState.initAsync()` no longer
   keeps `close()` waiting forever either.
+* Fix an expired `waitForChildren` forgetting the children registered after it
+  started: the wait dropped the whole live registry instead of only the
+  snapshot it was awaiting, so a scope that registered mid-wait — one the wait
+  never awaited by design — was silently unregistered, and the next
+  `waitForChildren()` returned at once while it was still disposing of itself.
+  The children are now dropped even when the `onTimeout` reporter throws.
 * Fix `ScopeNotifier.value` not subscribing to a new listenable on update.
 * Fix `LiteScope.close()` hang outside the Ready state; fix
   `ScreenshotReplacer` completing early and leaking `ui.Image`.

@@ -229,5 +229,91 @@ void main() {
         );
       });
     });
+
+    test('a timeout drops only the children the wait was awaiting', () {
+      fakeAsync((async) {
+        final registry = ChildRegistry()..registerChild('slow');
+        TimeoutException? reported;
+
+        var done = false;
+        unawaited(
+          registry
+              .waitForChildren(
+                timeout: const Duration(seconds: 3),
+                onTimeout: (error, _) => reported = error,
+              )
+              .then((_) => done = true),
+        );
+
+        // Registered while the wait is already running, so it is excluded from
+        // that wait by design -- but it never unregistered, so the registry
+        // must still know about it once the wait has given up.
+        final laterChild = registry.registerChild('later');
+
+        async.elapse(const Duration(seconds: 4));
+
+        expect(done, isTrue, reason: 'the wait must not hang');
+        expect(reported, isNotNull);
+        expect(
+          reported!.message,
+          contains('slow'),
+          reason: 'the child that held the wait up is named',
+        );
+        expect(
+          reported!.message,
+          isNot(contains('later')),
+          reason: 'a child this wait never awaited did not hold it up',
+        );
+        expect(
+          registry.childrenCount,
+          1,
+          reason: 'only the children of the expired wait are dropped',
+        );
+
+        var secondDone = false;
+        unawaited(registry.waitForChildren().then((_) => secondDone = true));
+        async.elapse(Duration.zero);
+
+        expect(
+          secondDone,
+          isFalse,
+          reason: 'a later wait must still await the child that is live',
+        );
+
+        laterChild.unregister();
+        async.elapse(Duration.zero);
+
+        expect(secondDone, isTrue);
+        expect(registry.hasChildren, isFalse);
+      });
+    });
+
+    test('an onTimeout that throws still gives up on the children left', () {
+      fakeAsync((async) {
+        final registry = ChildRegistry()..registerChild('slow');
+        Object? escaped;
+
+        unawaited(
+          registry
+              .waitForChildren(
+            timeout: const Duration(seconds: 3),
+            onTimeout: (_, __) => throw StateError('reporting failed'),
+          )
+              .catchError((Object error) {
+            escaped = error;
+          }),
+        );
+
+        async.elapse(const Duration(seconds: 4));
+
+        expect(escaped, isA<StateError>(), reason: 'the failure is not hidden');
+        expect(
+          registry.hasChildren,
+          isFalse,
+          reason: 'a reporter that throws must not leave the registry holding '
+              'entries the expired wait already gave up on',
+        );
+      });
+    });
   });
 }
