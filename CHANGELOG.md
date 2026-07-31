@@ -1,5 +1,30 @@
 ## 0.10.0
 
+* [breaking changes] `AsyncScopeCoordinator` now owns the `scopeKey` queues of
+  its own subtree instead of a process-wide map, and is what scopes without a
+  parent scope register with. The global `asyncScopeRoot`, `AsyncScopeRoot`,
+  `AsyncScopeCoordinatorEntry` and `ScopeChildEntry` are gone, and
+  `AsyncScopeParent.waitForChildren` takes `timeout` and `onTimeout`.
+  * Migration: `asyncScopeRoot.waitForChildren()` becomes
+    `AsyncScopeCoordinator.waitForChildren(context, {timeout, onTimeout})`,
+    which awaits the scopes registered with the nearest coordinator above
+    `context`. `timeout` defaults to
+    `ScopeConfig.defaultWaitForChildrenTimeout` and an expiry is reported
+    through `FlutterError.reportError` unless `onTimeout` is given.
+  * `AsyncScopeCoordinator.enter` is no longer public: the queues are entered
+    by the scopes themselves and the entry types are internal.
+  * `AsyncScopeParent.registerChild` is no longer public. It was a public
+    member of a public mixin, so code that mixed `AsyncScopeParent` in and
+    called or overrode `registerChild` no longer compiles; `hasChildren`,
+    `childrenCount` and `waitForChildren` stay public.
+  * **Silent behaviour change:** a scope with neither a parent scope nor an
+    `AsyncScopeCoordinator` above it now registers nowhere, so nothing awaits
+    its disposal — previously every such scope landed in the global
+    `asyncScopeRoot`. Such code keeps compiling unchanged and behaves
+    differently: if anything used to await those scopes, put an
+    `AsyncScopeCoordinator` above them (the usual place is above
+    `MaterialApp`) and await
+    `AsyncScopeCoordinator.waitForChildren(context)`.
 * Upgrade logger_builder to 0.5.0: logs are now published through
   `publishLog`, so `ScopeConfig.logger.transformer` can now rewrite or drop
   them. scopo's own API is unaffected, since `ScopeLogPublisher` and

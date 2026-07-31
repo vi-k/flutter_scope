@@ -9,6 +9,7 @@ import '../utils/is_building.dart';
 import '../utils/progress_iterator/progress_iterator.dart';
 import '../utils/screenshot_replacer.dart';
 import '../utils/stream/run_stream_guarded.dart';
+import 'e_async_scope/scope_coordination.dart';
 
 part 'a_base/base.dart';
 part 'b_scope_widget/scope_widget_base.dart';
@@ -23,7 +24,6 @@ part 'd_scope_notifier/scope_notifier_core.dart';
 part 'd_scope_notifier/scope_state_model/scope_state_model.dart';
 part 'd_scope_notifier/scope_state_model/scope_state_with_error_model.dart';
 part 'e_async_scope/async_scope_parent.dart';
-part 'e_async_scope/async_scope_root.dart';
 part 'e_async_scope/async_scope.dart';
 part 'e_async_scope/async_scope_base.dart';
 part 'e_async_scope/async_scope_context.dart';

@@ -412,6 +412,30 @@ universal place is above `MaterialApp`:
 AsyncScopeCoordinator(child: MaterialApp(home: HomeScreen()))
 ```
 
+Each coordinator scopes `scopeKey` to its own subtree: two scopes with the
+same key under different coordinators never wait for one another, and it is
+always the nearest coordinator above a scope that serves it. The queues belong
+to the coordinator's element, so serialization holds only for as long as that
+element does: replacing the coordinator itself — a different `ValueKey`, a
+different position in the tree — throws its queues away along with it, which
+is why it belongs above everything that can be replaced.
+
+A coordinator is also the wait root for the scopes in its subtree that have no
+scope above them, so `AsyncScopeCoordinator.waitForChildren(context)` is the
+way to await those top-level scopes — for example before tearing down a test
+or finishing a splash screen:
+
+```dart
+await AsyncScopeCoordinator.waitForChildren(context);
+```
+
+It awaits the scopes registered at the moment of the call, and, like every
+other wait in the package, it is bounded — by a `timeout` when one is passed,
+by `ScopeConfig.defaultWaitForChildrenTimeout` otherwise. An expiry is not an
+error the caller has to handle: the future completes normally and the
+`TimeoutException` is reported through `FlutterError.reportError`, unless an
+`onTimeout` callback is given.
+
 ## Logging and configuration
 
 Logging is off by default. Levels are `verbose`, `debug`, `info`, `error`, and

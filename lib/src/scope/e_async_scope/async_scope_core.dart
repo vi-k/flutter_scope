@@ -104,9 +104,9 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
   /// callback would use the disposed notifier.
   bool _isDisposing = false;
 
-  AsyncScopeCoordinatorEntry? _asyncScopeEntry;
+  AccessEntry? _asyncScopeEntry;
 
-  ScopeChildEntry? _asyncScopeParentEntry;
+  ChildEntry? _asyncScopeParentEntry;
 
   @override
   bool get autoSelfDependence => true;
@@ -167,21 +167,31 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
   }
 
   void _registerWithParent() {
-    if (_asyncScopeParentEntry case final ScopeChildEntry entry) {
+    if (_asyncScopeParentEntry case final ChildEntry entry) {
       entry.unregister();
       _asyncScopeParentEntry = null;
     }
 
-    AsyncScopeParent? parent;
+    // A parent scope always wins: the coordinator is the wait root only for a
+    // scope that has no scope above it at all. A coordinator placed between
+    // two scopes -- the shape of `AsyncScopeCoordinator(child: MaterialApp(…))`
+    // inside a root scope -- must not take the parent's place, or the parent
+    // would stop waiting for its child.
+    AsyncScopeParent? parentScope;
+    AsyncScopeParent? coordinator;
     visitAncestorElements((e) {
-      if (e case final AsyncScopeParent e) {
-        parent = e;
+      if (e case final AsyncScopeParent parent) {
+        if (e is _AsyncScopeCoordinatorElement) {
+          coordinator ??= parent;
+          return true;
+        }
+        parentScope = parent;
         return false;
       }
       return true;
     });
 
-    _asyncScopeParentEntry = (parent ?? asyncScopeRoot).registerChild(
+    _asyncScopeParentEntry = (parentScope ?? coordinator)?._registerChild(
       widget.toStringShort(showHashCode: true),
     );
   }
@@ -199,17 +209,26 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
 
     // Wait for access.
     if (scopeKey case final scopeKey?) {
-      final entry = AsyncScopeCoordinatorEntry(
+      final entry = AccessEntry(
         widget.toStringShort(showHashCode: true),
       );
       _asyncScopeEntry = entry;
       _log.d(() => 'wait for access to [$scopeKey]');
-      await AsyncScopeCoordinator.enter(
+      await AsyncScopeCoordinator._enter(
         this,
         scopeKey,
         entry,
         timeout: scopeKeyTimeout ?? ScopeConfig.defaultScopeKeysTimeout,
-        onTimeout: onScopeKeyTimeout,
+        onTimeout: (error, stackTrace) {
+          FlutterError.reportError(
+            FlutterErrorDetails(
+              exception: error,
+              stack: stackTrace,
+              library: 'scopo',
+            ),
+          );
+          onScopeKeyTimeout();
+        },
       );
       if (entry.isCancelled) {
         _log.d(() => 'access to [$scopeKey] cancelled');
@@ -319,31 +338,25 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
 
     if (hasChildren) {
       _log.d(() => 'wait for children (count: $childrenCount)');
-      var future = waitForChildren();
-      final timeout =
-          waitForChildrenTimeout ?? ScopeConfig.defaultWaitForChildrenTimeout;
-      if (timeout != null) {
-        future = future.timeout(timeout);
-      }
-
-      try {
-        await future;
-      } on TimeoutException catch (error, stackTrace) {
-        FlutterError.reportError(
-          FlutterErrorDetails(
-            exception: TimeoutException(
-              '${widget.toStringShort(showHashCode: true)}'
-              " couldn't wait for the children to complete: $_children",
-              timeout,
+      await waitForChildren(
+        timeout:
+            waitForChildrenTimeout ?? ScopeConfig.defaultWaitForChildrenTimeout,
+        onTimeout: (error, stackTrace) {
+          FlutterError.reportError(
+            FlutterErrorDetails(
+              // The message the registry builds knows nothing about the widget
+              // tree, so the scope puts its own name in front of it.
+              exception: TimeoutException(
+                '${widget.toStringShort(showHashCode: true)} ${error.message}',
+                error.duration,
+              ),
+              stack: stackTrace,
+              library: 'scopo',
             ),
-            stack: stackTrace,
-            library: 'scopo',
-          ),
-        );
-        onWaitForChildrenTimeout();
-      } finally {
-        _children.clear();
-      }
+          );
+          onWaitForChildrenTimeout();
+        },
+      );
     }
 
     try {
