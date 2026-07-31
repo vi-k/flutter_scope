@@ -41,6 +41,15 @@
 * Fix infinite recursion in `CompareUtils.identical`.
 * Fix hang in `ScopeAutoDependencies.dispose()` when no dependency requires
   disposal.
+* Fix a deadlock when an asynchronous initialization fails before it starts:
+  `initAsync()` raising on the spot, or the missing-`AsyncScopeCoordinator`
+  error of a scope with a `scopeKey`, left the scope waiting for its own
+  initialization forever. It never unregistered from its parent, so the parent
+  burned its whole `waitForChildrenTimeout` on a scope that was already gone,
+  and neither of them was ever disposed of. The failure is still reported the
+  same way, and a scope whose initialization never happened is still not
+  disposed of. The same failure in `LiteScopeCoreState.initAsync()` no longer
+  keeps `close()` waiting forever either.
 * Fix `ScopeNotifier.value` not subscribing to a new listenable on update.
 * Fix `LiteScope.close()` hang outside the Ready state; fix
   `ScreenshotReplacer` completing early and leaking `ui.Image`.

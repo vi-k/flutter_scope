@@ -233,6 +233,73 @@ void main() {
         expect(element.state, isA<AsyncScopeWaiting>());
       },
     );
+
+    // The same shape as the `AsyncScopeElementBase` deadlock covered in
+    // `async_scope_test.dart`, one layer down: `LiteScopeCoreState`
+    // synchronizes its disposal with its own initialization through a
+    // completer, and `_performAsyncInit()` runs on a future discarded by
+    // `initState()`. A failed `initAsync()` used to leave that completer
+    // unsettled, so `close()` -- which reaches it through
+    // `LiteScopeElementBase.disposeAsync()` -- never came back.
+    for (final (kind, isAsync) in [('synchronously', false), ('async', true)]) {
+      testWidgets(
+        'completes when the state initAsync throws $kind',
+        (tester) async {
+          // The failure surfaces as an uncaught error of the zone the build
+          // ran in, exactly as for the scope-level initialization; a guarded
+          // child zone catches it before `flutter_test` ends the test on it.
+          // Nothing inside that zone may throw -- an assertion that fails
+          // there is swallowed by the zone's error handler and the test hangs
+          // instead of failing -- so every `expect` is made once it is gone.
+          final errors = <Object>[];
+          var isClosed = false;
+          late _CloseScopeElement element;
+
+          await runZonedGuarded(
+            () async {
+              await tester.pumpWidget(
+                _app(
+                  _CloseScope(
+                    init: _becomesReady,
+                    failStateInit: true,
+                    failStateInitAsync: isAsync,
+                  ),
+                ),
+              );
+              element = _scopeOf(tester);
+              // The state only exists once the scope is ready: it is created
+              // by the widget `buildOnReady()` mounts.
+              await _settle(tester, until: () => element.createdState != null);
+
+              unawaited(element.close().whenComplete(() => isClosed = true));
+              await _settle(tester, until: () => isClosed);
+            },
+            (error, stackTrace) => errors.add(error),
+          );
+
+          expect(
+            element.createdState,
+            isNotNull,
+            reason: 'the state must have been created and initialized',
+          );
+          expect(
+            isClosed,
+            isTrue,
+            reason: 'close() must not wait for an initialization that failed',
+          );
+          expect(
+            element.createdState!.disposeAsyncCount,
+            0,
+            reason: 'an initialization that never happened is not disposed of',
+          );
+          expect(
+            errors.single,
+            isA<StateError>(),
+            reason: 'the failure is still reported, not swallowed',
+          );
+        },
+      );
+    }
   });
 
   group('ScreenshotReplacer', () {
@@ -409,7 +476,19 @@ final class _CloseScope
     extends LiteScopeCore<_CloseScope, _CloseScopeElement, _CloseScopeState> {
   final Stream<AsyncScopeInitState> Function() init;
 
-  const _CloseScope({required this.init});
+  /// Makes [_CloseScopeState.initAsync] fail, the way a plain user error in a
+  /// state initializer does.
+  final bool failStateInit;
+
+  /// Whether that failure is raised from a future ([_CloseScopeState.initAsync]
+  /// returns a `FutureOr<void>`, so both are ordinary user code).
+  final bool failStateInitAsync;
+
+  const _CloseScope({
+    required this.init,
+    this.failStateInit = false,
+    this.failStateInitAsync = false,
+  });
 
   @override
   _CloseScopeElement createScopeElement() => _CloseScopeElement(this);
@@ -420,6 +499,10 @@ final class _CloseScopeElement extends LiteScopeElementBase<_CloseScope,
   /// How many times [disposeAsync] ran, to prove that a disposal racing the
   /// ready state still releases what `initAsync()` acquired.
   int disposeAsyncCount = 0;
+
+  /// The state built by `buildOnReady()`, kept here because the widget that
+  /// owns it is private to the package and cannot be found by type.
+  _CloseScopeState? createdState;
 
   _CloseScopeElement(super.widget);
 
@@ -447,11 +530,30 @@ final class _CloseScopeElement extends LiteScopeElementBase<_CloseScope,
       const Text('error');
 
   @override
-  _CloseScopeState createState() => _CloseScopeState();
+  _CloseScopeState createState() => createdState = _CloseScopeState();
 }
 
 final class _CloseScopeState extends LiteScopeCoreState<_CloseScope,
     _CloseScopeElement, _CloseScopeState> {
+  /// How many times [disposeAsync] ran, to prove that a state whose
+  /// initialization failed is not disposed of.
+  int disposeAsyncCount = 0;
+
+  @override
+  FutureOr<void> initAsync() {
+    if (!params.failStateInit) return null;
+    if (params.failStateInitAsync) {
+      return Future<void>.error(StateError('state initAsync failed'));
+    }
+
+    throw StateError('state initAsync failed');
+  }
+
+  @override
+  FutureOr<void> disposeAsync() {
+    disposeAsyncCount++;
+  }
+
   @override
   Widget build(BuildContext context) => const Text('ready');
 }

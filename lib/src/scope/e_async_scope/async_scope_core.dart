@@ -207,105 +207,132 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
       _registerWithParent();
     });
 
-    // Wait for access.
-    if (scopeKey case final scopeKey?) {
-      final entry = AccessEntry(
-        widget.toStringShort(showHashCode: true),
-      );
-      _asyncScopeEntry = entry;
-      _log.d(() => 'wait for access to [$scopeKey]');
-      await AsyncScopeCoordinator._enter(
-        this,
-        scopeKey,
-        entry,
-        timeout: scopeKeyTimeout ?? ScopeConfig.defaultScopeKeysTimeout,
-        onTimeout: (error, stackTrace) {
-          FlutterError.reportError(
-            FlutterErrorDetails(
-              exception: error,
-              stack: stackTrace,
-              library: 'scopo',
+    // Everything below either hands `_initCompleter` over to the subscription
+    // that completes it, or completes it itself. A failure in between -- the
+    // coordinator lookup, or `initAsync()` raising while the stream is being
+    // built -- would otherwise leave the completer unsettled forever: this
+    // future is discarded, so nothing retries and nothing else settles it,
+    // while `_performAsyncDispose` waits for it before it may unregister the
+    // scope from its parent. The error is re-thrown untouched, so it still
+    // surfaces as an uncaught error of the zone the mount ran in.
+    try {
+      // Wait for access.
+      if (scopeKey case final scopeKey?) {
+        final entry = AccessEntry(
+          widget.toStringShort(showHashCode: true),
+        );
+        _asyncScopeEntry = entry;
+        _log.d(() => 'wait for access to [$scopeKey]');
+        try {
+          await AsyncScopeCoordinator._enter(
+            this,
+            scopeKey,
+            entry,
+            timeout: scopeKeyTimeout ?? ScopeConfig.defaultScopeKeysTimeout,
+            onTimeout: (error, stackTrace) {
+              FlutterError.reportError(
+                FlutterErrorDetails(
+                  exception: error,
+                  stack: stackTrace,
+                  library: 'scopo',
+                ),
+              );
+              onScopeKeyTimeout();
+            },
+          );
+        } on Object {
+          // The entry never made it into a queue -- the lookup of the
+          // coordinator that owns the queues is what failed -- so there is
+          // nothing to release, and the `exit()` in `_performAsyncDispose`
+          // would throw on an entry that was never attached.
+          _asyncScopeEntry = null;
+          rethrow;
+        }
+        if (entry.isCancelled) {
+          _log.d(() => 'access to [$scopeKey] cancelled');
+        } else {
+          _log.d(() => 'access to [$scopeKey] obtained');
+        }
+
+        if (entry.isCancelled || !mounted) {
+          _log.i('initialization cancelled');
+          _initCompleter.complete();
+          return;
+        }
+      }
+
+      _log.i('initialize…');
+      _subscription = initAsync().asyncMap((state) {
+        switch (_model.state) {
+          case AsyncScopeWaiting():
+          case AsyncScopeProgress():
+            break;
+          case AsyncScopeReady():
+            throw StateError('$W already initialized');
+          case AsyncScopeError():
+            throw StateError('$W initialization failed');
+        }
+
+        switch (state) {
+          case AsyncScopeProgress():
+            _log.i(() => 'progress: ${state.progress}');
+            _model.update(state);
+          case AsyncScopeReady():
+            if (pauseAfterInitialization case final pauseAfterInitialization?
+                when ScopeConfig.pauseAfterInitializationEnabled) {
+              Future<void>.delayed(pauseAfterInitialization, () {
+                if (mounted && !_isDisposing) {
+                  _model.update(state);
+                }
+              });
+            } else {
+              // Give the last progress value a chance to be displayed.
+              SchedulerBinding.instance
+                ..scheduleFrame()
+                ..addPostFrameCallback((_) {
+                  if (!mounted || _isDisposing) return;
+                  _model.update(state);
+                });
+            }
+            _initSucceeded = true;
+            _log.i('initialized');
+            _initCompleter.complete();
+        }
+      }).listen(
+        (_) {},
+        onError: (Object error, StackTrace stackTrace) {
+          _log.e('initialization failed', error: error, stackTrace: stackTrace);
+
+          _model.update(
+            AsyncScopeError(
+              error,
+              stackTrace,
+              progress: switch (_model.state) {
+                AsyncScopeProgress(:final progress) => progress,
+                _ => null,
+              },
             ),
           );
-          onScopeKeyTimeout();
+
+          _initCompleter.complete();
         },
-      );
-      if (entry.isCancelled) {
-        _log.d(() => 'access to [$scopeKey] cancelled');
-      } else {
-        _log.d(() => 'access to [$scopeKey] obtained');
-      }
-
-      if (entry.isCancelled || !mounted) {
-        _log.i('initialization cancelled');
-        _initCompleter.complete();
-        return;
-      }
-    }
-
-    _log.i('initialize…');
-    _subscription = initAsync().asyncMap((state) {
-      switch (_model.state) {
-        case AsyncScopeWaiting():
-        case AsyncScopeProgress():
-          break;
-        case AsyncScopeReady():
-          throw StateError('$W already initialized');
-        case AsyncScopeError():
-          throw StateError('$W initialization failed');
-      }
-
-      switch (state) {
-        case AsyncScopeProgress():
-          _log.i(() => 'progress: ${state.progress}');
-          _model.update(state);
-        case AsyncScopeReady():
-          if (pauseAfterInitialization case final pauseAfterInitialization?
-              when ScopeConfig.pauseAfterInitializationEnabled) {
-            Future<void>.delayed(pauseAfterInitialization, () {
-              if (mounted && !_isDisposing) {
-                _model.update(state);
-              }
-            });
-          } else {
-            // Give the last progress value a chance to be displayed.
-            SchedulerBinding.instance
-              ..scheduleFrame()
-              ..addPostFrameCallback((_) {
-                if (!mounted || _isDisposing) return;
-                _model.update(state);
-              });
+        onDone: () {
+          if (!_initCompleter.isCompleted) {
+            _log.i('not initialized');
+            _initCompleter.complete();
           }
-          _initSucceeded = true;
-          _log.i('initialized');
-          _initCompleter.complete();
-      }
-    }).listen(
-      (_) {},
-      onError: (Object error, StackTrace stackTrace) {
-        _log.e('initialization failed', error: error, stackTrace: stackTrace);
-
-        _model.update(
-          AsyncScopeError(
-            error,
-            stackTrace,
-            progress: switch (_model.state) {
-              AsyncScopeProgress(:final progress) => progress,
-              _ => null,
-            },
-          ),
-        );
-
+        },
+        cancelOnError: true,
+      );
+    } on Object catch (error, stackTrace) {
+      // `_initSucceeded` stays false: nothing was initialized, so nothing is
+      // disposed of either.
+      _log.e('initialization failed', error: error, stackTrace: stackTrace);
+      if (!_initCompleter.isCompleted) {
         _initCompleter.complete();
-      },
-      onDone: () {
-        if (!_initCompleter.isCompleted) {
-          _log.i('not initialized');
-          _initCompleter.complete();
-        }
-      },
-      cancelOnError: true,
-    );
+      }
+      rethrow;
+    }
 
     return _initCompleter.future;
   }
