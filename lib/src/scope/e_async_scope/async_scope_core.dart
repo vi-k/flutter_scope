@@ -202,8 +202,15 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
     _log.d('prepare for initialization');
 
     // Register with parent scope.
+    //
+    // `mounted` alone does not cover a disposal that has already run:
+    // `close()` keeps the element mounted on purpose, so a callback drained
+    // after the disposal is over would hand the parent a *fresh* entry, one
+    // registered after the `finally` had unregistered the previous one and
+    // that nobody will ever complete. The parent would then burn its whole
+    // `waitForChildrenTimeout` on a scope that is already gone.
     SchedulerBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
+      if (!mounted || _isDisposing) return;
       _registerWithParent();
     });
 

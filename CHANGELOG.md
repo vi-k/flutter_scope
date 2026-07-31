@@ -70,6 +70,14 @@
   complete, with no way out. The coordinator is now resolved before the entry
   is created, which is what the blanket handler existed for, and an attached
   entry is never dropped.
+* Fix `close()` leaving an orphaned child entry behind: the post-frame
+  callback that registers a scope with its parent was guarded by `mounted`
+  alone, and `close()` keeps the element mounted on purpose. A disposal that
+  finished before that callback fired handed the parent a fresh entry
+  registered after the `finally` had unregistered the previous one, so the
+  parent — or `AsyncScopeCoordinator.waitForChildren` — burned its whole
+  timeout on a scope that was already gone. The callback is now guarded the
+  same way its two siblings are.
 * Fix an expired `waitForChildren` forgetting the children registered after it
   started: the wait dropped the whole live registry instead of only the
   snapshot it was awaiting, so a scope that registered mid-wait — one the wait

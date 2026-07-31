@@ -290,6 +290,83 @@ void main() {
       },
     );
 
+    // `close()` deliberately keeps the element mounted, so the `mounted`
+    // guard on the post-frame callback that registers the scope with its
+    // parent tells that callback nothing about a disposal that is already
+    // over. The two sibling callbacks in `_performAsyncInit` got the
+    // `_isDisposing` half of the guard; this one kept only `mounted`.
+    //
+    // The assertions are about effects: how many children the parent still
+    // holds, and whether a later wait comes back on its own. The wait's limit
+    // is set far beyond anything this test can advance, so an expiry cannot
+    // be what releases it.
+    testWidgets(
+      'does not register with the parent again once close() has finished',
+      (tester) async {
+        final binding = tester.binding;
+
+        // Mount by driving the build phase directly, so the post-frame
+        // callback that `_performAsyncInit` schedules to register the scope
+        // with its parent stays pending -- `pumpWidget` would drain it within
+        // the very frame that schedules it (the same technique as in
+        // `async_scope_test.dart`).
+        binding.attachRootWidget(
+          binding.wrapWithDefaultView(
+            const Directionality(
+              textDirection: TextDirection.ltr,
+              child: AsyncScopeCoordinator(
+                child: _CloseScope(init: _neverEmits),
+              ),
+            ),
+          ),
+        );
+        binding.buildOwner!.buildScope(binding.rootElement!);
+
+        final coordinator = tester.element(find.byType(AsyncScopeCoordinator))
+            as AsyncScopeParent;
+        final element = _scopeOf(tester);
+
+        var isClosed = false;
+        unawaited(element.close().whenComplete(() => isClosed = true));
+
+        // Real time only, no frames: the whole disposal runs -- unregistering
+        // an entry that does not exist yet -- while the registration callback
+        // is still queued.
+        for (var i = 0; i < 20 && !isClosed; i++) {
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 10)),
+          );
+        }
+        expect(isClosed, isTrue, reason: 'close() must have finished first');
+
+        // The first frame drains the pending callback.
+        await tester.pump();
+
+        expect(
+          coordinator.childrenCount,
+          0,
+          reason: 'a scope that has finished disposing of itself must not '
+              'register a fresh entry with its parent',
+        );
+
+        var waited = false;
+        unawaited(
+          coordinator
+              .waitForChildren(timeout: const Duration(days: 1))
+              .then((_) => waited = true),
+        );
+        await _settle(tester, until: () => waited);
+
+        expect(
+          waited,
+          isTrue,
+          reason: 'nothing would ever complete an orphaned entry, so the wait '
+              'could only end by giving up on a scope that is already gone',
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+
     // The same shape as the `AsyncScopeElementBase` deadlock covered in
     // `async_scope_test.dart`, one layer down: `LiteScopeCoreState`
     // synchronizes its disposal with its own initialization through a
