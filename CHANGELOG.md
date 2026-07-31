@@ -11,7 +11,8 @@
 * [breaking changes] Remove dead API: `LiteScopeInitState`/`Waiting`/
   `Progress`/`Ready`; rename `ScopeDependencyNoDisposalRequred` to
   `ScopeDependencyNoDisposalRequired`.
-* Remove the internal, never-exported `typeToShortString`.
+* Remove the internal, never-exported `typeToShortString` and the unused
+  `Notifier` mixin with its `TestNotifier`.
 * Fix infinite recursion in `CompareUtils.identical`.
 * Fix hang in `ScopeAutoDependencies.dispose()` when no dependency requires
   disposal.
