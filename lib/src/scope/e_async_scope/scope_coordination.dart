@@ -228,8 +228,18 @@ final class ChildEntry {
 
   ChildEntry._(this._debugName, this._registry);
 
+  /// Leaves the registry, completing the wait this entry was holding up.
+  ///
+  /// Doing it a second time is a no-op rather than a failure: the parent this
+  /// entry belonged to has already been told, and raising here would turn a
+  /// double release into a crash for a caller that has nothing left to fix.
   void unregister() {
-    assert(_registry != null, 'Entry is already unregistered');
+    if (_registry == null) {
+      assert(_completer.isCompleted, 'Detached entry is not completed');
+
+      return;
+    }
+
     assert(!_completer.isCompleted, 'Entry is already completed');
 
     _completer.complete();

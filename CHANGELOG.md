@@ -78,6 +78,14 @@
   parent — or `AsyncScopeCoordinator.waitForChildren` — burned its whole
   timeout on a scope that was already gone. The callback is now guarded the
   same way its two siblings are.
+* Fix moving a closed scope in the tree with a `GlobalKey` crashing: the
+  disposal unregistered the entry it held with its parent but left the field
+  pointing at it, and `activate()` re-registered unconditionally — so the move
+  reached for an entry that was already gone. In debug that hit an assert; in
+  release, where the assert is not there to stop it, it fell through to
+  `Bad state: Future already completed`. The field is now cleared, a
+  reactivation after disposal no longer registers at all, and
+  `ChildEntry.unregister()` is idempotent.
 * Fix an expired `waitForChildren` forgetting the children registered after it
   started: the wait dropped the whole live registry instead of only the
   snapshot it was awaiting, so a scope that registered mid-wait — one the wait

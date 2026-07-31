@@ -162,6 +162,14 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
   @override
   void activate() {
     super.activate();
+
+    // A `close()`d element stays mounted, so it can still be moved in the
+    // tree with a `GlobalKey` -- and it comes back here with its disposal
+    // already over. Registering it with its new parent would hand that parent
+    // an entry nobody will ever complete, since the `finally` that would have
+    // unregistered it has long since run.
+    if (_isDisposing) return;
+
     // Register again when the widget is moved in the tree with a GlobalKey.
     _registerWithParent();
   }
@@ -440,7 +448,14 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
       _log.e('disposal failed', error: error, stackTrace: stackTrace);
       rethrow;
     } finally {
-      _asyncScopeParentEntry?.unregister();
+      // Cleared, not just unregistered: the element outlives its disposal
+      // when it was closed via `close()` rather than removed from the tree,
+      // and a stale entry left in the field is one `_registerWithParent()`
+      // would try to unregister a second time.
+      if (_asyncScopeParentEntry case final asyncScopeParentEntry?) {
+        asyncScopeParentEntry.unregister();
+        _asyncScopeParentEntry = null;
+      }
 
       if (_asyncScopeEntry case final asyncScopeEntry?) {
         _log.d(() => 'exit from [$scopeKey]');

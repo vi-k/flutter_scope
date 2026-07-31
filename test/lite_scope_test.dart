@@ -367,6 +367,70 @@ void main() {
       },
     );
 
+    // A `close()`d element stays mounted, so it can still be moved in the
+    // tree with a `GlobalKey`: the element is deactivated and reactivated
+    // rather than unmounted, and `activate()` re-runs the registration with
+    // the parent. The disposal's `finally` unregistered the parent entry but
+    // never cleared the field, so that re-registration reached for an entry
+    // that was already gone -- an assert in debug, and a `Future already
+    // completed` in release, where that assert is not there to stop it.
+    testWidgets(
+      'survives being moved with a GlobalKey after close()',
+      (tester) async {
+        final scopeKey = GlobalKey();
+        Widget build({required bool moved}) => Directionality(
+              textDirection: TextDirection.ltr,
+              child: AsyncScopeCoordinator(
+                child: Column(
+                  children: [
+                    if (!moved)
+                      SizedBox(
+                        child: _CloseScope(key: scopeKey, init: _neverEmits),
+                      ),
+                    if (moved)
+                      Center(
+                        child: _CloseScope(key: scopeKey, init: _neverEmits),
+                      ),
+                  ],
+                ),
+              ),
+            );
+
+        await tester.pumpWidget(build(moved: false));
+        await tester.pumpAndSettle();
+
+        final coordinator = tester.element(find.byType(AsyncScopeCoordinator))
+            as AsyncScopeParent;
+        expect(coordinator.childrenCount, 1);
+
+        final element = _scopeOf(tester);
+        var isClosed = false;
+        unawaited(element.close().whenComplete(() => isClosed = true));
+        await _settle(tester, until: () => isClosed);
+
+        expect(isClosed, isTrue);
+        expect(coordinator.childrenCount, 0);
+
+        // The closed scope is moved under a different parent widget: its
+        // element is retaken by the `GlobalKey` instead of being unmounted,
+        // so `activate()` runs on an element whose disposal is over.
+        await tester.pumpWidget(build(moved: true));
+
+        expect(
+          tester.takeException(),
+          isNull,
+          reason: 'reactivating a closed scope must not reach for the parent '
+              'entry its disposal already unregistered',
+        );
+        expect(
+          coordinator.childrenCount,
+          0,
+          reason: 'a scope that is done disposing of itself must not register '
+              'with its new parent either -- nothing would complete the entry',
+        );
+      },
+    );
+
     // The same shape as the `AsyncScopeElementBase` deadlock covered in
     // `async_scope_test.dart`, one layer down: `LiteScopeCoreState`
     // synchronizes its disposal with its own initialization through a
@@ -622,6 +686,7 @@ final class _CloseScope
   final bool failStateDispose;
 
   const _CloseScope({
+    super.key,
     required this.init,
     this.failStateInit = false,
     this.failStateInitAsync = false,

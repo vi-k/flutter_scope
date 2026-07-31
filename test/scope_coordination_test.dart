@@ -202,6 +202,30 @@ void main() {
       expect(registry.hasChildren, isFalse);
     });
 
+    // A scope can be handed the same entry to release twice -- its disposal
+    // clears the field, but an element that stays mounted through `close()`
+    // can still be moved in the tree and try to re-register. Raising on the
+    // second release would turn that into a crash for a caller with nothing
+    // left to fix, and in release builds -- where the asserts are gone --
+    // into `Future already completed`.
+    test('unregistering a second time is a no-op', () async {
+      final registry = ChildRegistry();
+      final child = registry.registerChild('child');
+      expect(registry.hasChildren, isTrue);
+
+      child.unregister();
+      expect(registry.hasChildren, isFalse);
+
+      child.unregister();
+
+      var done = false;
+      unawaited(registry.waitForChildren().then((_) => done = true));
+      await pumpEvents();
+
+      expect(done, isTrue);
+      expect(registry.childrenCount, 0);
+    });
+
     test('a timeout reports and gives up on the children left', () {
       fakeAsync((async) {
         final registry = ChildRegistry()..registerChild('slow');
