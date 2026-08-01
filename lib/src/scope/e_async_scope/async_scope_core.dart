@@ -194,19 +194,30 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
   void activate() {
     super.activate();
 
-    // A move with a `GlobalKey` is one of the two ways the (`scopeKey`,
-    // coordinator) pair can change under a live element.
-    assert(_debugCheckScopeKeyOwnership());
-
     // A `close()`d element stays mounted, so it can still be moved in the
     // tree with a `GlobalKey` -- and it comes back here with its disposal
     // already over. Registering it with its new parent would hand that parent
     // an entry nobody will ever complete, since the `finally` that would have
     // unregistered it has long since run.
-    if (_isDisposing) return;
+    if (_isDisposing) {
+      assert(_debugCheckScopeKeyOwnership());
+
+      return;
+    }
 
     // Register again when the widget is moved in the tree with a GlobalKey.
+    //
+    // Before the ownership check, not after it: a move with a `GlobalKey` is
+    // one of the two ways that check can fail, and it fails by raising. Left
+    // above this line it would unwind `activate()` in exactly the case it
+    // exists to describe, so the scope would leave its old parent's subtree
+    // without ever unregistering from it -- the old parent would then wait
+    // out its whole `waitForChildrenTimeout` on a child that is alive and
+    // well somewhere else. The handoff happens first; the report is what may
+    // be lost, and it is not.
     _registerWithParent();
+
+    assert(_debugCheckScopeKeyOwnership());
   }
 
   @override

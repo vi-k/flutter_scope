@@ -712,6 +712,12 @@ void main() {
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
 
+      final [oldParent, newParent] = tester
+          .elementList(find.byType(AsyncScopeCoordinator))
+          .cast<AsyncScopeParent>()
+          .toList();
+      expect(oldParent.childrenCount, 1);
+
       await tester.pumpWidget(build(moved: true));
 
       final exception = tester.takeException();
@@ -725,6 +731,37 @@ void main() {
         exception.toString(),
         contains('different `key`'),
         reason: 'and says what to do instead',
+      );
+
+      // Reporting the violation must not cost the parent handoff the move
+      // itself needs. The scope has left the first coordinator's subtree, and
+      // it is alive and well under the second one: a diagnostic that unwound
+      // `activate()` before `_registerWithParent()` would leave the first
+      // coordinator waiting for it forever.
+      expect(
+        oldParent.childrenCount,
+        0,
+        reason: 'the coordinator the scope left must not keep waiting for it',
+      );
+      expect(
+        newParent.childrenCount,
+        1,
+        reason: 'the coordinator it moved under is what waits for it now',
+      );
+
+      var waited = false;
+      unawaited(
+        oldParent
+            .waitForChildren(timeout: const Duration(days: 1))
+            .then((_) => waited = true),
+      );
+      await _settle(tester, until: () => waited);
+
+      expect(
+        waited,
+        isTrue,
+        reason: 'the limit is far beyond what this test can advance, so only '
+            'an empty registry can have released the wait',
       );
     });
   });
