@@ -1,8 +1,13 @@
-# batch2 — five coordination/lifecycle defects
+# batch2 — five coordination/lifecycle defects, plus two found in review
 
 Branch `coordfix`, based on `0fe8261`. Baseline: 69 tests green.
-Final: **77 tests green**, `flutter analyze` clean in the package and both
+Final: **79 tests green**, `flutter analyze` clean in the package and both
 examples, `dart format` clean, `dart doc` 0 warnings / 0 errors.
+
+The five defects of the original brief are sections 1–5; the two issues a
+review then found by execution — one of them a regression section 5
+introduced — are sections 6–7, and the verification table at the end of that
+part is the current one.
 
 One commit per defect, each with its test written first, watched fail, then
 fixed, then watched pass — and each fix hand-reverted afterwards to prove the
@@ -254,6 +259,124 @@ same way. `_TestScope` gained `super.key`.
 CHANGELOG: five bullets added under `## 0.10.0` (unpublished). No historical
 section touched.
 
+## Review follow-up — two issues found by execution
+
+Both reported against the batch above; the first is a regression `a2368e8`
+introduced. Same method throughout: failing test first, fix, green, then the
+fix hand-reverted to prove the test load-bearing.
+
+### 6 — `b567551` fix(async-scope): keep the parent handoff when a reparented scope is reported
+
+`lib/src/scope/e_async_scope/async_scope_core.dart`, `activate()`.
+
+**Defect (regression from `a2368e8`).** `_debugCheckScopeKeyOwnership()` raises
+rather than returning `false`, and `activate()` ran it *before*
+`_registerWithParent()`. So in exactly the case the diagnostic exists for — a
+`GlobalKey` move of a keyed scope to another coordinator — the throw unwound
+`activate()` and the re-registration never happened. The scope left the old
+parent's subtree without ever unregistering from it: `childrenCount` stayed at
+one forever and the old parent waited out its whole `waitForChildrenTimeout` on
+a child that was alive and well somewhere else. Before `a2368e8`, `activate()`
+re-registered unconditionally and the handoff worked on every move.
+
+**Fix.** The handoff happens first and the check follows it, on both paths —
+the `_isDisposing` early return keeps its own check:
+
+```dart
+void activate() {
+  super.activate();
+  if (_isDisposing) {
+    assert(_debugCheckScopeKeyOwnership());
+    return;
+  }
+  _registerWithParent();
+  assert(_debugCheckScopeKeyOwnership());
+}
+```
+
+The report is unchanged; only what survives it is.
+
+**Test.** `cannot move under another coordinator` (already present) now pins
+both halves: the `FlutterError` still fires, **and** the coordinator the scope
+left drops to zero children while the one it moved under holds one, **and**
+`oldParent.waitForChildren(timeout: 1 day)` comes back on its own — a limit far
+beyond what the test can advance, so only an empty registry can have released
+it.
+
+Reverted-fix check (assert moved back above `_registerWithParent()`):
+`Expected: <0> Actual: <1>`, `the coordinator the scope left must not keep
+waiting for it`.
+
+### 7 — `265aa47` fix(async-scope): report a scopeKey that appears after the scope has mounted
+
+`lib/src/scope/e_async_scope/async_scope_core.dart`.
+
+**Defect.** The check returned early whenever `_asyncScopeEntry == null`, and an
+entry is only ever created at mount, inside `if (scopeKey case final scopeKey?)`.
+A scope that mounted key-less and later claimed a contested key therefore got no
+entry, no exclusion and no diagnostic at all — it simply coexisted with the
+holder on the same key under the same coordinator, `takeException()` null. Not
+exotic: `scopeKey` is a plain constructor field on the public `AsyncScope`, and
+`AsyncScope(scopeKey: userId)` with a `userId` that is null until an async load
+finishes is ordinary usage.
+
+**Fix (the real check, not a documentation retreat).** `scopeKey` is read
+exactly once in `_performAsyncInit`, into `_acquiredScopeKey`, with a separate
+`_scopeKeyObserved` flag recording that it was read — `null` is an *answer*,
+not the absence of one, and a scope that gave it never takes a place in any
+queue. The check is measured against that answer rather than against the entry,
+so all four ways it can go stale report alike, each with its own message:
+
+| what changed | message |
+| --- | --- |
+| `null` → key | `... appeared after the scope had already initialized without one.` |
+| key → `null` | `... was given up while the scope was still holding it.` |
+| key → other key | `... changed while the scope was holding one.` |
+| coordinator | `The AsyncScopeCoordinator above ... changed while the scope was holding a scopeKey.` |
+
+An appearing key is deliberately worded apart from the rest: there is no
+misplaced entry to point at, only a key nobody ever took. The coordinator half
+is compared only once a queue is actually holding an entry
+(`_acquiredCoordinator != null`), so a scope that needs no key — and one whose
+coordinator lookup failed and never got an entry — may still be moved wherever
+the tree likes without a spurious report.
+
+**Tests** (`test/async_scope_coordinator_test.dart`, group `the scopeKey of a
+live scope`):
+
+- `cannot appear after the scope has mounted` — a holder on `'shared'` plus a
+  key-less scope under the same coordinator (`initialized == 2`, so they really
+  did coexist); the key then appears on the second scope and must be reported
+  with wording that says it was never taken.
+- `cannot be given up while the scope is holding it` — a keyed scope whose key
+  becomes `null` must be reported as *given up*, which is not the same as
+  changed: the entry is still held, by a scope that no longer claims to need
+  it.
+
+Reverted-fix checks: with the entry-only guard restored, `cannot appear` fails
+with `Expected: <Instance of 'FlutterError'> Actual: <null>` — total silence,
+the reviewer's finding exactly. With the single fixed message restored, `cannot
+be given up` fails with `Actual: 'The scopeKey of _TestScope changed while it
+was holding one.'`.
+
+**Docs.** Both the `scopeKey` dartdoc and the `## 0.10.0` CHANGELOG bullet were
+rewritten in the same commit. Both previously claimed the key was "fixed for
+the lifetime of the element" without saying it is *read once* — which is what
+makes an appearing key unhonourable rather than merely misplaced — and neither
+mentioned the appearing or disappearing cases at all. They now enumerate all
+four, and say plainly that none of them is repaired.
+
+### Verification after the follow-up
+
+| Check | Result |
+| --- | --- |
+| `flutter test` | 79 passed (69 baseline + 10 new) |
+| `flutter analyze` (package) | No issues found |
+| `flutter analyze` (example/minimal) | No issues found |
+| `flutter analyze` (example/scopo_demo) | No issues found |
+| `dart format --set-exit-if-changed lib test` | clean |
+| `dart doc` | 0 warnings, 0 errors |
+
 ## Deviations from the brief
 
 1. **Defect 1** — the file has one `onError` handler, not two; the two
@@ -266,3 +389,7 @@ section touched.
    private `AsyncScopeCoordinator._enter` was removed rather than left dead.
 3. **Defect 5** — the rebuild hook is `performRebuild()`, not `update()`, for
    the reason given above.
+4. **Follow-up 7** — none. The controller's decision (record the observed key,
+   including `null`, and compare against it) was implemented as stated; the
+   only judgement call was to word the appearing-key report differently from
+   the other three, since there is no misplaced entry to point at.
