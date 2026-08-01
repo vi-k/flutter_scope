@@ -52,11 +52,12 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
   ///
   /// **This getter is read exactly once, when the initialization starts, and
   /// the answer it gives then -- together with the coordinator above the scope
-  /// -- is fixed for the lifetime of the element.** `null` is one of those
-  /// answers, not the absence of one: a scope that reads no key never takes a
-  /// place in any queue, and nothing takes one for it later.
+  /// -- is binding until the scope has finished disposing of itself.** `null`
+  /// is one of those answers, not the absence of one: a scope that reads no
+  /// key never takes a place in any queue, and nothing takes one for it later.
   ///
-  /// So none of the four ways the answer can go stale is repaired:
+  /// So, for as long as it is binding, none of the four ways the answer can go
+  /// stale is repaired:
   ///
   /// * a key that **appears** after a scope initialized without one is not
   ///   honoured -- the scope holds nothing and keeps nobody out;
@@ -73,6 +74,12 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
   /// builds and cost nothing in release builds. None is repaired, because
   /// releasing a key and taking another one is asynchronous and a rebuild is
   /// not.
+  ///
+  /// Once the disposal has released the key, the answer binds nothing any more
+  /// and none of that is reported: an element that outlives its own disposal
+  /// -- which is what `close()` leaves behind, still mounted so it can show a
+  /// closing screen, and still movable with a [GlobalKey] -- may be rebuilt
+  /// and reparented freely.
   ///
   /// To switch a scope to another key, or to move it under another
   /// coordinator, give the widget a different [Widget.key] instead: the
@@ -149,6 +156,19 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
   /// read no key decided just as irrevocably that it needs none, and nothing
   /// takes an entry for it afterwards.
   bool _scopeKeyObserved = false;
+
+  /// Whether the disposal has released everything the key involved.
+  ///
+  /// The element outlives its own disposal when it was closed via `close()`
+  /// rather than removed from the tree -- that is the whole point of `close()`,
+  /// which keeps it mounted so it can show a closing screen, and leaves it
+  /// movable with a [GlobalKey]. Once the `finally` of [_performAsyncDispose]
+  /// has run, the entry has been `exit()`ed and the scope holds nothing, so
+  /// [scopeKey] answering differently from then on contradicts nothing and is
+  /// no longer worth reporting. Until then it still does: the entry is in a
+  /// queue, and a key that changes mid-close is the very violation the
+  /// diagnostic exists for.
+  bool _scopeKeySettled = false;
 
   /// The value [scopeKey] had when [_performAsyncInit] read it, and the
   /// [AsyncScopeCoordinator] element the resulting [_asyncScopeEntry] took its
@@ -264,13 +284,19 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
   /// -- and that is the one case with nothing to see, since there is no
   /// misplaced entry to notice, only a key that quietly excludes nobody.
   ///
+  /// A scope that has finished disposing of itself is past all of this: it has
+  /// released whatever it held, so the answer is no longer binding on
+  /// anything and it may be rebuilt or reparented freely -- which is exactly
+  /// what `close()` leaves an element able to do.
+  ///
   /// Called from an `assert`, so it costs nothing in release builds -- which
   /// is also why it raises rather than returning `false`: the message is worth
   /// more than the line number.
   bool _debugCheckScopeKeyOwnership() {
-    if (!_scopeKeyObserved) {
-      // The initialization has not read `scopeKey` yet, so there is no answer
-      // to disagree with.
+    if (!_scopeKeyObserved || _scopeKeySettled) {
+      // Either the initialization has not read `scopeKey` yet, so there is no
+      // answer to disagree with, or the disposal has released everything it
+      // led to, so disagreeing with it costs nothing.
       return true;
     }
 
@@ -642,10 +668,18 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
       }
 
       if (_asyncScopeEntry case final asyncScopeEntry?) {
-        _log.d(() => 'exit from [$scopeKey]');
+        // `_acquiredScopeKey`, not `scopeKey`: what is being released is the
+        // key the queue was entered on, whatever the getter says by now.
+        _log.d(() => 'exit from [$_acquiredScopeKey]');
         asyncScopeEntry.exit();
         _asyncScopeEntry = null;
       }
+
+      // Nothing is held any more, so [scopeKey] has nothing left to
+      // contradict. Set here rather than on `_isDisposing`, so a key that
+      // changes while the disposal is still in flight -- with the entry still
+      // in its queue -- is reported as loudly as ever.
+      _scopeKeySettled = true;
 
       _model.dispose();
 

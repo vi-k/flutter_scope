@@ -89,8 +89,9 @@
 * `scopeKey` is now documented and enforced as read exactly once, when the
   initialization starts: the answer it gives then — `null` included, which is
   an answer and not the absence of one — together with the
-  `AsyncScopeCoordinator` above the scope, is fixed for the lifetime of the
-  element. A key that appears after a scope initialized without one, a key
+  `AsyncScopeCoordinator` above the scope, is binding until the scope has
+  finished disposing of itself. A key that appears after a scope initialized
+  without one, a key
   that is given up, a key that changes, and a scope moved with a `GlobalKey`
   under a different coordinator all used to be silent, and the mutual
   exclusion the key exists for quietly stopped working — an appearing key was
@@ -99,7 +100,12 @@
   message that says what happened and what to do instead (give the widget a
   different `key`, so a new element reads the key afresh). Release builds are
   unaffected, and nothing is repaired: releasing a key and taking another one
-  is asynchronous, and a rebuild is not.
+  is asynchronous, and a rebuild is not. A scope that has finished disposing
+  of itself holds nothing, so it is exempt: an element that outlives its own
+  disposal — which is what `LiteScope.close()` leaves behind, still mounted so
+  it can show a closing screen, and still movable with a `GlobalKey` — may be
+  rebuilt and reparented freely. A key that changes while a `close()` is still
+  in flight, with the entry still in its queue, is reported as before.
 * Fix an expired `waitForChildren` forgetting the children registered after it
   started: the wait dropped the whole live registry instead of only the
   snapshot it was awaiting, so a scope that registered mid-wait — one the wait
