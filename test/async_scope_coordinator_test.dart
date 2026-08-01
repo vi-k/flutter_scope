@@ -419,6 +419,65 @@ void main() {
     );
   });
 
+  // `AsyncScopeParent.waitForChildren` is public API in its own right, not
+  // just the plumbing behind the static helper: `AsyncScopeCore.of` hands out
+  // the element, and every custom `AsyncScopeElementBase` exposes the method.
+  // Called without an `onTimeout` it must report the expiry itself, or a
+  // dropped child is total silence.
+  testWidgets('the mixin waitForChildren reports an expiry by default',
+      (tester) async {
+    await tester.pumpWidget(
+      const Directionality(
+        textDirection: TextDirection.ltr,
+        child: _TestScope(
+          disposeLabel: 'parent',
+          child: _TestScope(disposeLabel: 'child'),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // The very object `AsyncScopeCore.of<_TestScope, _TestScopeElement>(
+    // context, listen: false)` returns for the outer scope.
+    final parent =
+        tester.element<_TestScopeElement>(find.byType(_TestScope).first);
+    expect(parent.childrenCount, 1);
+
+    Object? error;
+    var waited = false;
+    unawaited(
+      // No `onTimeout`: its default is what is under test. The child scope is
+      // still mounted and never unregisters, so the wait can only expire.
+      parent.waitForChildren(timeout: const Duration(milliseconds: 50)).then(
+            (_) => waited = true,
+            onError: (Object failure) => error = failure,
+          ),
+    );
+    await _settle(tester, until: () => waited || error != null);
+
+    expect(error, isNull, reason: 'an expiry completes the future normally');
+    expect(waited, isTrue);
+
+    final exception = tester.takeException();
+    expect(
+      exception,
+      isA<TimeoutException>(),
+      reason: 'an expiry is reported even without an onTimeout callback',
+    );
+    expect(
+      (exception as TimeoutException).message,
+      startsWith('$_TestScope'),
+      reason: 'the element puts its own short description in front of the '
+          'message the registry builds',
+    );
+    expect(
+      find.byType(_TestScope),
+      findsNWidgets(2),
+      reason: 'the child that was dropped is still mounted -- nothing was '
+          'really waited for, so the silence would have been the whole story',
+    );
+  });
+
   testWidgets('waitForChildren without a coordinator is an error',
       (tester) async {
     late BuildContext context;
@@ -481,6 +540,304 @@ void main() {
       2,
       reason: 'the scope that timed out was let in anyway',
     );
+  });
+
+  // An expired `scopeKey` wait lets the scope in anyway and reports the
+  // expiry, so `onScopeKeyTimeout()` -- ordinary user code -- runs with the
+  // entry already in the queue. A failure there used to drop the entry from
+  // the element, and the disposal's `exit()` then never released the key: the
+  // queue kept an entry nobody would ever complete, and every later scope on
+  // that key waited for it with no way out.
+  //
+  // The assertion is about effects, never about timings: what proves it is
+  // that a later scope on the same key gets in and initializes, without
+  // having had to give up on the wait (`keyTimedOut`), and its own limit is
+  // set far beyond what the test can advance, so an expiry cannot be what let
+  // it in.
+  testWidgets('a failing onScopeKeyTimeout does not leak the scopeKey',
+      (tester) async {
+    Widget build({
+      required bool holder,
+      required bool waiter,
+      required bool successor,
+    }) =>
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: AsyncScopeCoordinator(
+            child: Column(
+              children: [
+                if (holder)
+                  const _TestScope(testKey: 'shared', disposeLabel: 'holder'),
+                if (waiter)
+                  const _TestScope(
+                    testKey: 'shared',
+                    keyTimeout: Duration(milliseconds: 50),
+                    throwOnKeyTimeout: true,
+                  ),
+                if (successor)
+                  const _TestScope(
+                    testKey: 'shared',
+                    disposeLabel: 'successor',
+                    keyTimeout: Duration(days: 1),
+                  ),
+              ],
+            ),
+          ),
+        );
+
+    // The hook's failure surfaces as an uncaught error of the zone the mount
+    // ran in -- `_performAsyncInit()`'s future is discarded -- so a guarded
+    // child zone catches it before `flutter_test` ends the test on it.
+    // Nothing inside that zone may throw, so every `expect` is made once it
+    // is gone.
+    final errors = <Object>[];
+    await runZonedGuarded(
+      () async {
+        await tester.pumpWidget(
+          build(holder: true, waiter: false, successor: false),
+        );
+        await tester.pumpAndSettle();
+
+        // The waiter queues up behind the holder and its limit expires: it is
+        // let in anyway, the expiry is reported, and `onScopeKeyTimeout()`
+        // throws.
+        await tester
+            .pumpWidget(build(holder: true, waiter: true, successor: false));
+        await tester.pump(const Duration(milliseconds: 100));
+      },
+      (error, stackTrace) => errors.add(error),
+    );
+
+    expect(errors, hasLength(1));
+    expect(errors.single, isA<StateError>());
+    expect(
+      tester.takeException(),
+      isA<TimeoutException>(),
+      reason: 'the expiry itself is still reported',
+    );
+
+    // Both scopes leave; the holder releases the key on the way out, and so
+    // must the waiter whose hook threw.
+    await tester
+        .pumpWidget(build(holder: false, waiter: false, successor: false));
+    await _settle(
+      tester,
+      until: () => _TestScopeElement.disposalOrder.contains('holder'),
+    );
+    expect(_TestScopeElement.disposalOrder, ['holder']);
+
+    await tester
+        .pumpWidget(build(holder: false, waiter: false, successor: true));
+    await tester.pumpAndSettle();
+
+    final successor =
+        tester.element<_TestScopeElement>(find.byType(_TestScope));
+
+    expect(
+      successor.state,
+      isA<AsyncScopeReady>(),
+      reason: 'the key was released, so the next scope got in at once',
+    );
+    expect(
+      successor.keyTimedOut,
+      isFalse,
+      reason: 'it got the key, it was not let in on an expired wait',
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  // A place in a queue is taken once and cannot be moved, so the pair
+  // (`scopeKey`, owning coordinator) is fixed for the lifetime of the element.
+  // Both ways of breaking that -- a `scopeKey` that starts returning something
+  // else, and a `GlobalKey` move under a different coordinator -- used to leave
+  // the entry parked on the old queue in silence, and the mutual exclusion the
+  // key exists for simply stopped working. The violation is now loud in debug
+  // builds.
+  group('the scopeKey of a live scope', () {
+    testWidgets('cannot change', (tester) async {
+      Widget build(Object key) => Directionality(
+            textDirection: TextDirection.ltr,
+            child: AsyncScopeCoordinator(child: _TestScope(testKey: key)),
+          );
+
+      await tester.pumpWidget(build('first'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+
+      await tester.pumpWidget(build('second'));
+
+      final exception = tester.takeException();
+      expect(exception, isA<FlutterError>());
+      expect(
+        exception.toString(),
+        contains('`scopeKey`'),
+        reason: 'the report says what happened',
+      );
+      expect(
+        exception.toString(),
+        contains('different `key`'),
+        reason: 'and what to do instead',
+      );
+    });
+
+    // `null` is a value this getter may legitimately return, and a scope that
+    // reads it as `null` decides just as irrevocably that it needs no key:
+    // nothing takes an entry afterwards. `AsyncScope(scopeKey: userId)` with a
+    // `userId` that is null until an async load finishes is ordinary usage, so
+    // a key that turns up late is not exotic -- and it used to be completely
+    // silent, because the check only ran once an entry existed.
+    testWidgets('cannot appear after the scope has mounted', (tester) async {
+      Widget build(Object? lateKey) => Directionality(
+            textDirection: TextDirection.ltr,
+            child: AsyncScopeCoordinator(
+              child: Column(
+                children: [
+                  const _TestScope(testKey: 'shared'),
+                  _TestScope(testKey: lateKey),
+                ],
+              ),
+            ),
+          );
+
+      await tester.pumpWidget(build(null));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(
+        _TestScopeElement.initialized,
+        2,
+        reason: 'the second scope read no key, so it never queued for one',
+      );
+
+      await tester.pumpWidget(build('shared'));
+
+      final exception = tester.takeException();
+      expect(exception, isA<FlutterError>());
+      expect(
+        exception.toString(),
+        contains('appeared'),
+        reason: 'the report says the key was never taken at all, which is not '
+            'the same as an entry left on the wrong queue',
+      );
+      expect(
+        exception.toString(),
+        contains('different `key`'),
+        reason: 'and says what to do instead',
+      );
+    });
+
+    testWidgets('cannot be given up while the scope is holding it',
+        (tester) async {
+      Widget build(Object? key) => Directionality(
+            textDirection: TextDirection.ltr,
+            child: AsyncScopeCoordinator(child: _TestScope(testKey: key)),
+          );
+
+      await tester.pumpWidget(build('shared'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+
+      await tester.pumpWidget(build(null));
+
+      final exception = tester.takeException();
+      expect(exception, isA<FlutterError>());
+      expect(
+        exception.toString(),
+        contains('given up'),
+        reason: 'a key let go is not a key that changed: the entry is still '
+            'held, by a scope that no longer claims to need it',
+      );
+      expect(
+        exception.toString(),
+        contains('different `key`'),
+        reason: 'and says what to do instead',
+      );
+    });
+
+    testWidgets('cannot move under another coordinator', (tester) async {
+      // The very same widget instance on both sides of the move, so the
+      // framework takes the `child.widget == newWidget` shortcut in
+      // `updateChild` and never rebuilds the element it just reactivated:
+      // `activate()` is then the only place left to notice the new
+      // coordinator.
+      final scope = _TestScope(key: GlobalKey(), testKey: 'shared');
+      // `Expanded`, so the `ErrorWidget` the framework substitutes for the
+      // failed build has bounded constraints: an unbounded one overflows the
+      // `Column` and buries the report under a second, unrelated exception.
+      Widget build({required bool moved}) => Directionality(
+            textDirection: TextDirection.ltr,
+            child: Column(
+              children: [
+                Expanded(
+                  child: AsyncScopeCoordinator(
+                    child: moved ? const SizedBox.shrink() : scope,
+                  ),
+                ),
+                Expanded(
+                  child: AsyncScopeCoordinator(
+                    child: moved ? scope : const SizedBox.shrink(),
+                  ),
+                ),
+              ],
+            ),
+          );
+
+      await tester.pumpWidget(build(moved: false));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+
+      final [oldParent, newParent] = tester
+          .elementList(find.byType(AsyncScopeCoordinator))
+          .cast<AsyncScopeParent>()
+          .toList();
+      expect(oldParent.childrenCount, 1);
+
+      await tester.pumpWidget(build(moved: true));
+
+      final exception = tester.takeException();
+      expect(exception, isA<FlutterError>());
+      expect(
+        exception.toString(),
+        contains('$AsyncScopeCoordinator'),
+        reason: 'the report names the coordinator the entry is parked on',
+      );
+      expect(
+        exception.toString(),
+        contains('different `key`'),
+        reason: 'and says what to do instead',
+      );
+
+      // Reporting the violation must not cost the parent handoff the move
+      // itself needs. The scope has left the first coordinator's subtree, and
+      // it is alive and well under the second one: a diagnostic that unwound
+      // `activate()` before `_registerWithParent()` would leave the first
+      // coordinator waiting for it forever.
+      expect(
+        oldParent.childrenCount,
+        0,
+        reason: 'the coordinator the scope left must not keep waiting for it',
+      );
+      expect(
+        newParent.childrenCount,
+        1,
+        reason: 'the coordinator it moved under is what waits for it now',
+      );
+
+      var waited = false;
+      unawaited(
+        oldParent
+            .waitForChildren(timeout: const Duration(days: 1))
+            .then((_) => waited = true),
+      );
+      await _settle(tester, until: () => waited);
+
+      expect(
+        waited,
+        isTrue,
+        reason: 'the limit is far beyond what this test can advance, so only '
+            'an empty registry can have released the wait',
+      );
+    });
   });
 
   testWidgets('an expired wait for children is reported', (tester) async {
@@ -586,6 +943,14 @@ final class _TestScope extends AsyncScopeCore<_TestScope, _TestScopeElement> {
   final String? disposeLabel;
   final Duration disposeDelay;
 
+  /// Overrides [AsyncScopeElementBase.scopeKeyTimeout] for this scope only,
+  /// so one scope in a tree can expire while another one cannot.
+  final Duration? keyTimeout;
+
+  /// Makes [AsyncScopeElementBase.onScopeKeyTimeout] fail, the way a plain
+  /// user error in an overridden hook does.
+  final bool throwOnKeyTimeout;
+
   /// Holds [_TestScopeElement.disposeAsync] until it is completed.
   ///
   /// A gate keeps a disposal pending without leaving a timer behind, which a
@@ -594,9 +959,12 @@ final class _TestScope extends AsyncScopeCore<_TestScope, _TestScopeElement> {
   final Completer<void>? disposeGate;
 
   const _TestScope({
+    super.key,
     this.testKey,
     this.disposeLabel,
     this.disposeDelay = Duration.zero,
+    this.keyTimeout,
+    this.throwOnKeyTimeout = false,
     this.disposeGate,
     // `child` is inherited from `ProxyWidget`; declaring it again here would
     // shadow it (`overridden_fields`).
@@ -609,6 +977,9 @@ final class _TestScope extends AsyncScopeCore<_TestScope, _TestScopeElement> {
 
 final class _TestScopeElement
     extends AsyncScopeElementBase<_TestScope, _TestScopeElement> {
+  /// Whether this scope had to be let into its key without ever getting it.
+  bool keyTimedOut = false;
+
   _TestScopeElement(super.widget);
 
   static int initialized = 0;
@@ -621,6 +992,17 @@ final class _TestScopeElement
 
   @override
   Object? get scopeKey => widget.testKey;
+
+  @override
+  Duration? get scopeKeyTimeout => widget.keyTimeout ?? super.scopeKeyTimeout;
+
+  @override
+  void onScopeKeyTimeout() {
+    keyTimedOut = true;
+    if (widget.throwOnKeyTimeout) {
+      throw StateError('onScopeKeyTimeout failed');
+    }
+  }
 
   @override
   Stream<AsyncScopeInitState> initAsync() async* {

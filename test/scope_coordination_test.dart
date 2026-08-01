@@ -202,6 +202,30 @@ void main() {
       expect(registry.hasChildren, isFalse);
     });
 
+    // A scope can be handed the same entry to release twice -- its disposal
+    // clears the field, but an element that stays mounted through `close()`
+    // can still be moved in the tree and try to re-register. Raising on the
+    // second release would turn that into a crash for a caller with nothing
+    // left to fix, and in release builds -- where the asserts are gone --
+    // into `Future already completed`.
+    test('unregistering a second time is a no-op', () async {
+      final registry = ChildRegistry();
+      final child = registry.registerChild('child');
+      expect(registry.hasChildren, isTrue);
+
+      child.unregister();
+      expect(registry.hasChildren, isFalse);
+
+      child.unregister();
+
+      var done = false;
+      unawaited(registry.waitForChildren().then((_) => done = true));
+      await pumpEvents();
+
+      expect(done, isTrue);
+      expect(registry.childrenCount, 0);
+    });
+
     test('a timeout reports and gives up on the children left', () {
       fakeAsync((async) {
         final registry = ChildRegistry()..registerChild('slow');
@@ -226,6 +250,92 @@ void main() {
           registry.hasChildren,
           isFalse,
           reason: 'the children left behind are dropped',
+        );
+      });
+    });
+
+    test('a timeout drops only the children the wait was awaiting', () {
+      fakeAsync((async) {
+        final registry = ChildRegistry()..registerChild('slow');
+        TimeoutException? reported;
+
+        var done = false;
+        unawaited(
+          registry
+              .waitForChildren(
+                timeout: const Duration(seconds: 3),
+                onTimeout: (error, _) => reported = error,
+              )
+              .then((_) => done = true),
+        );
+
+        // Registered while the wait is already running, so it is excluded from
+        // that wait by design -- but it never unregistered, so the registry
+        // must still know about it once the wait has given up.
+        final laterChild = registry.registerChild('later');
+
+        async.elapse(const Duration(seconds: 4));
+
+        expect(done, isTrue, reason: 'the wait must not hang');
+        expect(reported, isNotNull);
+        expect(
+          reported!.message,
+          contains('slow'),
+          reason: 'the child that held the wait up is named',
+        );
+        expect(
+          reported!.message,
+          isNot(contains('later')),
+          reason: 'a child this wait never awaited did not hold it up',
+        );
+        expect(
+          registry.childrenCount,
+          1,
+          reason: 'only the children of the expired wait are dropped',
+        );
+
+        var secondDone = false;
+        unawaited(registry.waitForChildren().then((_) => secondDone = true));
+        async.elapse(Duration.zero);
+
+        expect(
+          secondDone,
+          isFalse,
+          reason: 'a later wait must still await the child that is live',
+        );
+
+        laterChild.unregister();
+        async.elapse(Duration.zero);
+
+        expect(secondDone, isTrue);
+        expect(registry.hasChildren, isFalse);
+      });
+    });
+
+    test('an onTimeout that throws still gives up on the children left', () {
+      fakeAsync((async) {
+        final registry = ChildRegistry()..registerChild('slow');
+        Object? escaped;
+
+        unawaited(
+          registry
+              .waitForChildren(
+            timeout: const Duration(seconds: 3),
+            onTimeout: (_, __) => throw StateError('reporting failed'),
+          )
+              .catchError((Object error) {
+            escaped = error;
+          }),
+        );
+
+        async.elapse(const Duration(seconds: 4));
+
+        expect(escaped, isA<StateError>(), reason: 'the failure is not hidden');
+        expect(
+          registry.hasChildren,
+          isFalse,
+          reason: 'a reporter that throws must not leave the registry holding '
+              'entries the expired wait already gave up on',
         );
       });
     });

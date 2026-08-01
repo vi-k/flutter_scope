@@ -153,6 +153,62 @@ void main() {
     );
 
     testWidgets(
+      'hands the same disposal failure to every close() caller',
+      (tester) async {
+        await tester.pumpWidget(
+          _app(const _CloseScope(init: _becomesReady, failStateDispose: true)),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('ready'), findsOneWidget);
+
+        final element =
+            tester.element<_CloseScopeElement>(find.byType(_CloseScope));
+
+        Object? firstError;
+        Object? secondError;
+        var isFirstSettled = false;
+        var isSecondSettled = false;
+
+        // The first caller starts the disposal; the second one, issued before
+        // the first can settle, joins the very same run.
+        unawaited(
+          element.close().then(
+            (_) => isFirstSettled = true,
+            onError: (Object error) {
+              firstError = error;
+              isFirstSettled = true;
+            },
+          ),
+        );
+        unawaited(
+          element.close().then(
+            (_) => isSecondSettled = true,
+            onError: (Object error) {
+              secondError = error;
+              isSecondSettled = true;
+            },
+          ),
+        );
+
+        await _settle(tester, until: () => isFirstSettled && isSecondSettled);
+
+        expect(isFirstSettled, isTrue, reason: 'both calls must settle');
+        expect(isSecondSettled, isTrue, reason: 'both calls must settle');
+        expect(
+          firstError,
+          isA<StateError>(),
+          reason: 'the caller that started the disposal sees it fail',
+        );
+        expect(
+          secondError,
+          same(firstError),
+          reason: 'a caller that joined the run in flight must be told the '
+              'same thing, not that the disposal succeeded',
+        );
+      },
+    );
+
+    testWidgets(
       'completes in the ready state even when the screenshot can never '
       'be taken',
       (tester) async {
@@ -233,6 +289,361 @@ void main() {
         expect(element.state, isA<AsyncScopeWaiting>());
       },
     );
+
+    // `close()` deliberately keeps the element mounted, so the `mounted`
+    // guard on the post-frame callback that registers the scope with its
+    // parent tells that callback nothing about a disposal that is already
+    // over. The two sibling callbacks in `_performAsyncInit` got the
+    // `_isDisposing` half of the guard; this one kept only `mounted`.
+    //
+    // The assertions are about effects: how many children the parent still
+    // holds, and whether a later wait comes back on its own. The wait's limit
+    // is set far beyond anything this test can advance, so an expiry cannot
+    // be what releases it.
+    testWidgets(
+      'does not register with the parent again once close() has finished',
+      (tester) async {
+        final binding = tester.binding;
+
+        // Mount by driving the build phase directly, so the post-frame
+        // callback that `_performAsyncInit` schedules to register the scope
+        // with its parent stays pending -- `pumpWidget` would drain it within
+        // the very frame that schedules it (the same technique as in
+        // `async_scope_test.dart`).
+        binding.attachRootWidget(
+          binding.wrapWithDefaultView(
+            const Directionality(
+              textDirection: TextDirection.ltr,
+              child: AsyncScopeCoordinator(
+                child: _CloseScope(init: _neverEmits),
+              ),
+            ),
+          ),
+        );
+        binding.buildOwner!.buildScope(binding.rootElement!);
+
+        final coordinator = tester.element(find.byType(AsyncScopeCoordinator))
+            as AsyncScopeParent;
+        final element = _scopeOf(tester);
+
+        var isClosed = false;
+        unawaited(element.close().whenComplete(() => isClosed = true));
+
+        // Real time only, no frames: the whole disposal runs -- unregistering
+        // an entry that does not exist yet -- while the registration callback
+        // is still queued.
+        for (var i = 0; i < 20 && !isClosed; i++) {
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 10)),
+          );
+        }
+        expect(isClosed, isTrue, reason: 'close() must have finished first');
+
+        // The first frame drains the pending callback.
+        await tester.pump();
+
+        expect(
+          coordinator.childrenCount,
+          0,
+          reason: 'a scope that has finished disposing of itself must not '
+              'register a fresh entry with its parent',
+        );
+
+        var waited = false;
+        unawaited(
+          coordinator
+              .waitForChildren(timeout: const Duration(days: 1))
+              .then((_) => waited = true),
+        );
+        await _settle(tester, until: () => waited);
+
+        expect(
+          waited,
+          isTrue,
+          reason: 'nothing would ever complete an orphaned entry, so the wait '
+              'could only end by giving up on a scope that is already gone',
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    // A `close()`d element stays mounted, so it can still be moved in the
+    // tree with a `GlobalKey`: the element is deactivated and reactivated
+    // rather than unmounted, and `activate()` re-runs the registration with
+    // the parent. The disposal's `finally` unregistered the parent entry but
+    // never cleared the field, so that re-registration reached for an entry
+    // that was already gone -- an assert in debug, and a `Future already
+    // completed` in release, where that assert is not there to stop it.
+    testWidgets(
+      'survives being moved with a GlobalKey after close()',
+      (tester) async {
+        final scopeKey = GlobalKey();
+        Widget build({required bool moved}) => Directionality(
+              textDirection: TextDirection.ltr,
+              child: AsyncScopeCoordinator(
+                child: Column(
+                  children: [
+                    if (!moved)
+                      SizedBox(
+                        child: _CloseScope(key: scopeKey, init: _neverEmits),
+                      ),
+                    if (moved)
+                      Center(
+                        child: _CloseScope(key: scopeKey, init: _neverEmits),
+                      ),
+                  ],
+                ),
+              ),
+            );
+
+        await tester.pumpWidget(build(moved: false));
+        await tester.pumpAndSettle();
+
+        final coordinator = tester.element(find.byType(AsyncScopeCoordinator))
+            as AsyncScopeParent;
+        expect(coordinator.childrenCount, 1);
+
+        final element = _scopeOf(tester);
+        var isClosed = false;
+        unawaited(element.close().whenComplete(() => isClosed = true));
+        await _settle(tester, until: () => isClosed);
+
+        expect(isClosed, isTrue);
+        expect(coordinator.childrenCount, 0);
+
+        // The closed scope is moved under a different parent widget: its
+        // element is retaken by the `GlobalKey` instead of being unmounted,
+        // so `activate()` runs on an element whose disposal is over.
+        await tester.pumpWidget(build(moved: true));
+
+        expect(
+          tester.takeException(),
+          isNull,
+          reason: 'reactivating a closed scope must not reach for the parent '
+              'entry its disposal already unregistered',
+        );
+        expect(
+          coordinator.childrenCount,
+          0,
+          reason: 'a scope that is done disposing of itself must not register '
+              'with its new parent either -- nothing would complete the entry',
+        );
+      },
+    );
+
+    // `close()` keeps the element mounted on purpose -- so it can render a
+    // closing screen, and so it can still be moved with a `GlobalKey` -- and a
+    // scope that has finished closing has already `exit()`ed its `AccessEntry`.
+    // It holds no key and asks for none, so the live-ownership diagnostic has
+    // nothing left to be true about: the three tests below pin that it stays
+    // quiet afterwards, and loud while the disposal is still in flight.
+    group('with a scopeKey', () {
+      testWidgets(
+        'may be moved under another coordinator once it has finished closing',
+        (tester) async {
+          final scope = _CloseScope(
+            key: GlobalKey(),
+            init: _neverEmits,
+            testKey: 'shared',
+          );
+          // `Expanded`, so an `ErrorWidget` substituted for a failed build has
+          // bounded constraints and cannot bury the report under a `Column`
+          // overflow.
+          Widget build({required bool moved}) => Directionality(
+                textDirection: TextDirection.ltr,
+                child: Column(
+                  children: [
+                    Expanded(
+                      child: AsyncScopeCoordinator(
+                        child: moved ? const SizedBox.shrink() : scope,
+                      ),
+                    ),
+                    Expanded(
+                      child: AsyncScopeCoordinator(
+                        child: moved ? scope : const SizedBox.shrink(),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+
+          await tester.pumpWidget(build(moved: false));
+          await tester.pumpAndSettle();
+
+          var isClosed = false;
+          unawaited(
+            _scopeOf(tester).close().whenComplete(() => isClosed = true),
+          );
+          await _settle(tester, until: () => isClosed);
+
+          expect(isClosed, isTrue, reason: 'the key has been released');
+          expect(tester.takeException(), isNull);
+
+          await tester.pumpWidget(build(moved: true));
+
+          expect(
+            tester.takeException(),
+            isNull,
+            reason: 'a scope that has released its key holds nothing that '
+                'could be left parked on the coordinator it came from',
+          );
+        },
+      );
+
+      testWidgets(
+        'may be rebuilt with a different scopeKey once it has finished closing',
+        (tester) async {
+          Widget build(Object key) => Directionality(
+                textDirection: TextDirection.ltr,
+                child: AsyncScopeCoordinator(
+                  child: _CloseScope(init: _neverEmits, testKey: key),
+                ),
+              );
+
+          await tester.pumpWidget(build('shared'));
+          await tester.pumpAndSettle();
+
+          var isClosed = false;
+          unawaited(
+            _scopeOf(tester).close().whenComplete(() => isClosed = true),
+          );
+          await _settle(tester, until: () => isClosed);
+
+          expect(isClosed, isTrue, reason: 'the key has been released');
+          expect(tester.takeException(), isNull);
+
+          await tester.pumpWidget(build('other'));
+
+          expect(
+            tester.takeException(),
+            isNull,
+            reason: 'the key it read is no longer holding anything, so there '
+                'is nothing left for a new one to contradict',
+          );
+        },
+      );
+
+      testWidgets(
+        'still reports a scopeKey that changes while close() is in flight',
+        (tester) async {
+          // The init stream refuses to finish cancelling until the gate is
+          // opened, so the disposal parks inside `await subscription.cancel()`
+          // -- `_isDisposing` is set and the `AccessEntry` is still in the
+          // queue. The scope never leaves the waiting state, so no closing
+          // overlay is built: the substituted `ErrorWidget` then deactivates a
+          // subtree of one `Text`, instead of one with a running animation in
+          // it, which trips framework asserts of its own.
+          final gate = Completer<void>();
+          Widget build(Object key) => Directionality(
+                textDirection: TextDirection.ltr,
+                child: AsyncScopeCoordinator(
+                  child: _CloseScope(
+                    init: () => _neverEmitsUntilCancelled(gate),
+                    testKey: key,
+                  ),
+                ),
+              );
+
+          await tester.pumpWidget(build('shared'));
+          await tester.pumpAndSettle();
+          expect(find.text('waiting'), findsOneWidget);
+
+          var isClosed = false;
+          unawaited(
+            _scopeOf(tester).close().whenComplete(() => isClosed = true),
+          );
+          await _settle(tester, until: () => isClosed);
+
+          expect(isClosed, isFalse, reason: 'the disposal is still in flight');
+          expect(tester.takeException(), isNull);
+
+          await tester.pumpWidget(build('other'));
+
+          final exception = tester.takeException();
+          expect(
+            exception,
+            isA<FlutterError>(),
+            reason: 'the entry is still in the queue, so this is the real '
+                'violation and turning the check off on disposal would hide it',
+          );
+          expect(
+            exception.toString(),
+            contains('changed while the scope was holding one'),
+          );
+
+          gate.complete();
+          await _settle(tester, until: () => isClosed);
+          expect(isClosed, isTrue);
+        },
+      );
+    });
+
+    // The same shape as the `AsyncScopeElementBase` deadlock covered in
+    // `async_scope_test.dart`, one layer down: `LiteScopeCoreState`
+    // synchronizes its disposal with its own initialization through a
+    // completer, and `_performAsyncInit()` runs on a future discarded by
+    // `initState()`. A failed `initAsync()` used to leave that completer
+    // unsettled, so `close()` -- which reaches it through
+    // `LiteScopeElementBase.disposeAsync()` -- never came back.
+    for (final (kind, isAsync) in [('synchronously', false), ('async', true)]) {
+      testWidgets(
+        'completes when the state initAsync throws $kind',
+        (tester) async {
+          // The failure surfaces as an uncaught error of the zone the build
+          // ran in, exactly as for the scope-level initialization; a guarded
+          // child zone catches it before `flutter_test` ends the test on it.
+          // Nothing inside that zone may throw -- an assertion that fails
+          // there is swallowed by the zone's error handler and the test hangs
+          // instead of failing -- so every `expect` is made once it is gone.
+          final errors = <Object>[];
+          var isClosed = false;
+          late _CloseScopeElement element;
+
+          await runZonedGuarded(
+            () async {
+              await tester.pumpWidget(
+                _app(
+                  _CloseScope(
+                    init: _becomesReady,
+                    failStateInit: true,
+                    failStateInitAsync: isAsync,
+                  ),
+                ),
+              );
+              element = _scopeOf(tester);
+              // The state only exists once the scope is ready: it is created
+              // by the widget `buildOnReady()` mounts.
+              await _settle(tester, until: () => element.createdState != null);
+
+              unawaited(element.close().whenComplete(() => isClosed = true));
+              await _settle(tester, until: () => isClosed);
+            },
+            (error, stackTrace) => errors.add(error),
+          );
+
+          expect(
+            element.createdState,
+            isNotNull,
+            reason: 'the state must have been created and initialized',
+          );
+          expect(
+            isClosed,
+            isTrue,
+            reason: 'close() must not wait for an initialization that failed',
+          );
+          expect(
+            element.createdState!.disposeAsyncCount,
+            0,
+            reason: 'an initialization that never happened is not disposed of',
+          );
+          expect(
+            errors.single,
+            isA<StateError>(),
+            reason: 'the failure is still reported, not swallowed',
+          );
+        },
+      );
+    }
   });
 
   group('ScreenshotReplacer', () {
@@ -387,6 +798,17 @@ Future<void> _settle(
 Stream<AsyncScopeInitState> _neverEmits() =>
     Stream<AsyncScopeInitState>.multi((_) {});
 
+/// Like [_neverEmits], but the cancellation the disposal awaits does not
+/// finish until [gate] is completed.
+///
+/// That parks `_performAsyncDispose` between `_isDisposing = true` and the
+/// `finally` that releases the key -- the window in which the scope is closing
+/// and still holding its `AccessEntry`.
+Stream<AsyncScopeInitState> _neverEmitsUntilCancelled(Completer<void> gate) =>
+    Stream<AsyncScopeInitState>.multi(
+      (controller) => controller.onCancel = () => gate.future,
+    );
+
 /// Moves the scope into [AsyncScopeProgress] and keeps it there.
 Stream<AsyncScopeInitState> _emitsProgressOnly() =>
     Stream<AsyncScopeInitState>.multi(
@@ -409,7 +831,30 @@ final class _CloseScope
     extends LiteScopeCore<_CloseScope, _CloseScopeElement, _CloseScopeState> {
   final Stream<AsyncScopeInitState> Function() init;
 
-  const _CloseScope({required this.init});
+  /// Makes [_CloseScopeState.initAsync] fail, the way a plain user error in a
+  /// state initializer does.
+  final bool failStateInit;
+
+  /// Whether that failure is raised from a future ([_CloseScopeState.initAsync]
+  /// returns a `FutureOr<void>`, so both are ordinary user code).
+  final bool failStateInitAsync;
+
+  /// Makes [_CloseScopeState.disposeAsync] fail, the way a resource that
+  /// refuses to be released does.
+  final bool failStateDispose;
+
+  /// Becomes [AsyncScopeElementBase.scopeKey], so `close()` can be exercised
+  /// on a scope that actually holds a key.
+  final Object? testKey;
+
+  const _CloseScope({
+    super.key,
+    required this.init,
+    this.failStateInit = false,
+    this.failStateInitAsync = false,
+    this.failStateDispose = false,
+    this.testKey,
+  });
 
   @override
   _CloseScopeElement createScopeElement() => _CloseScopeElement(this);
@@ -421,7 +866,14 @@ final class _CloseScopeElement extends LiteScopeElementBase<_CloseScope,
   /// ready state still releases what `initAsync()` acquired.
   int disposeAsyncCount = 0;
 
+  /// The state built by `buildOnReady()`, kept here because the widget that
+  /// owns it is private to the package and cannot be found by type.
+  _CloseScopeState? createdState;
+
   _CloseScopeElement(super.widget);
+
+  @override
+  Object? get scopeKey => widget.testKey;
 
   @override
   Stream<AsyncScopeInitState> initAsync() => widget.init();
@@ -447,11 +899,36 @@ final class _CloseScopeElement extends LiteScopeElementBase<_CloseScope,
       const Text('error');
 
   @override
-  _CloseScopeState createState() => _CloseScopeState();
+  _CloseScopeState createState() => createdState = _CloseScopeState();
 }
 
 final class _CloseScopeState extends LiteScopeCoreState<_CloseScope,
     _CloseScopeElement, _CloseScopeState> {
+  /// How many times [disposeAsync] ran, to prove that a state whose
+  /// initialization failed is not disposed of.
+  int disposeAsyncCount = 0;
+
+  @override
+  FutureOr<void> initAsync() {
+    if (!params.failStateInit) return null;
+    if (params.failStateInitAsync) {
+      return Future<void>.error(StateError('state initAsync failed'));
+    }
+
+    throw StateError('state initAsync failed');
+  }
+
+  @override
+  FutureOr<void> disposeAsync() {
+    disposeAsyncCount++;
+    if (!params.failStateDispose) return null;
+
+    // A real asynchronous failure, delivered through an awaited future one
+    // microtask later, so it takes the same propagation path a resource that
+    // refuses to be released would.
+    return Future<void>.error(StateError('state disposeAsync failed'));
+  }
+
   @override
   Widget build(BuildContext context) => const Text('ready');
 }

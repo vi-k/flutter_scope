@@ -19,15 +19,41 @@ mixin AsyncScopeParent on Diagnosticable {
   /// the call have finished.
   ///
   /// A child that registers while the wait is already running is not awaited
-  /// by it.
+  /// by it, and is still registered once it is over.
   ///
-  /// On [timeout] the children left behind are dropped and [onTimeout] is
-  /// called; the future completes normally either way.
+  /// On [timeout] the awaited children that never finished are dropped and
+  /// [onTimeout] is called; the future completes normally either way.
+  ///
+  /// [onTimeout] defaults to reporting the [TimeoutException] through
+  /// [FlutterError.reportError], the same default
+  /// [AsyncScopeCoordinator.waitForChildren] applies, so a dropped child is
+  /// never silent; pass a callback to handle it instead.
   Future<void> waitForChildren({
     Duration? timeout,
     void Function(TimeoutException error, StackTrace stackTrace)? onTimeout,
-  }) =>
-      _childRegistry.waitForChildren(timeout: timeout, onTimeout: onTimeout);
+  }) {
+    // The message the registry builds knows nothing about the widget tree, so
+    // this parent puts its own name in front of it. The name is read here,
+    // while the parent is still mounted: the wait outlives the tree in the
+    // very cases it exists for, and reading `widget` at expiry time would
+    // throw on an element that has been unmounted since.
+    final name = onTimeout == null ? toStringShort() : null;
+
+    return _childRegistry.waitForChildren(
+      timeout: timeout,
+      onTimeout: onTimeout ??
+          (error, stackTrace) => FlutterError.reportError(
+                FlutterErrorDetails(
+                  exception: TimeoutException(
+                    '$name ${error.message}',
+                    error.duration,
+                  ),
+                  stack: stackTrace,
+                  library: 'scopo',
+                ),
+              ),
+    );
+  }
 
   ChildEntry _registerChild(String debugName) =>
       _childRegistry.registerChild(debugName);

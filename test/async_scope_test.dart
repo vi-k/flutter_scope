@@ -156,6 +156,345 @@ void main() {
       },
     );
   });
+
+  // Both tests below cover the same defect: `_performAsyncInit()` runs on a
+  // discarded future, so a failure raised *before* `_subscription` is assigned
+  // used to leave `_initCompleter` unsettled forever -- nothing else on that
+  // path completes it. `_performAsyncDispose()` then parked on
+  // `await _initCompleter.future`, never reached its `finally`, and never
+  // unregistered the scope from its parent, which burned its whole
+  // `waitForChildrenTimeout` on a child that was already gone.
+  //
+  // The assertions are about effects, never about timings: fake time in a
+  // widget test advances instantly, so a wall-clock measurement proves nothing
+  // about a stall. What proves it is that the parent's `waitForChildren` came
+  // back on its own (the timeout is set far beyond the budget `_settle` can
+  // advance, so an expiry cannot be what released it) and that the parent got
+  // to `disposeAsync()` at all.
+  group('AsyncScope failed initialization', () {
+    testWidgets(
+      'a scope whose initAsync throws synchronously still finishes disposing '
+      'of itself, so its parent does not wait for it in vain',
+      (tester) async {
+        late _WaitingParentScopeElement parent;
+        late _FailingInitScopeElement child;
+        late int childrenBefore;
+
+        // The failure reaches nobody but the zone: `_performAsyncInit()`'s
+        // future is discarded, so it never gets to the framework's error
+        // handling and `tester.takeException()` cannot see it. `flutter_test`'s
+        // own `handleUncaughtError` would end the test on the spot, so
+        // everything runs inside a guarded child zone that catches it first.
+        //
+        // Nothing inside that zone may throw: an assertion that fails there is
+        // swallowed by the zone's error handler and the test hangs instead of
+        // failing, so the body only ever collects, and every `expect` is made
+        // once the zone is gone.
+        final errors = <Object>[];
+        await runZonedGuarded(
+          () async {
+            await tester.pumpWidget(
+              const Directionality(
+                textDirection: TextDirection.ltr,
+                child: _WaitingParentScope(child: _FailingInitScope()),
+              ),
+            );
+            await tester.pumpAndSettle();
+
+            parent = tester.element(find.byType(_WaitingParentScope))
+                as _WaitingParentScopeElement;
+            child = tester.element(find.byType(_FailingInitScope))
+                as _FailingInitScopeElement;
+            childrenBefore = parent.childrenCount;
+
+            await tester.pumpWidget(
+              const Directionality(
+                textDirection: TextDirection.ltr,
+                child: SizedBox.shrink(),
+              ),
+            );
+            await _settle(tester, until: () => parent.disposed);
+          },
+          (error, stackTrace) => errors.add(error),
+        );
+
+        expect(
+          childrenBefore,
+          1,
+          reason: 'the scope registered with its parent before failing',
+        );
+        expect(
+          parent.timedOut,
+          isFalse,
+          reason: 'the parent never had to give up on the failed scope',
+        );
+        expect(
+          parent.childrenCount,
+          0,
+          reason: 'the failed scope finished disposing of itself and left',
+        );
+        expect(
+          parent.disposed,
+          isTrue,
+          reason: 'the parent got past the wait and disposed of itself',
+        );
+        expect(
+          child.disposeCount,
+          0,
+          reason: 'an initialization that never happened is not disposed of',
+        );
+        expect(
+          errors.single,
+          isA<StateError>(),
+          reason: 'the failure is still reported, not swallowed',
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      'a scope with a scopeKey and no coordinator still finishes disposing '
+      'of itself, so its parent does not wait for it in vain',
+      (tester) async {
+        late _WaitingParentScopeElement parent;
+        late _FailingInitScopeElement child;
+        late int childrenBefore;
+
+        // Same guarded zone as above, and the same rule about it: the
+        // `FlutterError` raised by the coordinator lookup surfaces as an
+        // uncaught error of the zone the mount ran in, and nothing inside the
+        // zone may throw.
+        final errors = <Object>[];
+        await runZonedGuarded(
+          () async {
+            await tester.pumpWidget(
+              const Directionality(
+                textDirection: TextDirection.ltr,
+                // No `AsyncScopeCoordinator` anywhere above: the lookup in
+                // `AsyncScopeCoordinator._elementOf` throws, and it throws
+                // before
+                // `_subscription` exists.
+                child: _WaitingParentScope(
+                  child: _FailingInitScope(testKey: 'shared'),
+                ),
+              ),
+            );
+            await tester.pumpAndSettle();
+
+            parent = tester.element(find.byType(_WaitingParentScope))
+                as _WaitingParentScopeElement;
+            child = tester.element(find.byType(_FailingInitScope))
+                as _FailingInitScopeElement;
+            childrenBefore = parent.childrenCount;
+
+            await tester.pumpWidget(
+              const Directionality(
+                textDirection: TextDirection.ltr,
+                child: SizedBox.shrink(),
+              ),
+            );
+            await _settle(tester, until: () => parent.disposed);
+          },
+          (error, stackTrace) => errors.add(error),
+        );
+
+        expect(
+          childrenBefore,
+          1,
+          reason: 'the scope registered with its parent before failing',
+        );
+        expect(
+          parent.timedOut,
+          isFalse,
+          reason: 'the parent never had to give up on the failed scope',
+        );
+        expect(
+          parent.childrenCount,
+          0,
+          reason: 'the failed scope finished disposing of itself and left',
+        );
+        expect(
+          parent.disposed,
+          isTrue,
+          reason: 'the parent got past the wait and disposed of itself',
+        );
+        expect(
+          child.disposeCount,
+          0,
+          reason: 'an initialization that never happened is not disposed of',
+        );
+        expect(
+          errors,
+          hasLength(1),
+          reason: 'the entry that never made it into a queue is dropped, so '
+              'the disposal does not `exit()` it and raise a second error',
+        );
+        expect(errors.single, isA<FlutterError>());
+        expect(
+          errors.single.toString(),
+          contains('No `AsyncScopeCoordinator`'),
+          reason: 'the original failure is still reported, not swallowed',
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+  });
+
+  // Both tests below cover the same defect: an event that arrives *after*
+  // `initAsync()` has already reached `AsyncScopeReady` used to complete
+  // `_initCompleter` a second time. The `Bad state: Future already completed`
+  // that raised replaced the failure being reported, so the real one never
+  // reached anybody.
+  //
+  // The assertions are about effects, never about timings: what proves the
+  // defect is which error the app receives, which state the scope is left in,
+  // and whether `disposeAsync()` still runs.
+  group('AsyncScope initialization that fails after the ready state', () {
+    testWidgets(
+      'reports the failure raised after the ready state instead of a '
+      'double-completed init completer, and leaves the scope ready',
+      (tester) async {
+        late _ErrorAfterReadyScopeElement scope;
+
+        // `_performAsyncInit()`'s subscription callbacks run in the zone the
+        // mount ran in, so a failure raised there surfaces as an uncaught
+        // error of that zone and `flutter_test`'s own `handleUncaughtError`
+        // would end the test on the spot. A guarded child zone catches it
+        // first. Nothing inside that zone may throw -- an assertion that
+        // fails there is swallowed by the zone's error handler and the test
+        // hangs instead of failing -- so every `expect` is made once it is
+        // gone.
+        final zoneErrors = <Object>[];
+        await runZonedGuarded(
+          () async {
+            await tester.pumpWidget(
+              const Directionality(
+                textDirection: TextDirection.ltr,
+                child: _ErrorAfterReadyScope(),
+              ),
+            );
+            await tester.pumpAndSettle();
+
+            scope = tester.element(find.byType(_ErrorAfterReadyScope))
+                as _ErrorAfterReadyScopeElement;
+          },
+          (error, stackTrace) => zoneErrors.add(error),
+        );
+
+        expect(
+          zoneErrors,
+          isEmpty,
+          reason: 'completing the init completer twice must not raise on top '
+              'of the failure being reported',
+        );
+
+        final exception = tester.takeException();
+        expect(
+          exception,
+          isA<StateError>(),
+          reason: 'the failure the stream raised is what reaches the app',
+        );
+        expect((exception! as StateError).message, 'failed after ready');
+        expect(
+          scope.state,
+          isA<AsyncScopeReady>(),
+          reason: 'a scope that did initialize must not be flipped into the '
+              'error state -- `buildOnError` would replace the widgets that '
+              'are already on screen',
+        );
+
+        await tester.pumpWidget(
+          const Directionality(
+            textDirection: TextDirection.ltr,
+            child: SizedBox.shrink(),
+          ),
+        );
+        await _settle(tester, until: () => scope.disposeCount > 0);
+
+        expect(
+          scope.disposeCount,
+          1,
+          reason: 'the initialization succeeded, so what it acquired is still '
+              'released exactly once',
+        );
+      },
+    );
+
+    testWidgets(
+      'reports a second ready state as the already-initialized diagnostic',
+      (tester) async {
+        late _TwiceReadyScopeElement scope;
+
+        final zoneErrors = <Object>[];
+        await runZonedGuarded(
+          () async {
+            await tester.pumpWidget(
+              const Directionality(
+                textDirection: TextDirection.ltr,
+                child: _TwiceReadyScope(),
+              ),
+            );
+            await tester.pumpAndSettle();
+
+            scope = tester.element(find.byType(_TwiceReadyScope))
+                as _TwiceReadyScopeElement;
+          },
+          (error, stackTrace) => zoneErrors.add(error),
+        );
+
+        expect(
+          zoneErrors,
+          isEmpty,
+          reason: "the package's own diagnostic must not turn into a `Bad "
+              'state: Future already completed` crash',
+        );
+
+        final exception = tester.takeException();
+        expect(exception, isA<StateError>());
+        expect(
+          (exception! as StateError).message,
+          '$_TwiceReadyScope already initialized',
+          reason: 'the second ready state is caught even though it arrives '
+              'before the post-frame callback that applies the first one',
+        );
+        expect(scope.state, isA<AsyncScopeReady>());
+
+        await tester.pumpWidget(
+          const Directionality(
+            textDirection: TextDirection.ltr,
+            child: SizedBox.shrink(),
+          ),
+        );
+        await _settle(tester, until: () => scope.disposeCount > 0);
+
+        expect(
+          scope.disposeCount,
+          1,
+          reason: 'the ready branch ran once, so the disposal runs once',
+        );
+      },
+    );
+  });
+}
+
+/// Pumps frames interleaved with slices of *real* time, until [until] holds or
+/// the budget runs out.
+///
+/// The `StreamSubscription.cancel()` chain of
+/// `AsyncScopeElementBase._performAsyncDispose` only makes progress outside the
+/// test's fake-async zone, so `pumpAndSettle()` alone never reaches
+/// `disposeAsync()`. The same workaround is documented in
+/// `async_scope_coordinator_test.dart` and `lite_scope_test.dart`.
+Future<void> _settle(
+  WidgetTester tester, {
+  required bool Function() until,
+}) async {
+  for (var i = 0; i < 20 && !until(); i++) {
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 10)),
+    );
+    await tester.pump(const Duration(milliseconds: 10));
+  }
 }
 
 /// Minimal [AsyncScopeCore] used to test the `_registerWithParent()`
@@ -198,6 +537,148 @@ final class _ReadyRaceScopeElement
   int disposeCount = 0;
 
   _ReadyRaceScopeElement(super.widget);
+
+  @override
+  FutureOr<void> disposeAsync() {
+    disposeCount++;
+  }
+
+  @override
+  Widget buildOnState(AsyncScopeState state) => const SizedBox.shrink();
+}
+
+/// A scope that waits for the scopes below it, and says so when the wait had
+/// to be given up on.
+///
+/// [_WaitingParentScopeElement.waitForChildrenTimeout] is set far beyond
+/// anything the tests can advance, so an expired wait is something the
+/// assertions can rule out rather than something they race against.
+final class _WaitingParentScope
+    extends AsyncScopeCore<_WaitingParentScope, _WaitingParentScopeElement> {
+  const _WaitingParentScope({required super.child});
+
+  @override
+  _WaitingParentScopeElement createScopeElement() =>
+      _WaitingParentScopeElement(this);
+}
+
+final class _WaitingParentScopeElement extends AsyncScopeElementBase<
+    _WaitingParentScope, _WaitingParentScopeElement> {
+  bool timedOut = false;
+  bool disposed = false;
+
+  _WaitingParentScopeElement(super.widget);
+
+  @override
+  Duration? get waitForChildrenTimeout => const Duration(days: 1);
+
+  @override
+  void onWaitForChildrenTimeout() => timedOut = true;
+
+  @override
+  FutureOr<void> disposeAsync() {
+    disposed = true;
+  }
+
+  @override
+  Widget buildOnState(AsyncScopeState state) => widget.child;
+}
+
+/// A scope whose initialization fails before `_subscription` exists.
+///
+/// With a [testKey] and no [AsyncScopeCoordinator] above it, the coordinator
+/// lookup fails first and `initAsync()` is never even called; without one,
+/// `initAsync()` itself throws synchronously.
+final class _FailingInitScope
+    extends AsyncScopeCore<_FailingInitScope, _FailingInitScopeElement> {
+  final Object? testKey;
+
+  const _FailingInitScope({this.testKey});
+
+  @override
+  _FailingInitScopeElement createScopeElement() =>
+      _FailingInitScopeElement(this);
+}
+
+final class _FailingInitScopeElement
+    extends AsyncScopeElementBase<_FailingInitScope, _FailingInitScopeElement> {
+  int disposeCount = 0;
+
+  _FailingInitScopeElement(super.widget);
+
+  @override
+  Object? get scopeKey => widget.testKey;
+
+  // Deliberately not `async*`: the point is a plain user error raised while
+  // the stream is being built, before there is anything to subscribe to.
+  @override
+  Stream<AsyncScopeInitState> initAsync() =>
+      throw StateError('initAsync failed');
+
+  @override
+  FutureOr<void> disposeAsync() {
+    disposeCount++;
+  }
+
+  @override
+  Widget buildOnState(AsyncScopeState state) => const SizedBox.shrink();
+}
+
+/// A scope whose `initAsync()` raises *after* it has reached
+/// [AsyncScopeReady] -- the shape of a stream that keeps working once the
+/// scope is usable and then fails.
+final class _ErrorAfterReadyScope extends AsyncScopeCore<_ErrorAfterReadyScope,
+    _ErrorAfterReadyScopeElement> {
+  const _ErrorAfterReadyScope();
+
+  @override
+  _ErrorAfterReadyScopeElement createScopeElement() =>
+      _ErrorAfterReadyScopeElement(this);
+}
+
+final class _ErrorAfterReadyScopeElement extends AsyncScopeElementBase<
+    _ErrorAfterReadyScope, _ErrorAfterReadyScopeElement> {
+  int disposeCount = 0;
+
+  _ErrorAfterReadyScopeElement(super.widget);
+
+  @override
+  Stream<AsyncScopeInitState> initAsync() async* {
+    yield AsyncScopeReady();
+    throw StateError('failed after ready');
+  }
+
+  @override
+  FutureOr<void> disposeAsync() {
+    disposeCount++;
+  }
+
+  @override
+  Widget buildOnState(AsyncScopeState state) => const SizedBox.shrink();
+}
+
+/// A scope whose `initAsync()` emits [AsyncScopeReady] twice, both events
+/// arriving before the post-frame callback that applies the first one to the
+/// model -- the case the `already initialized` diagnostic exists for.
+final class _TwiceReadyScope
+    extends AsyncScopeCore<_TwiceReadyScope, _TwiceReadyScopeElement> {
+  const _TwiceReadyScope();
+
+  @override
+  _TwiceReadyScopeElement createScopeElement() => _TwiceReadyScopeElement(this);
+}
+
+final class _TwiceReadyScopeElement
+    extends AsyncScopeElementBase<_TwiceReadyScope, _TwiceReadyScopeElement> {
+  int disposeCount = 0;
+
+  _TwiceReadyScopeElement(super.widget);
+
+  @override
+  Stream<AsyncScopeInitState> initAsync() async* {
+    yield AsyncScopeReady();
+    yield AsyncScopeReady();
+  }
 
   @override
   FutureOr<void> disposeAsync() {

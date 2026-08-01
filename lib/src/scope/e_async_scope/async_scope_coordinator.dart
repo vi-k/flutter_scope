@@ -25,6 +25,15 @@ final class AsyncScopeCoordinator extends ScopeWidgetCore<AsyncScopeCoordinator,
   _AsyncScopeCoordinatorElement createScopeElement() =>
       _AsyncScopeCoordinatorElement(this);
 
+  /// The nearest coordinator above [context], the one whose queues a scope
+  /// with a `scopeKey` takes its place in.
+  ///
+  /// Each coordinator keeps its own keys: scopes under different coordinators
+  /// never wait for one another, even when their keys are equal.
+  ///
+  /// A scope resolves this *before* it creates its [AccessEntry], so the one
+  /// failure that can happen while the entry does not yet exist stays where
+  /// there is nothing to release.
   static _AsyncScopeCoordinatorElement _elementOf(BuildContext context) =>
       ScopeWidgetCore.maybeOf<AsyncScopeCoordinator,
           _AsyncScopeCoordinatorElement>(
@@ -40,33 +49,21 @@ final class AsyncScopeCoordinator extends ScopeWidgetCore<AsyncScopeCoordinator,
         ' scopes that share the key.',
       ));
 
-  /// Takes [entry] into the queue of [key] of the nearest coordinator.
-  ///
-  /// Each coordinator keeps its own keys: scopes under different coordinators
-  /// never wait for one another, even when their keys are equal.
-  static Future<void> _enter(
-    BuildContext context,
-    Object key,
-    AccessEntry entry, {
-    Duration? timeout,
-    void Function(TimeoutException error, StackTrace stackTrace)? onTimeout,
-  }) =>
-      _elementOf(context)
-          .enter(key, entry, timeout: timeout, onTimeout: onTimeout);
-
   /// Waits for the scopes registered with the nearest coordinator at the time
   /// of the call.
   ///
   /// These are the scopes that have no parent scope above them; a scope with a
   /// parent scope is awaited by that parent instead. A scope that registers
-  /// while the wait is already running is not awaited by it.
+  /// while the wait is already running is not awaited by it, and is still
+  /// registered once it is over.
   ///
   /// [timeout] defaults to [ScopeConfig.defaultWaitForChildrenTimeout], the
   /// same default the scopes themselves use; pass a [Duration] to override it
-  /// for this call only. An expiry is not fatal: the scopes left behind are
-  /// dropped and the future completes normally, so a scope that never finishes
-  /// disposing of itself degrades into a delay instead of a deadlock. Removing
-  /// the limit entirely is done through [ScopeConfig], not here.
+  /// for this call only. An expiry is not fatal: the awaited scopes that never
+  /// finished are dropped and the future completes normally, so a scope that
+  /// never finishes disposing of itself degrades into a delay instead of a
+  /// deadlock. Removing the limit entirely is done through [ScopeConfig], not
+  /// here.
   ///
   /// [onTimeout] defaults to reporting the [TimeoutException] through
   /// [FlutterError.reportError], so an expiry is never silent; pass a callback

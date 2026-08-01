@@ -172,9 +172,11 @@ final class ChildRegistry {
   /// while the wait is already running is not awaited by it.
   ///
   /// Completes at once when there are no children. When [timeout] elapses,
-  /// [onTimeout] is called, the children left behind are dropped and the
-  /// future completes normally: a child that never finishes must not keep its
-  /// parent from being disposed of.
+  /// [onTimeout] is called, the awaited children that never finished are
+  /// dropped and the future completes normally: a child that never finishes
+  /// must not keep its parent from being disposed of. A child that registered
+  /// after the wait started is kept — this wait never awaited it, so it is not
+  /// this wait's to give up on.
   Future<void> waitForChildren({
     Duration? timeout,
     void Function(TimeoutException error, StackTrace stackTrace)? onTimeout,
@@ -183,7 +185,12 @@ final class ChildRegistry {
       return;
     }
 
-    var future = _children.map((e) => e._completer.future).wait;
+    // The snapshot this wait is responsible for. The live list may grow while
+    // the wait is running, and those late arrivals belong to a later wait, not
+    // to this one -- neither to await, nor to give up on.
+    final awaited = List.of(_children);
+
+    var future = awaited.map((e) => e._completer.future).wait;
     if (timeout != null) {
       future = future.timeout(timeout);
     }
@@ -191,16 +198,24 @@ final class ChildRegistry {
     try {
       await future;
     } on TimeoutException catch (_, stackTrace) {
-      onTimeout?.call(
-        TimeoutException(
-          "couldn't wait for the children to complete: $_children",
-          timeout,
-        ),
-        stackTrace,
-      );
-      // Only the children that never finished are still here; dropping them
-      // keeps a second wait from hanging on entries nobody will complete.
-      _children.clear();
+      final unfinished =
+          awaited.where((e) => !e._completer.isCompleted).toList();
+
+      try {
+        onTimeout?.call(
+          TimeoutException(
+            "couldn't wait for the children to complete: $unfinished",
+            timeout,
+          ),
+          stackTrace,
+        );
+      } finally {
+        // Dropping the children this wait gave up on keeps a second wait from
+        // hanging on entries nobody will complete. It happens even when the
+        // report above throws, so a failing reporter cannot leave the registry
+        // wedged. The children registered after this wait started stay.
+        _children.removeWhere(unfinished.contains);
+      }
     }
   }
 }
@@ -213,8 +228,18 @@ final class ChildEntry {
 
   ChildEntry._(this._debugName, this._registry);
 
+  /// Leaves the registry, completing the wait this entry was holding up.
+  ///
+  /// Doing it a second time is a no-op rather than a failure: the parent this
+  /// entry belonged to has already been told, and raising here would turn a
+  /// double release into a crash for a caller that has nothing left to fix.
   void unregister() {
-    assert(_registry != null, 'Entry is already unregistered');
+    if (_registry == null) {
+      assert(_completer.isCompleted, 'Detached entry is not completed');
+
+      return;
+    }
+
     assert(!_completer.isCompleted, 'Entry is already completed');
 
     _completer.complete();

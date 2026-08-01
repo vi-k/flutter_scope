@@ -228,25 +228,34 @@ abstract base class LiteScopeElementBase<
   S _createState() => _state = createState().._scopeElement = this as E;
 
   @override
-  Future<void> _performAsyncDispose() async {
+  Future<void> _performAsyncDispose() {
+    // There is one disposal run per element, and every caller -- an explicit
+    // [close], a concurrent one, the implicit disposal on unmount -- must
+    // observe its outcome. Completing the shared completer *with the run
+    // itself* hands the same value, or the same error and stack trace, to all
+    // of them alike: a failure the first caller sees is never reported as a
+    // success to the next one.
     if (_closeCompleter case final closeCompleter?) {
       return closeCompleter.future;
     }
 
+    // Installed before the run starts, so a caller arriving while the run is
+    // still synchronous joins it instead of starting a second one.
     final closeCompleter = Completer<void>();
     _closeCompleter = closeCompleter;
+    closeCompleter.complete(_runAsyncDispose());
 
+    return closeCompleter.future;
+  }
+
+  Future<void> _runAsyncDispose() async {
     markNeedsBuild();
 
     if (_screenshotCompleter case final screenshotCompleter?) {
       await screenshotCompleter.future;
     }
 
-    try {
-      await super._performAsyncDispose();
-    } finally {
-      closeCompleter.complete();
-    }
+    await super._performAsyncDispose();
   }
 
   /// Closes the scope before the disposal occurs.
@@ -314,7 +323,18 @@ abstract base class LiteScopeCoreState<
   // End of overriding block
   //
 
+  /// Disposal may begin before the end of asynchronous initialization.
+  /// Therefore, we use [_initCompleter] for synchronization.
+  ///
+  /// It is settled when the initialization *ends*, successfully or not:
+  /// [_performAsyncDispose] waits for it, and a failure that left it unsettled
+  /// would keep the scope from ever being disposed of. Whether the
+  /// initialization actually worked is [_initSucceeded].
   final _initCompleter = Completer<void>();
+
+  /// Whether [initAsync] has completed successfully.
+  bool _initSucceeded = false;
+
   late final E _scopeElement;
 
   @override
@@ -325,7 +345,7 @@ abstract base class LiteScopeCoreState<
   W get params => _scopeElement.widget;
 
   /// Whether the scope initialization is fully completed.
-  bool get isInitialized => _initCompleter.isCompleted;
+  bool get isInitialized => _initSucceeded;
 
   @override
   @mustCallSuper
@@ -335,28 +355,45 @@ abstract base class LiteScopeCoreState<
   }
 
   Future<void> _performAsyncInit() async {
-    final result = initAsync();
-    if (result is Future<void>) {
-      await result;
-      _initCompleter.complete();
-      if (mounted) {
-        onInitialized();
-        notifyDependents();
+    try {
+      final result = initAsync();
+      if (result is Future<void>) {
+        await result;
+        _completeInit();
+      } else {
+        SchedulerBinding.instance.runOutsideFrame(_completeInit);
       }
-    } else {
-      SchedulerBinding.instance.runOutsideFrame(() {
+    } on Object {
+      // This future is discarded by `initState`, so nothing else ever settles
+      // the completer: leaving it unsettled would park [_performAsyncDispose]
+      // -- and the `close()` that waits for it -- forever. The error is
+      // re-thrown untouched, so it still surfaces as an uncaught error of the
+      // zone the build ran in.
+      if (!_initCompleter.isCompleted) {
         _initCompleter.complete();
-        if (mounted) {
-          onInitialized();
-          notifyDependents();
-        }
-      });
+      }
+      rethrow;
+    }
+  }
+
+  void _completeInit() {
+    _initSucceeded = true;
+    _initCompleter.complete();
+    if (mounted) {
+      onInitialized();
+      notifyDependents();
     }
   }
 
   Future<void> _performAsyncDispose() async {
     if (!_initCompleter.isCompleted) {
       await _initCompleter.future;
+    }
+
+    // Nothing was initialized, so there is nothing to dispose of -- the same
+    // rule `AsyncScopeElementBase` applies to its own `disposeAsync`.
+    if (!_initSucceeded) {
+      return;
     }
 
     final result = disposeAsync();

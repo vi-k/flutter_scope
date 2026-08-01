@@ -42,6 +42,49 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
   // Overriding block
   //
 
+  /// The key this scope must hold alone, or `null` when it needs none.
+  ///
+  /// A scope with a key waits, before it initializes, until every scope that
+  /// asked for the same key from the same [AsyncScopeCoordinator] has finished
+  /// disposing of itself, and holds it until its own disposal is over. Two
+  /// scopes under different coordinators never wait for one another, even when
+  /// their keys are equal.
+  ///
+  /// **This getter is read exactly once, when the initialization starts, and
+  /// the answer it gives then -- together with the coordinator above the scope
+  /// -- is binding until the scope has finished disposing of itself.** `null`
+  /// is one of those answers, not the absence of one: a scope that reads no
+  /// key never takes a place in any queue, and nothing takes one for it later.
+  ///
+  /// So, for as long as it is binding, none of the four ways the answer can go
+  /// stale is repaired:
+  ///
+  /// * a key that **appears** after a scope initialized without one is not
+  ///   honoured -- the scope holds nothing and keeps nobody out;
+  /// * a key that is **given up** is still held until the disposal releases
+  ///   it, so it goes on excluding scopes this one no longer claims to
+  ///   exclude;
+  /// * a key that **changes** leaves the entry on the old one, which is never
+  ///   released for the scope it was meant to keep out, while the new one
+  ///   keeps nobody out;
+  /// * a scope **moved with a [GlobalKey] under a different coordinator**
+  ///   keeps its place in the queue it left, with the same two consequences.
+  ///
+  /// All four are reported through an `assert`, so they are loud in debug
+  /// builds and cost nothing in release builds. None is repaired, because
+  /// releasing a key and taking another one is asynchronous and a rebuild is
+  /// not.
+  ///
+  /// Once the disposal has released the key, the answer binds nothing any more
+  /// and none of that is reported: an element that outlives its own disposal
+  /// -- which is what `close()` leaves behind, still mounted so it can show a
+  /// closing screen, and still movable with a [GlobalKey] -- may be rebuilt
+  /// and reparented freely.
+  ///
+  /// To switch a scope to another key, or to move it under another
+  /// coordinator, give the widget a different [Widget.key] instead: the
+  /// framework then builds a new element, which reads this getter afresh and
+  /// releases the old key on its way out.
   Object? get scopeKey => null;
 
   Duration? get pauseAfterInitialization => null;
@@ -106,6 +149,40 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
 
   AccessEntry? _asyncScopeEntry;
 
+  /// Whether [_performAsyncInit] has read [scopeKey] yet.
+  ///
+  /// Kept apart from [_acquiredScopeKey], because `null` is a value the getter
+  /// may legitimately return and the answer matters either way: a scope that
+  /// read no key decided just as irrevocably that it needs none, and nothing
+  /// takes an entry for it afterwards.
+  bool _scopeKeyObserved = false;
+
+  /// Whether the disposal has released everything the key involved.
+  ///
+  /// The element outlives its own disposal when it was closed via `close()`
+  /// rather than removed from the tree -- that is the whole point of `close()`,
+  /// which keeps it mounted so it can show a closing screen, and leaves it
+  /// movable with a [GlobalKey]. Once the `finally` of [_performAsyncDispose]
+  /// has run, the entry has been `exit()`ed and the scope holds nothing, so
+  /// [scopeKey] answering differently from then on contradicts nothing and is
+  /// no longer worth reporting. Until then it still does: the entry is in a
+  /// queue, and a key that changes mid-close is the very violation the
+  /// diagnostic exists for.
+  bool _scopeKeySettled = false;
+
+  /// The value [scopeKey] had when [_performAsyncInit] read it, and the
+  /// [AsyncScopeCoordinator] element the resulting [_asyncScopeEntry] took its
+  /// place on -- the latter `null` when no key was read, or when the lookup
+  /// failed and no entry was ever created.
+  ///
+  /// The answer is given once and cannot be revisited: an entry lives in the
+  /// queue of one key of one coordinator and there is no way to move it, and a
+  /// key that was never asked for has no entry to move. Both are remembered
+  /// here to be able to say so out loud when they change, instead of letting
+  /// the mutual exclusion the key exists for quietly stop working.
+  Object? _acquiredScopeKey;
+  _AsyncScopeCoordinatorElement? _acquiredCoordinator;
+
   ChildEntry? _asyncScopeParentEntry;
 
   @override
@@ -162,8 +239,141 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
   @override
   void activate() {
     super.activate();
+
+    // A `close()`d element stays mounted, so it can still be moved in the
+    // tree with a `GlobalKey` -- and it comes back here with its disposal
+    // already over. Registering it with its new parent would hand that parent
+    // an entry nobody will ever complete, since the `finally` that would have
+    // unregistered it has long since run.
+    if (_isDisposing) {
+      assert(_debugCheckScopeKeyOwnership());
+
+      return;
+    }
+
     // Register again when the widget is moved in the tree with a GlobalKey.
+    //
+    // Before the ownership check, not after it: a move with a `GlobalKey` is
+    // one of the two ways that check can fail, and it fails by raising. Left
+    // above this line it would unwind `activate()` in exactly the case it
+    // exists to describe, so the scope would leave its old parent's subtree
+    // without ever unregistering from it -- the old parent would then wait
+    // out its whole `waitForChildrenTimeout` on a child that is alive and
+    // well somewhere else. The handoff happens first; the report is what may
+    // be lost, and it is not.
     _registerWithParent();
+
+    assert(_debugCheckScopeKeyOwnership());
+  }
+
+  @override
+  void performRebuild() {
+    // The other way: a `scopeKey` getter that starts returning something else
+    // -- a new widget with a different key, or a value read from the element's
+    // own state.
+    assert(_debugCheckScopeKeyOwnership());
+    super.performRebuild();
+  }
+
+  /// Fails when [scopeKey] no longer gives the answer the initialization read,
+  /// or when the coordinator that owns the queue it entered is no longer the
+  /// one above the scope.
+  ///
+  /// The absence of a key counts as an answer: a scope that read `null` never
+  /// takes an entry, so a key that turns up afterwards is not honoured either
+  /// -- and that is the one case with nothing to see, since there is no
+  /// misplaced entry to notice, only a key that quietly excludes nobody.
+  ///
+  /// A scope that has finished disposing of itself is past all of this: it has
+  /// released whatever it held, so the answer is no longer binding on
+  /// anything and it may be rebuilt or reparented freely -- which is exactly
+  /// what `close()` leaves an element able to do.
+  ///
+  /// Called from an `assert`, so it costs nothing in release builds -- which
+  /// is also why it raises rather than returning `false`: the message is worth
+  /// more than the line number.
+  bool _debugCheckScopeKeyOwnership() {
+    if (!_scopeKeyObserved || _scopeKeySettled) {
+      // Either the initialization has not read `scopeKey` yet, so there is no
+      // answer to disagree with, or the disposal has released everything it
+      // led to, so disagreeing with it costs nothing.
+      return true;
+    }
+
+    final currentScopeKey = scopeKey;
+    // Which coordinator is above the scope only matters once one of its queues
+    // is holding an entry: a scope that took none may be moved wherever the
+    // tree likes.
+    final currentCoordinator = _acquiredCoordinator == null
+        ? null
+        : ScopeWidgetCore.maybeOf<AsyncScopeCoordinator,
+            _AsyncScopeCoordinatorElement>(this, listen: false);
+
+    if (currentScopeKey == _acquiredScopeKey &&
+        identical(currentCoordinator, _acquiredCoordinator)) {
+      return true;
+    }
+
+    final name = widget.toStringShort();
+    final acquiredCoordinator =
+        _acquiredCoordinator?.toStringShort() ?? 'no $AsyncScopeCoordinator';
+    final coordinator =
+        currentCoordinator?.toStringShort() ?? 'no $AsyncScopeCoordinator';
+
+    final (String summary, String detail) =
+        switch ((_acquiredScopeKey, currentScopeKey)) {
+      (null, final appeared?) => (
+          'The `scopeKey` of $name appeared after the scope had already'
+              ' initialized without one.',
+          'The key is read once, when the initialization starts, and this'
+              ' scope read none: it never took a place in any queue, and nothing'
+              ' takes one for it now. [$appeared] is not honoured -- this scope'
+              ' holds nothing, and whoever does hold [$appeared] is not keeping it'
+              ' out.',
+        ),
+      (final acquired?, null) => (
+          'The `scopeKey` of $name was given up while the scope was still'
+              ' holding it.',
+          'It is holding [$acquired] in the queue of $acquiredCoordinator, and'
+              ' now claims to need no key at all. The entry stays where it is'
+              ' until the disposal releases it, so [$acquired] goes on keeping out'
+              ' the scopes this one no longer claims to exclude.',
+        ),
+      (final acquired?, final asked?) when acquired != asked => (
+          'The `scopeKey` of $name changed while the scope was holding one.',
+          'It is holding [$acquired] in the queue of $acquiredCoordinator, and'
+              ' is now asking for [$asked]. The entry cannot follow: it stays'
+              ' where it is, so [$acquired] is never released for the scope it was'
+              ' meant to keep out, and [$asked] keeps nobody out.',
+        ),
+      _ => (
+          'The `$AsyncScopeCoordinator` above $name changed while the scope'
+              ' was holding a `scopeKey`.',
+          'It is holding [$_acquiredScopeKey] in the queue of'
+              ' $acquiredCoordinator, and is now under $coordinator. The entry'
+              ' cannot follow: it stays in the queue it left, so the key it holds'
+              ' there is never released, and under the new coordinator it keeps'
+              ' nobody out.',
+        ),
+    };
+
+    throw FlutterError.fromParts([
+      ErrorSummary(summary),
+      ErrorDescription(detail),
+      ErrorDescription(
+        'Releasing a key and taking another one is asynchronous, and a rebuild'
+        ' is not, so there is nothing to do about it here.',
+      ),
+      ErrorHint(
+        'The answer `scopeKey` gives when the initialization reads it --'
+        ' including `null`, for no key at all -- and the'
+        ' `$AsyncScopeCoordinator` above the scope are fixed for the lifetime'
+        ' of the element. To use another key, or to move the scope under'
+        ' another coordinator, give the widget a different `key`: the'
+        ' framework then builds a new element, which reads the key afresh and'
+        ' releases the old one on its way out.',
+      ),
+    ]);
   }
 
   void _registerWithParent() {
@@ -202,110 +412,183 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
     _log.d('prepare for initialization');
 
     // Register with parent scope.
+    //
+    // `mounted` alone does not cover a disposal that has already run:
+    // `close()` keeps the element mounted on purpose, so a callback drained
+    // after the disposal is over would hand the parent a *fresh* entry, one
+    // registered after the `finally` had unregistered the previous one and
+    // that nobody will ever complete. The parent would then burn its whole
+    // `waitForChildrenTimeout` on a scope that is already gone.
     SchedulerBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
+      if (!mounted || _isDisposing) return;
       _registerWithParent();
     });
 
-    // Wait for access.
-    if (scopeKey case final scopeKey?) {
-      final entry = AccessEntry(
-        widget.toStringShort(showHashCode: true),
-      );
-      _asyncScopeEntry = entry;
-      _log.d(() => 'wait for access to [$scopeKey]');
-      await AsyncScopeCoordinator._enter(
-        this,
-        scopeKey,
-        entry,
-        timeout: scopeKeyTimeout ?? ScopeConfig.defaultScopeKeysTimeout,
-        onTimeout: (error, stackTrace) {
-          FlutterError.reportError(
-            FlutterErrorDetails(
-              exception: error,
-              stack: stackTrace,
-              library: 'scopo',
+    // Everything below either hands `_initCompleter` over to the subscription
+    // that completes it, or completes it itself. A failure in between -- the
+    // coordinator lookup, or `initAsync()` raising while the stream is being
+    // built -- would otherwise leave the completer unsettled forever: this
+    // future is discarded, so nothing retries and nothing else settles it,
+    // while `_performAsyncDispose` waits for it before it may unregister the
+    // scope from its parent. The error is re-thrown untouched, so it still
+    // surfaces as an uncaught error of the zone the mount ran in.
+    try {
+      // `scopeKey` is read exactly once, here. The answer -- a key, or the
+      // decision that none is needed -- is what everything below is built on,
+      // and what every later rebuild is measured against.
+      final acquiredScopeKey = scopeKey;
+      _acquiredScopeKey = acquiredScopeKey;
+      _scopeKeyObserved = true;
+
+      // Wait for access.
+      if (acquiredScopeKey case final scopeKey?) {
+        // The coordinator is looked up *before* the entry exists: the lookup
+        // is the one step here that can fail without the entry ever reaching
+        // a queue, and an entry that reached one has to be released by the
+        // `exit()` in `_performAsyncDispose` no matter how the rest goes.
+        // Everything below attaches the entry before it awaits anything, so
+        // once it is in `_asyncScopeEntry` it is in a queue too, and a
+        // failure -- `onScopeKeyTimeout()`, ordinary user code, throwing on
+        // an expiry, say -- must not drop it: nothing else would ever release
+        // the key, and every later scope on it would wait for an entry nobody
+        // completes.
+        final coordinator = AsyncScopeCoordinator._elementOf(this);
+        final entry = AccessEntry(
+          widget.toStringShort(showHashCode: true),
+        );
+        _asyncScopeEntry = entry;
+        _acquiredCoordinator = coordinator;
+        _log.d(() => 'wait for access to [$scopeKey]');
+        await coordinator.enter(
+          scopeKey,
+          entry,
+          timeout: scopeKeyTimeout ?? ScopeConfig.defaultScopeKeysTimeout,
+          onTimeout: (error, stackTrace) {
+            FlutterError.reportError(
+              FlutterErrorDetails(
+                exception: error,
+                stack: stackTrace,
+                library: 'scopo',
+              ),
+            );
+            onScopeKeyTimeout();
+          },
+        );
+        if (entry.isCancelled) {
+          _log.d(() => 'access to [$scopeKey] cancelled');
+        } else {
+          _log.d(() => 'access to [$scopeKey] obtained');
+        }
+
+        if (entry.isCancelled || !mounted) {
+          _log.i('initialization cancelled');
+          _initCompleter.complete();
+          return;
+        }
+      }
+
+      _log.i('initialize…');
+      _subscription = initAsync().asyncMap((state) {
+        // `_initSucceeded`, not `_model.state`: the model only becomes
+        // `AsyncScopeReady` inside the post-frame (or delayed) callback
+        // scheduled below, so a second `AsyncScopeReady` that arrives before
+        // that callback runs would slip past a check on the model and
+        // initialize the scope all over again -- a second `_initSucceeded`, a
+        // second pending update, and a second `_initCompleter.complete()`.
+        if (_initSucceeded) {
+          throw StateError('$W already initialized');
+        }
+        if (_model.state case AsyncScopeError()) {
+          throw StateError('$W initialization failed');
+        }
+
+        switch (state) {
+          case AsyncScopeProgress():
+            _log.i(() => 'progress: ${state.progress}');
+            _model.update(state);
+          case AsyncScopeReady():
+            if (pauseAfterInitialization case final pauseAfterInitialization?
+                when ScopeConfig.pauseAfterInitializationEnabled) {
+              Future<void>.delayed(pauseAfterInitialization, () {
+                if (mounted && !_isDisposing) {
+                  _model.update(state);
+                }
+              });
+            } else {
+              // Give the last progress value a chance to be displayed.
+              SchedulerBinding.instance
+                ..scheduleFrame()
+                ..addPostFrameCallback((_) {
+                  if (!mounted || _isDisposing) return;
+                  _model.update(state);
+                });
+            }
+            _initSucceeded = true;
+            _log.i('initialized');
+            if (!_initCompleter.isCompleted) {
+              _initCompleter.complete();
+            }
+        }
+      }).listen(
+        (_) {},
+        onError: (Object error, StackTrace stackTrace) {
+          _log.e('initialization failed', error: error, stackTrace: stackTrace);
+
+          // A failure that arrives *after* [AsyncScopeReady] -- a stream that
+          // keeps working once the scope is usable and then raises, or the
+          // `already initialized` diagnostic above -- reaches a scope that is
+          // initialized: [disposeAsync] will have to release what
+          // [initAsync] acquired, and the widgets built for the ready state
+          // are the ones on screen. Flipping the model into [AsyncScopeError]
+          // now would swap them for `buildOnError` behind the user's back,
+          // and completing [_initCompleter] a second time would raise `Bad
+          // state: Future already completed` *on top of* the failure being
+          // reported -- which is how the real one used to get lost. The
+          // failure is reported instead, and the scope is left as it is.
+          if (_initSucceeded) {
+            FlutterError.reportError(
+              FlutterErrorDetails(
+                exception: error,
+                stack: stackTrace,
+                library: 'scopo',
+              ),
+            );
+
+            return;
+          }
+
+          _model.update(
+            AsyncScopeError(
+              error,
+              stackTrace,
+              progress: switch (_model.state) {
+                AsyncScopeProgress(:final progress) => progress,
+                _ => null,
+              },
             ),
           );
-          onScopeKeyTimeout();
-        },
-      );
-      if (entry.isCancelled) {
-        _log.d(() => 'access to [$scopeKey] cancelled');
-      } else {
-        _log.d(() => 'access to [$scopeKey] obtained');
-      }
 
-      if (entry.isCancelled || !mounted) {
-        _log.i('initialization cancelled');
-        _initCompleter.complete();
-        return;
-      }
-    }
-
-    _log.i('initialize…');
-    _subscription = initAsync().asyncMap((state) {
-      switch (_model.state) {
-        case AsyncScopeWaiting():
-        case AsyncScopeProgress():
-          break;
-        case AsyncScopeReady():
-          throw StateError('$W already initialized');
-        case AsyncScopeError():
-          throw StateError('$W initialization failed');
-      }
-
-      switch (state) {
-        case AsyncScopeProgress():
-          _log.i(() => 'progress: ${state.progress}');
-          _model.update(state);
-        case AsyncScopeReady():
-          if (pauseAfterInitialization case final pauseAfterInitialization?
-              when ScopeConfig.pauseAfterInitializationEnabled) {
-            Future<void>.delayed(pauseAfterInitialization, () {
-              if (mounted && !_isDisposing) {
-                _model.update(state);
-              }
-            });
-          } else {
-            // Give the last progress value a chance to be displayed.
-            SchedulerBinding.instance
-              ..scheduleFrame()
-              ..addPostFrameCallback((_) {
-                if (!mounted || _isDisposing) return;
-                _model.update(state);
-              });
+          if (!_initCompleter.isCompleted) {
+            _initCompleter.complete();
           }
-          _initSucceeded = true;
-          _log.i('initialized');
-          _initCompleter.complete();
-      }
-    }).listen(
-      (_) {},
-      onError: (Object error, StackTrace stackTrace) {
-        _log.e('initialization failed', error: error, stackTrace: stackTrace);
-
-        _model.update(
-          AsyncScopeError(
-            error,
-            stackTrace,
-            progress: switch (_model.state) {
-              AsyncScopeProgress(:final progress) => progress,
-              _ => null,
-            },
-          ),
-        );
-
+        },
+        onDone: () {
+          if (!_initCompleter.isCompleted) {
+            _log.i('not initialized');
+            _initCompleter.complete();
+          }
+        },
+        cancelOnError: true,
+      );
+    } on Object catch (error, stackTrace) {
+      // `_initSucceeded` stays false: nothing was initialized, so nothing is
+      // disposed of either.
+      _log.e('initialization failed', error: error, stackTrace: stackTrace);
+      if (!_initCompleter.isCompleted) {
         _initCompleter.complete();
-      },
-      onDone: () {
-        if (!_initCompleter.isCompleted) {
-          _log.i('not initialized');
-          _initCompleter.complete();
-        }
-      },
-      cancelOnError: true,
-    );
+      }
+      rethrow;
+    }
 
     return _initCompleter.future;
   }
@@ -375,13 +658,28 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
       _log.e('disposal failed', error: error, stackTrace: stackTrace);
       rethrow;
     } finally {
-      _asyncScopeParentEntry?.unregister();
+      // Cleared, not just unregistered: the element outlives its disposal
+      // when it was closed via `close()` rather than removed from the tree,
+      // and a stale entry left in the field is one `_registerWithParent()`
+      // would try to unregister a second time.
+      if (_asyncScopeParentEntry case final asyncScopeParentEntry?) {
+        asyncScopeParentEntry.unregister();
+        _asyncScopeParentEntry = null;
+      }
 
       if (_asyncScopeEntry case final asyncScopeEntry?) {
-        _log.d(() => 'exit from [$scopeKey]');
+        // `_acquiredScopeKey`, not `scopeKey`: what is being released is the
+        // key the queue was entered on, whatever the getter says by now.
+        _log.d(() => 'exit from [$_acquiredScopeKey]');
         asyncScopeEntry.exit();
         _asyncScopeEntry = null;
       }
+
+      // Nothing is held any more, so [scopeKey] has nothing left to
+      // contradict. Set here rather than on `_isDisposing`, so a key that
+      // changes while the disposal is still in flight -- with the entry still
+      // in its queue -- is reported as loudly as ever.
+      _scopeKeySettled = true;
 
       _model.dispose();
 

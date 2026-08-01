@@ -41,11 +41,93 @@
 * Fix infinite recursion in `CompareUtils.identical`.
 * Fix hang in `ScopeAutoDependencies.dispose()` when no dependency requires
   disposal.
+* Fix a deadlock when an asynchronous initialization fails before it starts:
+  `initAsync()` raising on the spot, or the missing-`AsyncScopeCoordinator`
+  error of a scope with a `scopeKey`, left the scope waiting for its own
+  initialization forever. It never unregistered from its parent, so the parent
+  burned its whole `waitForChildrenTimeout` on a scope that was already gone,
+  and neither of them was ever disposed of. The failure is still reported the
+  same way, and a scope whose initialization never happened is still not
+  disposed of. The same failure in `LiteScopeCoreState.initAsync()` no longer
+  keeps `close()` waiting forever either.
+* Fix a failure raised after `initAsync()` had already reached
+  `AsyncScopeReady` crashing with `Bad state: Future already completed`
+  instead of being reported: the stream's error handler completed the
+  initialization completer a second time, and that crash replaced the failure
+  it was handling, so the real error reached nobody. Such a failure is now
+  reported through `FlutterError.reportError` (library `scopo`) and the scope
+  stays ready — it is no longer flipped into `AsyncScopeError`, which would
+  have replaced the widgets already on screen with `buildOnError` while
+  `disposeAsync()` still ran. The `already initialized` diagnostic now checks
+  whether the initialization succeeded instead of the applied model state, so
+  a second `AsyncScopeReady` arriving before the post-frame callback that
+  applies the first one no longer re-runs the whole ready branch.
+* Fix a `scopeKey` held forever when `onScopeKeyTimeout()` throws: an expired
+  wait lets the scope into the key anyway and then calls that hook, so by the
+  time it ran the entry was already in the queue — and a failure there made
+  the scope forget the entry, so its disposal never released the key. Every
+  later scope on that key then waited for an entry nobody would ever
+  complete, with no way out. The coordinator is now resolved before the entry
+  is created, which is what the blanket handler existed for, and an attached
+  entry is never dropped.
+* Fix `close()` leaving an orphaned child entry behind: the post-frame
+  callback that registers a scope with its parent was guarded by `mounted`
+  alone, and `close()` keeps the element mounted on purpose. A disposal that
+  finished before that callback fired handed the parent a fresh entry
+  registered after the `finally` had unregistered the previous one, so the
+  parent — or `AsyncScopeCoordinator.waitForChildren` — burned its whole
+  timeout on a scope that was already gone. The callback is now guarded the
+  same way its two siblings are.
+* Fix moving a closed scope in the tree with a `GlobalKey` crashing: the
+  disposal unregistered the entry it held with its parent but left the field
+  pointing at it, and `activate()` re-registered unconditionally — so the move
+  reached for an entry that was already gone. In debug that hit an assert; in
+  release, where the assert is not there to stop it, it fell through to
+  `Bad state: Future already completed`. The field is now cleared, a
+  reactivation after disposal no longer registers at all, and
+  `ChildEntry.unregister()` is idempotent.
+* `scopeKey` is now documented and enforced as read exactly once, when the
+  initialization starts: the answer it gives then — `null` included, which is
+  an answer and not the absence of one — together with the
+  `AsyncScopeCoordinator` above the scope, is binding until the scope has
+  finished disposing of itself. A key that appears after a scope initialized
+  without one, a key
+  that is given up, a key that changes, and a scope moved with a `GlobalKey`
+  under a different coordinator all used to be silent, and the mutual
+  exclusion the key exists for quietly stopped working — an appearing key was
+  never taken at all, so a second scope simply coexisted with the holder. All
+  four are now reported in debug builds through an `assert`, each with a
+  message that says what happened and what to do instead (give the widget a
+  different `key`, so a new element reads the key afresh). Release builds are
+  unaffected, and nothing is repaired: releasing a key and taking another one
+  is asynchronous, and a rebuild is not. A scope that has finished disposing
+  of itself holds nothing, so it is exempt: an element that outlives its own
+  disposal — which is what `LiteScope.close()` leaves behind, still mounted so
+  it can show a closing screen, and still movable with a `GlobalKey` — may be
+  rebuilt and reparented freely. A key that changes while a `close()` is still
+  in flight, with the entry still in its queue, is reported as before.
+* Fix an expired `waitForChildren` forgetting the children registered after it
+  started: the wait dropped the whole live registry instead of only the
+  snapshot it was awaiting, so a scope that registered mid-wait — one the wait
+  never awaited by design — was silently unregistered, and the next
+  `waitForChildren()` returned at once while it was still disposing of itself.
+  The children are now dropped even when the `onTimeout` reporter throws.
+* `AsyncScopeParent.waitForChildren` now defaults `onTimeout` to reporting the
+  `TimeoutException` through `FlutterError.reportError` (library `scopo`),
+  prefixed with the parent's short description — the same default
+  `AsyncScopeCoordinator.waitForChildren` already applied. Calling the mixin
+  method directly on a scope element used to drop the children and complete
+  with nothing reported at all.
 * Fix `ScopeNotifier.value` not subscribing to a new listenable on update.
 * Fix `LiteScope.close()` hang outside the Ready state; fix
   `ScreenshotReplacer` completing early and leaking `ui.Image`.
 * Fix a double close() race in LiteScope orphaning the screenshot barrier;
   cap ScreenshotReplacer retries (new public ScreenshotReplacer.maxRetries).
+* Fix concurrent `LiteScope.close()` callers disagreeing about a failed
+  disposal: only the caller that started the run saw the error, while every
+  other one — a second `close()`, or the implicit disposal on unmount — was
+  told the very same run had succeeded. All of them now receive the same
+  value, or the same error and stack trace.
 * Fix the closing screenshot never being taken in release and profile builds:
   the `debugNeedsPaint` pre-check is now assert-gated, so it no longer throws
   a `LateInitializationError` on every `close()`.
