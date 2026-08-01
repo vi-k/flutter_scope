@@ -680,6 +680,80 @@ void main() {
       );
     });
 
+    // `null` is a value this getter may legitimately return, and a scope that
+    // reads it as `null` decides just as irrevocably that it needs no key:
+    // nothing takes an entry afterwards. `AsyncScope(scopeKey: userId)` with a
+    // `userId` that is null until an async load finishes is ordinary usage, so
+    // a key that turns up late is not exotic -- and it used to be completely
+    // silent, because the check only ran once an entry existed.
+    testWidgets('cannot appear after the scope has mounted', (tester) async {
+      Widget build(Object? lateKey) => Directionality(
+            textDirection: TextDirection.ltr,
+            child: AsyncScopeCoordinator(
+              child: Column(
+                children: [
+                  const _TestScope(testKey: 'shared'),
+                  _TestScope(testKey: lateKey),
+                ],
+              ),
+            ),
+          );
+
+      await tester.pumpWidget(build(null));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(
+        _TestScopeElement.initialized,
+        2,
+        reason: 'the second scope read no key, so it never queued for one',
+      );
+
+      await tester.pumpWidget(build('shared'));
+
+      final exception = tester.takeException();
+      expect(exception, isA<FlutterError>());
+      expect(
+        exception.toString(),
+        contains('appeared'),
+        reason: 'the report says the key was never taken at all, which is not '
+            'the same as an entry left on the wrong queue',
+      );
+      expect(
+        exception.toString(),
+        contains('different `key`'),
+        reason: 'and says what to do instead',
+      );
+    });
+
+    testWidgets('cannot be given up while the scope is holding it',
+        (tester) async {
+      Widget build(Object? key) => Directionality(
+            textDirection: TextDirection.ltr,
+            child: AsyncScopeCoordinator(child: _TestScope(testKey: key)),
+          );
+
+      await tester.pumpWidget(build('shared'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+
+      await tester.pumpWidget(build(null));
+
+      final exception = tester.takeException();
+      expect(exception, isA<FlutterError>());
+      expect(
+        exception.toString(),
+        contains('given up'),
+        reason: 'a key let go is not a key that changed: the entry is still '
+            'held, by a scope that no longer claims to need it',
+      );
+      expect(
+        exception.toString(),
+        contains('different `key`'),
+        reason: 'and says what to do instead',
+      );
+    });
+
     testWidgets('cannot move under another coordinator', (tester) async {
       // The very same widget instance on both sides of the move, so the
       // framework takes the `child.widget == newWidget` shortcut in

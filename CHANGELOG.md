@@ -86,16 +86,20 @@
   `Bad state: Future already completed`. The field is now cleared, a
   reactivation after disposal no longer registers at all, and
   `ChildEntry.unregister()` is idempotent.
-* A `scopeKey`, together with the `AsyncScopeCoordinator` above the scope, is
-  now documented and enforced as fixed for the lifetime of the element. A key
-  that started returning something else, or a scope moved with a `GlobalKey`
-  under a different coordinator, used to leave the entry parked on the old
-  queue in silence — another scope with the same key then entered at once and
-  the mutual exclusion the key exists for quietly stopped working. Both are
-  now reported in debug builds, with a message that says what to do instead
-  (give the widget a different `key`, so a new element takes the new key from
-  scratch). Release builds are unaffected; there is no re-acquisition, since
-  releasing and taking a key again is asynchronous and a rebuild is not.
+* `scopeKey` is now documented and enforced as read exactly once, when the
+  initialization starts: the answer it gives then — `null` included, which is
+  an answer and not the absence of one — together with the
+  `AsyncScopeCoordinator` above the scope, is fixed for the lifetime of the
+  element. A key that appears after a scope initialized without one, a key
+  that is given up, a key that changes, and a scope moved with a `GlobalKey`
+  under a different coordinator all used to be silent, and the mutual
+  exclusion the key exists for quietly stopped working — an appearing key was
+  never taken at all, so a second scope simply coexisted with the holder. All
+  four are now reported in debug builds through an `assert`, each with a
+  message that says what happened and what to do instead (give the widget a
+  different `key`, so a new element reads the key afresh). Release builds are
+  unaffected, and nothing is repaired: releasing a key and taking another one
+  is asynchronous, and a rebuild is not.
 * Fix an expired `waitForChildren` forgetting the children registered after it
   started: the wait dropped the whole live registry instead of only the
   snapshot it was awaiting, so a scope that registered mid-wait — one the wait

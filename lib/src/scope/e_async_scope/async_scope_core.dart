@@ -50,19 +50,34 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
   /// scopes under different coordinators never wait for one another, even when
   /// their keys are equal.
   ///
-  /// **The key, together with the coordinator above the scope, is fixed for
-  /// the lifetime of the element.** The place in the queue is taken once, and
-  /// it cannot be moved: a key that starts returning something else -- or a
-  /// scope moved with a [GlobalKey] under a different coordinator -- leaves the
-  /// entry parked where it was, so the old key is held by a scope that no
-  /// longer claims it while the new key excludes nobody. A change is reported
-  /// in debug builds; there is no re-acquisition, because releasing and taking
-  /// a key again is asynchronous and a rebuild is not.
+  /// **This getter is read exactly once, when the initialization starts, and
+  /// the answer it gives then -- together with the coordinator above the scope
+  /// -- is fixed for the lifetime of the element.** `null` is one of those
+  /// answers, not the absence of one: a scope that reads no key never takes a
+  /// place in any queue, and nothing takes one for it later.
+  ///
+  /// So none of the four ways the answer can go stale is repaired:
+  ///
+  /// * a key that **appears** after a scope initialized without one is not
+  ///   honoured -- the scope holds nothing and keeps nobody out;
+  /// * a key that is **given up** is still held until the disposal releases
+  ///   it, so it goes on excluding scopes this one no longer claims to
+  ///   exclude;
+  /// * a key that **changes** leaves the entry on the old one, which is never
+  ///   released for the scope it was meant to keep out, while the new one
+  ///   keeps nobody out;
+  /// * a scope **moved with a [GlobalKey] under a different coordinator**
+  ///   keeps its place in the queue it left, with the same two consequences.
+  ///
+  /// All four are reported through an `assert`, so they are loud in debug
+  /// builds and cost nothing in release builds. None is repaired, because
+  /// releasing a key and taking another one is asynchronous and a rebuild is
+  /// not.
   ///
   /// To switch a scope to another key, or to move it under another
   /// coordinator, give the widget a different [Widget.key] instead: the
-  /// framework then builds a new element, which takes the new key from scratch
-  /// and releases the old one on its way out.
+  /// framework then builds a new element, which reads this getter afresh and
+  /// releases the old key on its way out.
   Object? get scopeKey => null;
 
   Duration? get pauseAfterInitialization => null;
@@ -127,13 +142,24 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
 
   AccessEntry? _asyncScopeEntry;
 
-  /// The [scopeKey] and the [AsyncScopeCoordinator] element [_asyncScopeEntry]
-  /// took its place on.
+  /// Whether [_performAsyncInit] has read [scopeKey] yet.
   ///
-  /// An entry lives in the queue of one key of one coordinator and there is no
-  /// way to move it, so the pair is fixed once the entry exists. It is
-  /// remembered here to be able to say so out loud when it changes, instead of
-  /// letting the mutual exclusion the key exists for quietly stop working.
+  /// Kept apart from [_acquiredScopeKey], because `null` is a value the getter
+  /// may legitimately return and the answer matters either way: a scope that
+  /// read no key decided just as irrevocably that it needs none, and nothing
+  /// takes an entry for it afterwards.
+  bool _scopeKeyObserved = false;
+
+  /// The value [scopeKey] had when [_performAsyncInit] read it, and the
+  /// [AsyncScopeCoordinator] element the resulting [_asyncScopeEntry] took its
+  /// place on -- the latter `null` when no key was read, or when the lookup
+  /// failed and no entry was ever created.
+  ///
+  /// The answer is given once and cannot be revisited: an entry lives in the
+  /// queue of one key of one coordinator and there is no way to move it, and a
+  /// key that was never asked for has no entry to move. Both are remembered
+  /// here to be able to say so out loud when they change, instead of letting
+  /// the mutual exclusion the key exists for quietly stop working.
   Object? _acquiredScopeKey;
   _AsyncScopeCoordinatorElement? _acquiredCoordinator;
 
@@ -229,55 +255,97 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
     super.performRebuild();
   }
 
-  /// Fails when the (`scopeKey`, coordinator) pair this element took its place
-  /// on is no longer the pair it would ask for now.
+  /// Fails when [scopeKey] no longer gives the answer the initialization read,
+  /// or when the coordinator that owns the queue it entered is no longer the
+  /// one above the scope.
+  ///
+  /// The absence of a key counts as an answer: a scope that read `null` never
+  /// takes an entry, so a key that turns up afterwards is not honoured either
+  /// -- and that is the one case with nothing to see, since there is no
+  /// misplaced entry to notice, only a key that quietly excludes nobody.
   ///
   /// Called from an `assert`, so it costs nothing in release builds -- which
   /// is also why it raises rather than returning `false`: the message is worth
   /// more than the line number.
   bool _debugCheckScopeKeyOwnership() {
-    if (_asyncScopeEntry == null) {
+    if (!_scopeKeyObserved) {
+      // The initialization has not read `scopeKey` yet, so there is no answer
+      // to disagree with.
       return true;
     }
 
     final currentScopeKey = scopeKey;
-    final currentCoordinator = ScopeWidgetCore.maybeOf<AsyncScopeCoordinator,
-        _AsyncScopeCoordinatorElement>(this, listen: false);
+    // Which coordinator is above the scope only matters once one of its queues
+    // is holding an entry: a scope that took none may be moved wherever the
+    // tree likes.
+    final currentCoordinator = _acquiredCoordinator == null
+        ? null
+        : ScopeWidgetCore.maybeOf<AsyncScopeCoordinator,
+            _AsyncScopeCoordinatorElement>(this, listen: false);
 
     if (currentScopeKey == _acquiredScopeKey &&
         identical(currentCoordinator, _acquiredCoordinator)) {
       return true;
     }
 
+    final name = widget.toStringShort();
     final acquiredCoordinator =
         _acquiredCoordinator?.toStringShort() ?? 'no $AsyncScopeCoordinator';
     final coordinator =
         currentCoordinator?.toStringShort() ?? 'no $AsyncScopeCoordinator';
 
+    final (String summary, String detail) =
+        switch ((_acquiredScopeKey, currentScopeKey)) {
+      (null, final appeared?) => (
+          'The `scopeKey` of $name appeared after the scope had already'
+              ' initialized without one.',
+          'The key is read once, when the initialization starts, and this'
+              ' scope read none: it never took a place in any queue, and nothing'
+              ' takes one for it now. [$appeared] is not honoured -- this scope'
+              ' holds nothing, and whoever does hold [$appeared] is not keeping it'
+              ' out.',
+        ),
+      (final acquired?, null) => (
+          'The `scopeKey` of $name was given up while the scope was still'
+              ' holding it.',
+          'It is holding [$acquired] in the queue of $acquiredCoordinator, and'
+              ' now claims to need no key at all. The entry stays where it is'
+              ' until the disposal releases it, so [$acquired] goes on keeping out'
+              ' the scopes this one no longer claims to exclude.',
+        ),
+      (final acquired?, final asked?) when acquired != asked => (
+          'The `scopeKey` of $name changed while the scope was holding one.',
+          'It is holding [$acquired] in the queue of $acquiredCoordinator, and'
+              ' is now asking for [$asked]. The entry cannot follow: it stays'
+              ' where it is, so [$acquired] is never released for the scope it was'
+              ' meant to keep out, and [$asked] keeps nobody out.',
+        ),
+      _ => (
+          'The `$AsyncScopeCoordinator` above $name changed while the scope'
+              ' was holding a `scopeKey`.',
+          'It is holding [$_acquiredScopeKey] in the queue of'
+              ' $acquiredCoordinator, and is now under $coordinator. The entry'
+              ' cannot follow: it stays in the queue it left, so the key it holds'
+              ' there is never released, and under the new coordinator it keeps'
+              ' nobody out.',
+        ),
+    };
+
     throw FlutterError.fromParts([
-      ErrorSummary(
-        'The `scopeKey` of ${widget.toStringShort()} changed while it was'
-        ' holding one.',
-      ),
+      ErrorSummary(summary),
+      ErrorDescription(detail),
       ErrorDescription(
-        'It took its place in the queue of [$_acquiredScopeKey] of'
-        ' $acquiredCoordinator, and is now asking for the queue of'
-        ' [$currentScopeKey] of $coordinator.',
-      ),
-      ErrorDescription(
-        'The entry it is holding cannot follow it: it stays where it was, so'
-        ' the key it still holds is never released for the scope it was meant'
-        ' to keep out, and the key it appears to hold now keeps nobody out.'
-        ' Releasing a key and taking another one is asynchronous, and a'
-        ' rebuild is not, so there is nothing to do about it here.',
+        'Releasing a key and taking another one is asynchronous, and a rebuild'
+        ' is not, so there is nothing to do about it here.',
       ),
       ErrorHint(
-        'A `scopeKey` and the `$AsyncScopeCoordinator` above the scope are'
-        ' fixed for the lifetime of the element. To use another key, or to'
-        ' move the scope under another coordinator, give the widget a'
-        ' different `key`: the framework then builds a new element, which'
-        ' takes the new key from scratch and releases the old one on its way'
-        ' out.',
+        'The answer `scopeKey` gives when the initialization reads it --'
+        ' including `null`, for no key at all -- and the'
+        ' `$AsyncScopeCoordinator` above the scope are fixed for the lifetime'
+        ' of the element. To use another key, or to move the scope under'
+        ' another coordinator, give the widget a different `key`: the'
+        ' framework then builds a new element, which reads the key afresh and'
+        ' releases the old one on its way out.',
       ),
     ]);
   }
@@ -339,8 +407,15 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
     // scope from its parent. The error is re-thrown untouched, so it still
     // surfaces as an uncaught error of the zone the mount ran in.
     try {
+      // `scopeKey` is read exactly once, here. The answer -- a key, or the
+      // decision that none is needed -- is what everything below is built on,
+      // and what every later rebuild is measured against.
+      final acquiredScopeKey = scopeKey;
+      _acquiredScopeKey = acquiredScopeKey;
+      _scopeKeyObserved = true;
+
       // Wait for access.
-      if (scopeKey case final scopeKey?) {
+      if (acquiredScopeKey case final scopeKey?) {
         // The coordinator is looked up *before* the entry exists: the lookup
         // is the one step here that can fail without the entry ever reaching
         // a queue, and an entry that reached one has to be released by the
@@ -356,7 +431,6 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
           widget.toStringShort(showHashCode: true),
         );
         _asyncScopeEntry = entry;
-        _acquiredScopeKey = scopeKey;
         _acquiredCoordinator = coordinator;
         _log.d(() => 'wait for access to [$scopeKey]');
         await coordinator.enter(
