@@ -1,13 +1,14 @@
-# batch2 — five coordination/lifecycle defects, plus two found in review
+# batch2 — five coordination/lifecycle defects, plus three found in review
 
 Branch `coordfix`, based on `0fe8261`. Baseline: 69 tests green.
-Final: **79 tests green**, `flutter analyze` clean in the package and both
+Final: **82 tests green**, `flutter analyze` clean in the package and both
 examples, `dart format` clean, `dart doc` 0 warnings / 0 errors.
 
-The five defects of the original brief are sections 1–5; the two issues a
-review then found by execution — one of them a regression section 5
-introduced — are sections 6–7, and the verification table at the end of that
-part is the current one.
+The five defects of the original brief are sections 1–5. Sections 6–8 are what
+two rounds of review then found by execution, each confirmed by running the
+code: a regression section 5 introduced (6), a hole in its diagnostic (7), and
+a false positive that closing the hole introduced (8). The verification table
+at the end is the current one.
 
 One commit per defect, each with its test written first, watched fail, then
 fixed, then watched pass — and each fix hand-reverted afterwards to prove the
@@ -366,11 +367,93 @@ makes an appearing key unhonourable rather than merely misplaced — and neither
 mentioned the appearing or disappearing cases at all. They now enumerate all
 four, and say plainly that none of them is repaired.
 
+### 8 — `f1ac421` fix(async-scope): stop the scopeKey diagnostic firing on a scope that has finished closing
+
+`lib/src/scope/e_async_scope/async_scope_core.dart`.
+
+**Defect (false positive introduced by `265aa47`).** The guard that section 7
+replaced — `if (_asyncScopeEntry == null) return true;` — happened to mean two
+things at once: "no key was ever taken" *and* "the disposal has already
+released everything", since the `finally` nulls that field. The new guard,
+`if (!_scopeKeyObserved) return true;`, only kept the first: once a real key
+had been read the flag stayed true forever, and the three key-tracking fields
+were never cleared by `_performAsyncDispose`.
+
+So a scope that had *fully* disposed of itself through the public, documented
+`LiteScope.close()` — which deliberately keeps the element mounted, so it can
+render a closing screen and can still be moved with a `GlobalKey` — was still
+held to a live-ownership invariant it no longer took part in. `exit()` had
+already run on its `AccessEntry`; it held nothing and asked for nothing. Two
+confirmed repros, both legitimate usage:
+
+1. closed, then moved with the same `GlobalKey` under a different coordinator →
+   `The AsyncScopeCoordinator above ... changed while the scope was holding a
+   scopeKey`, from `activate()`'s `_isDisposing` branch;
+2. closed, then merely rebuilt by its parent with a different key-backing value
+   → `The scopeKey of ... changed while the scope was holding one`, from
+   `performRebuild()`, which has no `_isDisposing` guard at all.
+
+Firing on correct code is worse than the hole section 7 closed.
+
+**Fix.** A `_scopeKeySettled` flag, set in `_performAsyncDispose`'s `finally`
+right where `_asyncScopeEntry` is nulled, and short-circuiting the check:
+`if (!_scopeKeyObserved || _scopeKeySettled) return true;`.
+
+The flag is deliberately **not** tied to `_isDisposing`. Between
+`_isDisposing = true` and that `finally` the entry is still sitting in its
+queue, so a key that changes there is the very violation the diagnostic exists
+for and stays loud. Only the release makes it moot.
+
+Also in the same block: the `exit from [...]` log now names `_acquiredScopeKey`
+rather than calling the `scopeKey` getter — what is being released is the key
+the queue was entered on, whatever the getter says by then, and it is a plain
+field rather than user code running in a half-torn-down element.
+
+**Tests** (`test/lite_scope_test.dart`, new group `LiteScope.close() with a
+scopeKey` — the suite paired `scopeKey` with `close()` nowhere before, since
+`_CloseScope` never overrode `scopeKey`). `_CloseScope` gained `testKey`, and
+`_neverEmitsUntilCancelled` gates the stream's cancellation.
+
+- `may be moved under another coordinator once it has finished closing` —
+  repro 1, must be silent.
+- `may be rebuilt with a different scopeKey once it has finished closing` —
+  repro 2, must be silent.
+- `still reports a scopeKey that changes while close() is in flight` — the
+  disposal is parked inside `await subscription.cancel()`, so `_isDisposing` is
+  set and the entry is still in its queue; the key change there must still be
+  reported.
+
+Reverted-fix checks, two of them, because the two halves of the requirement
+pull in opposite directions:
+
+- with the `_scopeKeySettled` short-circuit removed, both silent-after-close
+  tests fail with the exact repro messages above, and the in-flight test still
+  passes;
+- with the short-circuit widened to `_isDisposing` — the naive "turn the check
+  off on disposal" fix — both silent-after-close tests pass and the in-flight
+  test fails with `Expected: <Instance of 'FlutterError'> Actual: <null>`.
+
+Only the committed version satisfies both.
+
+**Docs.** The `scopeKey` dartdoc and the `## 0.10.0` bullet said the answer is
+fixed "for the lifetime of the element"; both now say it is binding *until the
+scope has finished disposing of itself*, and both spell out that an element
+outliving its own disposal may be rebuilt and reparented freely while a key
+that changes mid-`close()` is still reported.
+
+**Note on the test tree.** The in-flight test uses a bare `Directionality` and
+never reaches the ready state. Two earlier shapes were discarded after being
+observed to fail for reasons unrelated to the defect: under `MaterialApp` the
+substituted `ErrorWidget` tears down the focus machinery and trips
+`'_dependents.isEmpty'`, and in the ready state the closing overlay's
+`CircularProgressIndicator` is left animating in an orphaned subtree and trips
+`Tried to build dirty widget in the wrong build scope`.
+
 ### Verification after the follow-up
 
 | Check | Result |
 | --- | --- |
-| `flutter test` | 79 passed (69 baseline + 10 new) |
+| `flutter test` | 82 passed (69 baseline + 13 new) |
 | `flutter analyze` (package) | No issues found |
 | `flutter analyze` (example/minimal) | No issues found |
 | `flutter analyze` (example/scopo_demo) | No issues found |
@@ -393,3 +476,10 @@ four, and say plainly that none of them is repaired.
    including `null`, and compare against it) was implemented as stated; the
    only judgement call was to word the appearing-key report differently from
    the other three, since there is no misplaced entry to point at.
+5. **Follow-up 8** — none. Of the two mechanisms offered, the `_scopeKeySettled`
+   flag was chosen over clearing the observed state: clearing it would have
+   made a settled scope indistinguishable from one whose initialization has not
+   read `scopeKey` yet, and the two deserve different comments if not different
+   behaviour. One unrequested line came with it — the `exit from [...]` log now
+   names the recorded key instead of calling the `scopeKey` getter during
+   teardown.
