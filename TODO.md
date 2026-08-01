@@ -11,6 +11,7 @@
   фризит старого родителя.
 
 Известные проблемы (0.10.x):
+- dart format расходится на 6 файлах example/scopo_demo (версия форматтера новее той, которой их писали); переформатирование конфликтует с require_trailing_commas — чинить вместе с обновлением тулчейна.
 - AsyncScopeElementBase: окно между enter() и присвоением _subscription — dispose() в этом окне не отменяет инициализацию (см. TODO(nashol) в async_scope_core.dart:326).
 - AsyncScopeElementBase: post-frame регистрация у родителя проверяет mounted, но не _isDisposing — скоуп, закрытый через close() до первого кадра, регистрирует ChildEntry, который никто не снимет. С редизайном запись попадает в реестр координатора, а не в процесс-глобальный корень, но всё ещё способна выжечь весь таймаут ожидания детей.
 - ScopeAutoDependencies: _root не сбрасывается после dispose() — повторный init() падает на assert; при autoDisposeOnError runDispose затирает ScopeDependencyFailed → ошибки группы теряются.
