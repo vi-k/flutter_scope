@@ -480,7 +480,16 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
           _log.d(() => 'access to [$scopeKey] obtained');
         }
 
-        if (entry.isCancelled || !mounted) {
+        // `_isDisposing`, and not `mounted` alone: the disposal reaches the
+        // initialization through `_subscription`, which does not exist yet on
+        // this side of the `await` -- and a scope closed with `close()` stays
+        // mounted on purpose, so `mounted` says nothing about a disposal that
+        // has already begun. Without this, a scope on its way out would
+        // subscribe to `initAsync()` here and run it to completion, acquiring
+        // resources for a scope that no longer exists; `_performAsyncDispose`
+        // is meanwhile parked on `_initCompleter`, past the point where it
+        // could have cancelled anything.
+        if (entry.isCancelled || !mounted || _isDisposing) {
           _log.i('initialization cancelled');
           _initCompleter.complete();
           return;

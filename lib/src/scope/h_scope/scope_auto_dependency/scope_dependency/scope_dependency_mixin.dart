@@ -10,6 +10,17 @@ mixin ScopeDependencyMixin implements ScopeDependency {
   ScopeDependencyState get state => _state;
   ScopeDependencyState _state = const ScopeDependencyInitial();
 
+  /// Whether [runDispose] has already run to its end.
+  ///
+  /// The state used to answer this on its own, because a disposal that was
+  /// over always said [ScopeDependencyDisposed]. It cannot any more: a
+  /// dependency that collected errors keeps them, so a group that was disposed
+  /// of *because* something under it failed still says
+  /// [ScopeDependencyFailed]. Kept apart from the state, so
+  /// [ScopeDependency.disposalRequired] can still tell a disposal that is due
+  /// from one that is done.
+  bool _isDisposalDone = false;
+
   /// Automates the initialization process.
   ///
   /// Runs [init], handles the errors and sets the matching state.
@@ -48,6 +59,17 @@ mixin ScopeDependencyMixin implements ScopeDependency {
     }
   }
 
+  /// Automates the disposal process.
+  ///
+  /// A state that carries errors survives the disposal untouched:
+  /// [ScopeDependencyDisposed] says nothing at all, and the error list is the
+  /// only record of what went wrong. A group is disposed of *because*
+  /// something under it failed — [ScopeDependencyGroup.disposalRequired]
+  /// covers [ScopeDependencyFailed] — so overwriting its state threw that
+  /// record away exactly where it was needed, and with the default
+  /// [ScopeAutoDependencies.autoDisposeOnError] that happened before the
+  /// caller ever saw it. A failed *leaf* is never disposed of at all, so it
+  /// always kept its errors; the groups now behave the same way.
   @override
   Stream<String> runDispose() async* {
     try {
@@ -56,10 +78,13 @@ mixin ScopeDependencyMixin implements ScopeDependency {
         _handleDisposalPostCancelError,
         debugName: name,
       ).handleError(_handleDisposalError);
-      if (_state is! ScopeDependencyDisposalFailed) {
-        _state = const ScopeDependencyDisposed();
-      }
+      _state = switch (_state) {
+        final _ScopeDependencyWithErrors state when state.hasErrors => state,
+        _ => const ScopeDependencyDisposed(),
+      };
     } finally {
+      _isDisposalDone = true;
+
       // Catch the cancellation.
       if (_state is ScopeDependencyInitialized) {
         _state = ScopeDependencyDisposalCancelled();

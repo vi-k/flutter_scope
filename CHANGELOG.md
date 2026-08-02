@@ -78,6 +78,16 @@
   complete, with no way out. The coordinator is now resolved before the entry
   is created, which is what the blanket handler existed for, and an attached
   entry is never dropped.
+* Fix a scope running its whole initialization after its disposal had already
+  begun: a scope with a `scopeKey` awaits the coordinator before it subscribes
+  to `initAsync()`, and the disposal can only cancel an initialization through
+  that subscription — so a disposal starting inside that window had nothing to
+  cancel, and the `mounted` guard on the far side of the await says nothing
+  about a `close()`, which keeps the element mounted on purpose. The scope
+  went on to subscribe once the key was granted and to acquire resources it
+  would never release, since a scope whose disposal has already passed the
+  `disposeAsync()` decision does not run it. The initialization now also stops
+  when the disposal has begun; the normal path is unchanged.
 * Fix `close()` leaving an orphaned child entry behind: the post-frame
   callback that registers a scope with its parent was guarded by `mounted`
   alone, and `close()` keeps the element mounted on purpose. A disposal that
@@ -126,9 +136,38 @@
   `AsyncScopeCoordinator.waitForChildren` already applied. Calling the mixin
   method directly on a scope element used to drop the children and complete
   with nothing reported at all.
+* [breaking changes] A `ScopeDependency` that carries errors keeps them
+  through its disposal instead of being overwritten with
+  `ScopeDependencyDisposed`. A group is disposed of *because* something under
+  it failed — `disposalRequired` covers `ScopeDependencyFailed` — so the
+  disposal threw away the one record of what had failed, and with the default
+  `autoDisposeOnError` that happened before the caller ever saw it. A failed
+  *leaf* was never disposed of and so always kept its errors; the groups now
+  behave the same way. `disposalRequired` no longer reads the state alone, so
+  a group that stays `ScopeDependencyFailed` is not disposed of twice.
+  * Migration: after disposing of a tree that failed, the root reports
+    `isFailed == true` and `isDisposed == false`, where it used to report the
+    opposite; `stateToString()` still names the children that failed.
+* `ScopeAutoDependencies.init()` can be called again once the previous run has
+  been disposed of: it rebuilds the tree instead of reusing the one the
+  disposal left behind, which tripped an opaque `assert` inside the first
+  dependency it reached. The tree is replaced on the next `init()` rather than
+  dropped by `dispose()`, so the outcome of the run that is over stays
+  readable through `flattenDependencies()`. A second `init()` on a tree that
+  is *still alive* now fails with a `StateError` that says so, instead of
+  silently abandoning everything the first run is holding.
 * Fix `ScopeNotifier.value` not subscribing to a new listenable on update.
 * Fix `LiteScope.close()` hang outside the Ready state; fix
   `ScreenshotReplacer` completing early and leaking `ui.Image`.
+* Fix `LiteScope.close()` waiting forever on a screenshot that could never be
+  taken: a `notifyDependents()` left pending asks the next rebuild to skip the
+  subtree, so the widget `buildOnReady()` built for the closing frame — the
+  one carrying the `ScreenshotReplacer` that releases the barrier — was thrown
+  away by `updateChild`. `mounted && state is AsyncScopeReady`, which is what
+  `close()` checks before installing the barrier, is necessary but not
+  sufficient, and a scope closed in place stays mounted, so the `dispose()`
+  fallback never ran either. The closing frame now rebuilds the subtree
+  anyway; the pending notification is still delivered.
 * Fix a double close() race in LiteScope orphaning the screenshot barrier;
   cap ScreenshotReplacer retries (new public ScreenshotReplacer.maxRetries).
 * Fix concurrent `LiteScope.close()` callers disagreeing about a failed

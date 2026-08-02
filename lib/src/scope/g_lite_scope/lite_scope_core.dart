@@ -249,10 +249,23 @@ abstract base class LiteScopeElementBase<
   }
 
   Future<void> _runAsyncDispose() async {
-    markNeedsBuild();
-
     if (_screenshotCompleter case final screenshotCompleter?) {
+      // The barrier is released by the [ScreenshotReplacer] that
+      // [buildOnReady] mounts, and this is the rebuild that has to mount it.
+      // A [notifyDependents] left pending by the scope asks the next rebuild
+      // to skip the subtree, so `updateChild` would return the old child and
+      // throw away the widget [buildOnReady] just built -- the replacer would
+      // never be mounted, nothing would release the barrier, and a scope
+      // closed in place stays mounted, so the [dispose] fallback would not run
+      // either. `_forceRebuild` is what says the subtree has to be rebuilt
+      // anyway; `notifyClients` still runs, so the pending notification is not
+      // lost.
+      _forceRebuild = true;
+      markNeedsBuild();
+
       await screenshotCompleter.future;
+    } else {
+      markNeedsBuild();
     }
 
     await super._performAsyncDispose();
