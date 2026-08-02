@@ -78,6 +78,16 @@
   complete, with no way out. The coordinator is now resolved before the entry
   is created, which is what the blanket handler existed for, and an attached
   entry is never dropped.
+* Fix a scope running its whole initialization after its disposal had already
+  begun: a scope with a `scopeKey` awaits the coordinator before it subscribes
+  to `initAsync()`, and the disposal can only cancel an initialization through
+  that subscription — so a disposal starting inside that window had nothing to
+  cancel, and the `mounted` guard on the far side of the await says nothing
+  about a `close()`, which keeps the element mounted on purpose. The scope
+  went on to subscribe once the key was granted and to acquire resources it
+  would never release, since a scope whose disposal has already passed the
+  `disposeAsync()` decision does not run it. The initialization now also stops
+  when the disposal has begun; the normal path is unchanged.
 * Fix `close()` leaving an orphaned child entry behind: the post-frame
   callback that registers a scope with its parent was guarded by `mounted`
   alone, and `close()` keeps the element mounted on purpose. A disposal that

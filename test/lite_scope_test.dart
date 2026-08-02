@@ -646,6 +646,92 @@ void main() {
     }
   });
 
+  // `_performAsyncInit` hands the cancellation over to `_subscription`, and
+  // `_performAsyncDispose` can only reach it through that field. A scope with
+  // a `scopeKey` awaits `AsyncScopeCoordinator.enter()` before it subscribes,
+  // so between the `await` and the assignment there is a window in which the
+  // field is still `null` and a disposal that starts there has nothing to
+  // cancel. A scope closed with `close()` stays mounted, so the `mounted`
+  // guard on the far side of that `await` does not catch it either.
+  //
+  // The window is entered by driving the build phase directly and *not*
+  // awaiting anything afterwards: `enter()` on a free key completes in a
+  // microtask, so until the test yields, `_performAsyncInit` is parked at the
+  // `await` with `_subscription == null`.
+  group('AsyncScope initialization racing a disposal that already began', () {
+    testWidgets(
+      'control: a scope with a free scopeKey does start its initialization',
+      (tester) async {
+        var initCount = 0;
+        final element = _mountInEnterWindow(
+          tester,
+          init: () {
+            initCount++;
+
+            return _becomesReady();
+          },
+        );
+
+        expect(
+          initCount,
+          0,
+          reason: 'the probe must observe the window: `initAsync()` cannot '
+              'have been called before the key was granted',
+        );
+
+        await _settle(tester, until: () => element.state is AsyncScopeReady);
+
+        expect(
+          initCount,
+          1,
+          reason: 'a scope that is not being disposed of initializes as usual',
+        );
+        expect(element.state, isA<AsyncScopeReady>());
+      },
+    );
+
+    testWidgets(
+      'does not initialize when close() wins the race for a free scopeKey',
+      (tester) async {
+        var initCount = 0;
+        final element = _mountInEnterWindow(
+          tester,
+          init: () {
+            initCount++;
+
+            return _becomesReady();
+          },
+        );
+
+        // No `await` since the mount: the disposal starts inside the window,
+        // while `_subscription` is still `null`.
+        var isClosed = false;
+        unawaited(element.close().whenComplete(() => isClosed = true));
+
+        await _settle(tester, until: () => isClosed);
+
+        expect(isClosed, isTrue, reason: 'close() must still settle');
+        expect(
+          initCount,
+          0,
+          reason: 'a scope that is going away must not subscribe to its own '
+              'initialization once the key finally arrives',
+        );
+        expect(
+          element.disposeAsyncCount,
+          0,
+          reason: 'an initialization that never ran has nothing to release',
+        );
+        expect(
+          element.state,
+          isA<AsyncScopeWaiting>(),
+          reason: 'the scope never became ready',
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+  });
+
   group('ScreenshotReplacer', () {
     testWidgets(
       'reports completion exactly once and releases the captured image',
@@ -791,6 +877,33 @@ Future<void> _settle(
     );
     await tester.pump();
   }
+}
+
+/// Mounts a scope holding a `scopeKey` and returns while its
+/// `_performAsyncInit` is still parked on `AsyncScopeCoordinator.enter()`.
+///
+/// The build phase is driven directly, so no frame is drawn and no microtask
+/// is drained: `enter()` on a free key completes one microtask later, which
+/// cannot happen until the caller yields. Everything the caller does before
+/// its next `await` therefore happens while `_subscription` is still `null`.
+_CloseScopeElement _mountInEnterWindow(
+  WidgetTester tester, {
+  required Stream<AsyncScopeInitState> Function() init,
+}) {
+  final binding = tester.binding;
+  binding.attachRootWidget(
+    binding.wrapWithDefaultView(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: AsyncScopeCoordinator(
+          child: _CloseScope(init: init, testKey: 'window'),
+        ),
+      ),
+    ),
+  );
+  binding.buildOwner!.buildScope(binding.rootElement!);
+
+  return _scopeOf(tester);
 }
 
 /// Keeps the scope in [AsyncScopeWaiting]: nothing is ever emitted, and the
