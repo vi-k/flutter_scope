@@ -18,11 +18,20 @@ abstract base class ScopeDependencyGroup with ScopeDependencyMixin {
   @override
   int get count => _count;
 
+  /// A group holds nothing of its own, so what it needs disposing of is
+  /// whatever its children still hold — which is why a group whose
+  /// initialization failed or was cancelled is disposed of too.
+  ///
+  /// [ScopeDependencyMixin._isDisposalDone], and not the state alone: a group
+  /// that was disposed of because something under it failed keeps saying
+  /// [ScopeDependencyFailed], so that the caller can still read what failed,
+  /// and that must not be mistaken for a disposal that is still due.
   @override
   bool get disposalRequired =>
-      state is ScopeDependencyInitialized ||
-      state is ScopeDependencyFailed ||
-      state is ScopeDependencyCancelled;
+      !_isDisposalDone &&
+      (state is ScopeDependencyInitialized ||
+          state is ScopeDependencyFailed ||
+          state is ScopeDependencyCancelled);
 
   String _path(String name) => this.name.isEmpty ? name : '${this.name}/$name';
 

@@ -18,11 +18,44 @@ abstract base class ScopeAutoDependencies<T extends ScopeDependencies,
   /// Build the queue of dependencies.
   ScopeDependency buildDependencies(C context);
 
+  /// The tree the next [init] runs against, built afresh when the previous
+  /// run is over.
+  ///
+  /// A [ScopeDependency] goes through its states once: every one of them
+  /// asserts that its initialization starts from [ScopeDependencyInitial], so
+  /// the tree a disposal left behind cannot be initialized a second time. It
+  /// is kept until here rather than dropped by [dispose], so that the outcome
+  /// of the run that is over stays readable through [flattenDependencies] for
+  /// as long as it is the latest one.
+  ///
+  /// A tree that is still alive is another matter: replacing it would leak
+  /// everything it holds, since nothing would ever dispose of it. That is a
+  /// mistake in the caller, and it is named as one.
+  ScopeDependency _prepareDependencies(C context) {
+    final root = _root;
+
+    return switch (root) {
+      // Nothing has been built yet, or the previous tree is done: its
+      // disposal has run, so nothing it acquired is still held.
+      null => _root = buildDependencies(context),
+      _ when !root.disposalRequired && root.state is! ScopeDependencyInitial =>
+        _root = buildDependencies(context),
+      // Built, but never initialized: this *is* that first initialization.
+      _ when root.state is ScopeDependencyInitial => root,
+      _ => throw StateError(
+          '$T has already been initialized (${root.stateToString()}) and has'
+          ' not been disposed of. Dispose of it before initializing it again:'
+          ' a second `init()` would abandon everything the first one is'
+          ' still holding, and nothing would ever release it.',
+        ),
+    };
+  }
+
   /// Initialize the scope dependencies.
   Stream<ScopeInitState<ScopeAutoDependenciesProgress, T>> init(
     C context,
   ) async* {
-    final dependencies = _root ??= buildDependencies(context);
+    final dependencies = _prepareDependencies(context);
     final progressIterator = ProgressIterator(dependencies.count);
 
     try {
