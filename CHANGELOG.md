@@ -1,5 +1,13 @@
 ## 0.10.0
 
+* [breaking changes] An expired `waitForChildren` now drops the children it
+  was awaiting, so `hasChildren` and `childrenCount` fall to zero for them.
+  Children registered while the wait was already running are kept.
+* The dartdoc of `ScopeConfig.defaultScopeKeysTimeout` and
+  `defaultWaitForChildrenTimeout` was wrong: a zero duration expires
+  immediately, it does not disable the timeout. Only `null` removes the limit.
+  The behaviour is unchanged — anyone who set `Duration.zero` expecting the
+  documented meaning has been running with instantly-expiring waits.
 * [breaking changes] `AsyncScopeCoordinator` now owns the `scopeKey` queues of
   its own subtree instead of a process-wide map, and is what scopes without a
   parent scope register with. The global `asyncScopeRoot`, `AsyncScopeRoot`,
