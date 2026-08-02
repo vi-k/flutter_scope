@@ -80,6 +80,67 @@ void main() {
       },
     );
 
+    // `notifyDependents()` marks the element dirty *and* asks the next
+    // rebuild to skip the subtree (`_shouldOnlyNotify`), so `updateChild`
+    // returns the old child and the widget `buildOnReady()` just built is
+    // thrown away. `close()` installs the screenshot barrier on
+    // `mounted && state is AsyncScopeReady`, which is necessary but not
+    // sufficient: the `ScreenshotReplacer` that releases the barrier is never
+    // mounted, and a scope closed in place stays mounted, so the `dispose()`
+    // fallback never runs either.
+    testWidgets(
+      'control: a plain close() mounts the ScreenshotReplacer',
+      (tester) async {
+        await tester.pumpWidget(_app(const _CloseScope(init: _becomesReady)));
+        await tester.pumpAndSettle();
+        expect(find.text('ready'), findsOneWidget);
+
+        final element = _scopeOf(tester);
+
+        var isClosed = false;
+        unawaited(element.close().whenComplete(() => isClosed = true));
+
+        await tester.pump();
+
+        expect(
+          find.byType(ScreenshotReplacer),
+          findsOneWidget,
+          reason: 'the probe must be able to see the barrier being installed',
+        );
+
+        await _settle(tester, until: () => isClosed);
+        expect(isClosed, isTrue);
+      },
+    );
+
+    testWidgets(
+      'completes when a pending notifyDependents() would skip the subtree '
+      'the closing frame has to rebuild',
+      (tester) async {
+        await tester.pumpWidget(_app(const _CloseScope(init: _becomesReady)));
+        await tester.pumpAndSettle();
+        expect(find.text('ready'), findsOneWidget);
+
+        final element = _scopeOf(tester);
+
+        // A notify-only rebuild is left pending, and `close()` follows before
+        // any frame can drain it.
+        element.createdState!.notifyDependents();
+
+        var isClosed = false;
+        unawaited(element.close().whenComplete(() => isClosed = true));
+
+        await _settle(tester, until: () => isClosed);
+
+        expect(
+          isClosed,
+          isTrue,
+          reason: 'close() must not wait for a ScreenshotReplacer that the '
+              'notify-only rebuild kept from ever being mounted',
+        );
+      },
+    );
+
     testWidgets(
       'completes when the element leaves the tree before the closing frame '
       'is built',

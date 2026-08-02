@@ -159,6 +159,15 @@
 * Fix `ScopeNotifier.value` not subscribing to a new listenable on update.
 * Fix `LiteScope.close()` hang outside the Ready state; fix
   `ScreenshotReplacer` completing early and leaking `ui.Image`.
+* Fix `LiteScope.close()` waiting forever on a screenshot that could never be
+  taken: a `notifyDependents()` left pending asks the next rebuild to skip the
+  subtree, so the widget `buildOnReady()` built for the closing frame — the
+  one carrying the `ScreenshotReplacer` that releases the barrier — was thrown
+  away by `updateChild`. `mounted && state is AsyncScopeReady`, which is what
+  `close()` checks before installing the barrier, is necessary but not
+  sufficient, and a scope closed in place stays mounted, so the `dispose()`
+  fallback never ran either. The closing frame now rebuilds the subtree
+  anyway; the pending notification is still delivered.
 * Fix a double close() race in LiteScope orphaning the screenshot barrier;
   cap ScreenshotReplacer retries (new public ScreenshotReplacer.maxRetries).
 * Fix concurrent `LiteScope.close()` callers disagreeing about a failed

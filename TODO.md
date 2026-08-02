@@ -16,7 +16,6 @@
 - test/utils/logging.dart безусловно включает debug-уровень (шум ~15 строк на тест) — сделать opt-in; в my_fake_async.dart тела printPendingTimers/printFakeAsyncPendingTimers перепутаны местами.
 - Тест-инфра: Stream.error(...) как init-стрим не доходит до модели под AutomatedTestWidgetsFlutterBinding (state остаётся Waiting), в plain test() работает — возможно, скрывает проблему планирования в _performAsyncInit.
 - ScopeDependencyGroup.init(): та же empty-set дыра, что была в dispose (guard добавлен в 0.10.0, отдельного теста нет).
-- LiteScope: markNeedsBuild при _shouldOnlyNotify может не перемонтировать ScreenshotReplacer после notifyDependents+close — 'mounted && Ready' необходимое, но не достаточное условие рендера buildOnReady (pre-existing, воспроизведено ревью Task 8).
 
 Документация:
 - заполнить оставшиеся 7 заглушек doc/*.md: a_base, b_scope_widget, c_scope_model, d_scope_notifier, e_async_scope, f_async_data_scope, g_lite_scope (h_scope и i_debug написаны в 0.10.0).
