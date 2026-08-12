@@ -162,14 +162,22 @@ final class MyFakeAsync {
     }
   }
 
+  /// Prints when the timers tracked by this wrapper are due.
   @visibleForTesting
   void printPendingTimers() {
     debugPrint(_pendingTimers.map((e) => e.nextCall).toList().toString());
   }
 
+  /// Prints the durations of the timers [FakeAsync] itself is holding.
+  ///
+  /// Not the same list as [pendingTimers]: this wrapper tracks the timers
+  /// created through its own zone, and telling the two apart is the whole
+  /// point of having both methods.
   @visibleForTesting
   void printFakeAsyncPendingTimers() {
-    debugPrint(pendingTimers.map((e) => e.duration).toList().toString());
+    debugPrint(
+      _fakeAsync.pendingTimers.map((e) => e.duration).toList().toString(),
+    );
   }
 
   MyFakeTimer? _nextTimer() {

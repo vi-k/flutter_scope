@@ -9,7 +9,12 @@
 Ветка `main`, рабочее дерево чистое, других веток и worktree нет.
 Версия **0.10.0 подготовлена, но не опубликована** на pub.dev.
 
-Активной незавершённой работы нет.
+**В работе (2026-08-12):** разбор технического долга из этого файла и
+`TODO(nashol)` в `async_scope_core.dart:618`. Закрыто: логи в тестах стали
+opt-in, поправлен `my_fake_async`, добавлен тест на пустой набор потоков в
+`init()` concurrent-группы; снят устаревший пункт про `test/notifier_test.dart`
+— файла нет с коммита `2751810`. Осталось: расследование `Stream.error` под
+`AutomatedTestWidgetsFlutterBinding` и `TODO(nashol)`.
 
 2026-08-12 настроен регламент работы агентов: точка входа `AGENTS.md`
 (`CLAUDE.md` только импортирует её), этот файл, `docs/backlog.md`,
@@ -38,18 +43,10 @@
 - `dart format` расходится на 6 файлах `example/scopo_demo`: версия форматтера
   новее той, которой их писали, а переформатирование конфликтует с
   `require_trailing_commas`. Чинить вместе с обновлением тулчейна.
-- `test/utils/logging.dart` безусловно включает debug-уровень — около 15 строк
-  шума на каждый тест; нужно сделать opt-in.
-- В `test/utils/my_fake_async.dart` тела `printPendingTimers` и
-  `printFakeAsyncPendingTimers` перепутаны местами.
 - `Stream.error(...)` как init-стрим не доходит до модели под
   `AutomatedTestWidgetsFlutterBinding` (состояние остаётся `Waiting`), в
   обычном `test()` работает. Возможно, скрывает проблему планирования в
   `_performAsyncInit`.
-- `ScopeDependencyGroup.init()`: та же дыра с пустым множеством, что была в
-  `dispose()`. Guard добавлен в 0.10.0, отдельного теста нет.
-- `test/notifier_test.dart` целиком закомментирован (нет `main`) — остался с
-  времён удаления миксина `Notifier` (`2751810`).
 
 ## Пробелы в покрытии
 

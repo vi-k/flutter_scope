@@ -142,6 +142,18 @@ final class TestDependenciesConcurrentNoDispose
   String toString() => '$TestDependenciesConcurrentNoDispose';
 }
 
+/// Зеркало [TestDependenciesConcurrentNoDispose] для инициализации: у
+/// concurrent-группы нет детей вовсе, поэтому набор стримов, которые
+/// объединяет `init()`, пуст — та же дыра, что была в `dispose()`.
+final class TestDependenciesConcurrentEmptyInit
+    extends ScopeAutoDependencies<TestDependenciesConcurrentEmptyInit, void> {
+  @override
+  ScopeDependency buildDependencies(_) => concurrent('g', const []);
+
+  @override
+  String toString() => '$TestDependenciesConcurrentEmptyInit';
+}
+
 /// A small tree that keeps the default [ScopeAutoDependencies
 /// .autoDisposeOnError], so a failing dependency is followed at once by the
 /// automatic disposal — the path on which the group-level failure used to be
@@ -1417,6 +1429,21 @@ void main() {
         async.flushMicrotasks();
 
         expect(disposed, isTrue);
+      });
+    });
+
+    test('init completes when no child requires initialization', () {
+      final dependencies = TestDependenciesConcurrentEmptyInit();
+      myFakeAsync((async) {
+        // У concurrent-группы 'g' нет детей, поэтому набор стримов для
+        // объединения пуст уже на инициализации. Guard в _mergeStreams()
+        // один на оба направления, но проверен был только disposal: без
+        // него controller.close() не вызывается, init() никогда не
+        // завершается, и handleInitFor падает на «No more timers».
+        final progress = handleInitFor(dependencies, async);
+
+        expect(progress, ['$TestDependenciesConcurrentEmptyInit']);
+        expect(dependencies.root.isInitialized, isTrue);
       });
     });
   });
