@@ -397,6 +397,140 @@ void main() {
   // The assertions are about effects, never about timings: what proves the
   // defect is which error the app receives, which state the scope is left in,
   // and whether `disposeAsync()` still runs.
+  group('a child scope moved with a GlobalKey', () {
+    Widget treeWith({required GlobalKey childKey, required bool underSecond}) =>
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: Column(
+            children: [
+              _WaitingParentScope(
+                child: underSecond
+                    ? const SizedBox.shrink()
+                    : _MovableScope(key: childKey),
+              ),
+              _WaitingParentScope(
+                child: underSecond
+                    ? _MovableScope(key: childKey)
+                    : const SizedBox.shrink(),
+              ),
+            ],
+          ),
+        );
+
+    (_WaitingParentScopeElement, _WaitingParentScopeElement) parents(
+      WidgetTester tester,
+    ) =>
+        (
+          tester.element(find.byType(_WaitingParentScope).at(0))
+              as _WaitingParentScopeElement,
+          tester.element(find.byType(_WaitingParentScope).at(1))
+              as _WaitingParentScopeElement,
+        );
+
+    testWidgets(
+      'hands itself over to the new parent and lets the old one go',
+      (tester) async {
+        final childKey = GlobalKey();
+
+        await tester.pumpWidget(
+          treeWith(childKey: childKey, underSecond: false),
+        );
+        await tester.pumpAndSettle();
+
+        final (first, second) = parents(tester);
+
+        expect(first.childrenCount, 1, reason: 'the child started here');
+        expect(second.childrenCount, 0);
+
+        // The move goes through `deactivate` + `activate`, and it is
+        // `activate()` that has to unregister the scope from the parent it
+        // left and register it with the one it arrived at. A failed handoff
+        // is invisible from the child's side: it shows up as the old parent
+        // waiting out its whole `waitForChildrenTimeout` on a scope that is
+        // alive and well elsewhere.
+        await tester.pumpWidget(
+          treeWith(childKey: childKey, underSecond: true),
+        );
+        await tester.pumpAndSettle();
+
+        expect(
+          first.childrenCount,
+          0,
+          reason: 'the scope unregistered from the parent it left',
+        );
+        expect(
+          second.childrenCount,
+          1,
+          reason: 'the scope registered with the parent it arrived at',
+        );
+        expect(
+          find.byKey(childKey),
+          findsOneWidget,
+          reason: 'the scope itself survived the move',
+        );
+      },
+    );
+
+    testWidgets(
+      'is awaited by the new parent, not by the old one',
+      (tester) async {
+        final childKey = GlobalKey();
+
+        await tester.pumpWidget(
+          treeWith(childKey: childKey, underSecond: false),
+        );
+        await tester.pumpAndSettle();
+        await tester.pumpWidget(
+          treeWith(childKey: childKey, underSecond: true),
+        );
+        await tester.pumpAndSettle();
+
+        final (first, second) = parents(tester);
+        final child =
+            tester.element(find.byType(_MovableScope)) as _MovableScopeElement;
+
+        // The child holds its own disposal open, so the parent that awaits it
+        // cannot finish while it is held.
+        final held = Completer<void>();
+        child.disposalGate = held.future;
+
+        await tester.pumpWidget(
+          const Directionality(
+            textDirection: TextDirection.ltr,
+            child: SizedBox.shrink(),
+          ),
+        );
+        await _settle(tester, until: () => first.disposed);
+
+        expect(
+          first.disposed,
+          isTrue,
+          reason: 'the parent it left had nothing left to wait for',
+        );
+        expect(
+          first.timedOut,
+          isFalse,
+          reason: 'and it did not have to give up on anything',
+        );
+        expect(
+          second.disposed,
+          isFalse,
+          reason: 'the parent it moved to is held by the child it now awaits',
+        );
+
+        held.complete();
+        await _settle(tester, until: () => second.disposed);
+
+        expect(
+          second.disposed,
+          isTrue,
+          reason: 'and it finishes once the child is done',
+        );
+        expect(second.timedOut, isFalse);
+      },
+    );
+  });
+
   group('AsyncScope initialization that raises while it is cancelled', () {
     testWidgets(
       'still finishes disposing of itself, so its parent does not wait for it '
@@ -609,6 +743,36 @@ Future<void> _settle(
     );
     await tester.pump(const Duration(milliseconds: 10));
   }
+}
+
+/// A scope that can be moved between parents with a [GlobalKey], and can hold
+/// its own disposal open so that the parent awaiting it can be observed
+/// waiting.
+final class _MovableScope
+    extends AsyncScopeCore<_MovableScope, _MovableScopeElement> {
+  const _MovableScope({super.key});
+
+  @override
+  _MovableScopeElement createScopeElement() => _MovableScopeElement(this);
+}
+
+final class _MovableScopeElement
+    extends AsyncScopeElementBase<_MovableScope, _MovableScopeElement> {
+  /// Awaited by [disposeAsync], so a test can keep the disposal — and with it
+  /// the parent that waits for this scope — open for as long as it likes.
+  Future<void>? disposalGate;
+
+  _MovableScopeElement(super.widget);
+
+  @override
+  Future<void> disposeAsync() async {
+    if (disposalGate case final gate?) {
+      await gate;
+    }
+  }
+
+  @override
+  Widget buildOnState(AsyncScopeState state) => const SizedBox.shrink();
 }
 
 /// A scope whose initialization raises *while it is being cancelled*: the
