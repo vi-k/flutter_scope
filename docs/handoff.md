@@ -13,8 +13,9 @@
 `TODO(nashol)` в `async_scope_core.dart:618`. Закрыто: логи в тестах стали
 opt-in, поправлен `my_fake_async`, добавлен тест на пустой набор потоков в
 `init()` concurrent-группы; снят устаревший пункт про `test/notifier_test.dart`
-— файла нет с коммита `2751810`. Осталось: расследование `Stream.error` под
-`AutomatedTestWidgetsFlutterBinding` и `TODO(nashol)`.
+— файла нет с коммита `2751810`; закрыт вопрос со `Stream.error` под тестовым
+биндингом (дефекта нет, добавлен тест на ветку ошибки инициализации).
+Осталось: `TODO(nashol)`.
 
 2026-08-12 настроен регламент работы агентов: точка входа `AGENTS.md`
 (`CLAUDE.md` только импортирует её), этот файл, `docs/backlog.md`,
@@ -43,10 +44,12 @@ opt-in, поправлен `my_fake_async`, добавлен тест на пу�
 - `dart format` расходится на 6 файлах `example/scopo_demo`: версия форматтера
   новее той, которой их писали, а переформатирование конфликтует с
   `require_trailing_commas`. Чинить вместе с обновлением тулчейна.
-- `Stream.error(...)` как init-стрим не доходит до модели под
-  `AutomatedTestWidgetsFlutterBinding` (состояние остаётся `Waiting`), в
-  обычном `test()` работает. Возможно, скрывает проблему планирования в
-  `_performAsyncInit`.
+- Тестовое ограничение, не дефект: под `AutomatedTestWidgetsFlutterBinding`
+  ошибка, лежащая в буфере потока до подписки (`Stream.error`), не проходит
+  через `asyncMap` — а именно так подписывается `_performAsyncInit`. Ветку
+  ошибки в тестах поднимать `async*`-потоком, который бросает после первого
+  события; `Stream.error` — только внутри `tester.runAsync`. Разбор:
+  `docs/records/2026-08-12[1]-stream-error-under-test-binding.md`.
 
 ## Пробелы в покрытии
 

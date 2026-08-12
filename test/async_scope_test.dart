@@ -173,6 +173,54 @@ void main() {
   // to `disposeAsync()` at all.
   group('AsyncScope failed initialization', () {
     testWidgets(
+      'an error raised inside the init stream reaches the model with the last '
+      'progress, and the error branch is built',
+      (tester) async {
+        // The other failure tests raise *before* the stream exists, so the
+        // error goes through the `try` of `_performAsyncInit` and reaches
+        // nobody but the zone. An error raised by the stream itself takes the
+        // other path — the subscription's `onError`, which is what puts
+        // `AsyncScopeError` into the model and keeps the last progress with
+        // it — and nothing covered that path.
+        await tester.pumpWidget(
+          Directionality(
+            textDirection: TextDirection.ltr,
+            child: AsyncScope(
+              init: (context) async* {
+                yield AsyncScopeProgress('step');
+                throw StateError('init failed');
+              },
+              dispose: () {},
+              initBuilder: (context) => const Text('initializing'),
+              errorBuilder: (context, error, stackTrace) =>
+                  Text('error: $error'),
+              builder: (context) => const Text('ready'),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('error: Bad state: init failed'), findsOneWidget);
+
+        final element = tester.element(find.byType(AsyncScope))
+            as AsyncScopeContext<AsyncScope>;
+
+        expect(element.hasError, isTrue);
+        expect(element.error, isA<StateError>());
+        expect(
+          element.state,
+          isA<AsyncScopeError>().having(
+            (state) => state.progress,
+            'progress',
+            'step',
+          ),
+          reason: 'the progress the scope had reached is kept with the error',
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
       'a scope whose initAsync throws synchronously still finishes disposing '
       'of itself, so its parent does not wait for it in vain',
       (tester) async {
