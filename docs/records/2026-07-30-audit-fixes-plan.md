@@ -1,5 +1,9 @@
 # scopo — план исправлений по итогам аудита 2026-07-30
 
+> **Состояние на 2026-08-12:** выполнен полностью, смержен в `main` (9ee497d, релиз 0.10.0). Исторический документ, не поддерживается — часть решений позднее пересмотрена.
+> **Что это:** план из 18 задач по итогам аудита кода перед выпуском 0.10.0.
+> **Связанные записи:** отчёты по задачам — `2026-07-30[2]-audit-fixes-tasks.md`, итог волны — `2026-07-30[3]-audit-fixes-final-report.md`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Довести scopo до зелёного тест-сьюта, исправить 9 найденных багов корректности, вычистить мёртвый код и привести README/упаковку в соответствие с реальным API. Релиз 0.10.0.

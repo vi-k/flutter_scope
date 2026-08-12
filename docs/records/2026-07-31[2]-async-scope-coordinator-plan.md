@@ -1,5 +1,9 @@
 # AsyncScope Coordinator Redesign Implementation Plan
 
+> **Состояние на 2026-08-12:** выполнен полностью, смержен в `main` (12b4c9f). Исторический документ, не поддерживается.
+> **Что это:** план реализации редизайна координации из 4 задач.
+> **Связанные записи:** спецификация — `2026-07-31-async-scope-coordinator-design.md`, отчёты по задачам — `2026-07-31[3]-async-scope-coordinator-tasks.md`, предмержевое ревью — `2026-07-31[4]-async-scope-coordinator-final-report.md`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Сделать `AsyncScopeCoordinator` единственным владельцем координации асинхронных скоупов — очередей по `scopeKey` и корня ожиданий, — вынеся саму координацию в тестируемое ядро без Flutter.

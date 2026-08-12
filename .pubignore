@@ -8,9 +8,11 @@
 # are tracked in git but of no use to a consumer of the package.
 /docs/
 
-# Working directories of the agent tooling.
+# Working directories of the agent tooling, and the instructions they read.
 /.claude/
 /.superpowers/
+/AGENTS.md
+/CLAUDE.md
 
 # Miscellaneous
 *.class
