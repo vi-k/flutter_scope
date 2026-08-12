@@ -3,6 +3,108 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:scopo/scopo.dart';
 
 void main() {
+  setUp(() {
+    _CounterValueView.buildCount = 0;
+    _ConstantView.buildCount = 0;
+  });
+
+  group('ScopeNotifier', () {
+    testWidgets('rebuilds only the dependents whose selected value changed', (
+      tester,
+    ) async {
+      final counter = _Counter();
+      addTearDown(counter.dispose);
+
+      await tester.pumpWidget(_Host(counter: counter));
+      await tester.pumpAndSettle();
+
+      final valueBuilds = _CounterValueView.buildCount;
+      final constantBuilds = _ConstantView.buildCount;
+
+      counter.increment();
+      await tester.pump();
+
+      expect(find.text('value: 1'), findsOneWidget);
+      expect(
+        _CounterValueView.buildCount,
+        valueBuilds + 1,
+        reason: 'the scope listens to the model and notified this dependent',
+      );
+      expect(
+        _ConstantView.buildCount,
+        constantBuilds,
+        reason: 'the value this one selects did not change',
+      );
+    });
+
+    testWidgets('of(listen: false) does not subscribe', (tester) async {
+      final counter = _Counter();
+      addTearDown(counter.dispose);
+      var readerBuilds = 0;
+
+      await tester.pumpWidget(
+        _Host(
+          counter: counter,
+          child: Builder(
+            builder: (context) {
+              readerBuilds++;
+              ScopeNotifier.of<_Counter>(context, listen: false);
+
+              return const Text('reader');
+            },
+          ),
+        ),
+      );
+
+      final builds = readerBuilds;
+      counter.increment();
+      await tester.pump();
+
+      expect(readerBuilds, builds);
+    });
+
+    testWidgets('disposes of the model it created', (tester) async {
+      late _Counter created;
+
+      await tester.pumpWidget(
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: ScopeNotifier<_Counter>(
+            create: (context) => created = _Counter(),
+            dispose: (counter) => counter.dispose(),
+            builder: (context) => const _CounterValueView(),
+          ),
+        ),
+      );
+
+      expect(created.disposeCount, 0);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+
+      expect(created.disposeCount, 1);
+    });
+
+    testWidgets(
+      'stops listening to a model it was given once it leaves the tree',
+      (tester) async {
+        final counter = _Counter();
+        addTearDown(counter.dispose);
+
+        await tester.pumpWidget(_Host(counter: counter));
+        await tester.pumpAndSettle();
+
+        await tester.pumpWidget(const SizedBox.shrink());
+
+        // The scope removed its listener on the way out, so nothing is left
+        // to mark a defunct element dirty.
+        counter.increment();
+        await tester.pump();
+
+        expect(tester.takeException(), isNull);
+      },
+    );
+  });
+
   testWidgets(
     'ScopeNotifier.value re-subscribes to the new listenable on swap',
     (tester) async {
@@ -60,5 +162,78 @@ class _ValueView extends StatelessWidget {
     );
 
     return Text('$value');
+  }
+}
+
+/// A model with one value that changes and one that never does.
+final class _Counter extends ChangeNotifier {
+  int _value = 0;
+  int get value => _value;
+
+  int get constant => 42;
+
+  int disposeCount = 0;
+
+  void increment() {
+    _value++;
+    notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    disposeCount++;
+    super.dispose();
+  }
+}
+
+final class _Host extends StatelessWidget {
+  final _Counter counter;
+  final Widget? child;
+
+  const _Host({required this.counter, this.child});
+
+  @override
+  Widget build(BuildContext context) => Directionality(
+        textDirection: TextDirection.ltr,
+        child: ScopeNotifier<_Counter>.value(
+          value: counter,
+          builder: (context) =>
+              child ??
+              const Column(children: [_CounterValueView(), _ConstantView()]),
+        ),
+      );
+}
+
+final class _CounterValueView extends StatelessWidget {
+  static int buildCount = 0;
+
+  const _CounterValueView();
+
+  @override
+  Widget build(BuildContext context) {
+    buildCount++;
+    final value = ScopeNotifier.select<_Counter, int>(
+      context,
+      (counter) => counter.value,
+    );
+
+    return Text('value: $value');
+  }
+}
+
+final class _ConstantView extends StatelessWidget {
+  static int buildCount = 0;
+
+  const _ConstantView();
+
+  @override
+  Widget build(BuildContext context) {
+    buildCount++;
+    final value = ScopeNotifier.select<_Counter, int>(
+      context,
+      (counter) => counter.constant,
+    );
+
+    return Text('constant: $value');
   }
 }
