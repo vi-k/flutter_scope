@@ -615,8 +615,32 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
 
     // Cancel the initialization if it has not finished yet.
     if (_subscription case final subscription?) {
-      // TODO(nashol): errors raised after the cancellation land here
-      await subscription.cancel();
+      // A generator runs its `finally` when it is cancelled, and a failure
+      // raised there -- or by anything else the cancellation drives -- is
+      // delivered through this future. Letting it out would abandon the
+      // disposal right here, before any of the releasing below has run: the
+      // scope would never unregister from its parent, which then waits out
+      // its whole `waitForChildrenTimeout` on a scope that is already gone,
+      // and never release its `scopeKey`, so every later scope on that key
+      // would queue behind an entry nobody completes. The failure is
+      // reported and the disposal goes on -- the same trade the rest of this
+      // file makes for the failures it cannot hand to a caller.
+      try {
+        await subscription.cancel();
+      } on Object catch (error, stackTrace) {
+        _log.e(
+          'initialization cancellation failed',
+          error: error,
+          stackTrace: stackTrace,
+        );
+        FlutterError.reportError(
+          FlutterErrorDetails(
+            exception: error,
+            stack: stackTrace,
+            library: 'scopo',
+          ),
+        );
+      }
       if (!_initCompleter.isCompleted) {
         _log.i('initialization cancelled');
         _initCompleter.complete();

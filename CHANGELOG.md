@@ -49,6 +49,13 @@
 * Fix infinite recursion in `CompareUtils.identical`.
 * Fix hang in `ScopeAutoDependencies.dispose()` when no dependency requires
   disposal.
+* Fix an abandoned disposal when the initialization raises while it is being
+  cancelled: a generator that fails in its `finally` hands that failure to the
+  `cancel()` the disposal awaits, and it used to leave the disposal right
+  there — the scope never unregistered from its parent, which then waited out
+  its whole `waitForChildrenTimeout` on a scope that was already gone, and
+  never released its `scopeKey`. The failure is now reported through
+  `FlutterError.reportError` and the disposal runs to its end.
 * Fix a deadlock when an asynchronous initialization fails before it starts:
   `initAsync()` raising on the spot, or the missing-`AsyncScopeCoordinator`
   error of a scope with a `scopeKey`, left the scope waiting for its own

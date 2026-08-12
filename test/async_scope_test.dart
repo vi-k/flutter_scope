@@ -397,6 +397,72 @@ void main() {
   // The assertions are about effects, never about timings: what proves the
   // defect is which error the app receives, which state the scope is left in,
   // and whether `disposeAsync()` still runs.
+  group('AsyncScope initialization that raises while it is cancelled', () {
+    testWidgets(
+      'still finishes disposing of itself, so its parent does not wait for it '
+      'in vain',
+      (tester) async {
+        late _WaitingParentScopeElement parent;
+        late int childrenBefore;
+
+        // Same guarded zone as the other failure tests, and the same rule
+        // about it: nothing inside may throw, every expectation is made once
+        // the zone is gone.
+        final errors = <Object>[];
+        await runZonedGuarded(
+          () async {
+            await tester.pumpWidget(
+              const Directionality(
+                textDirection: TextDirection.ltr,
+                child: _WaitingParentScope(child: _RaisingOnCancelScope()),
+              ),
+            );
+            await tester.pump();
+
+            parent = tester.element(find.byType(_WaitingParentScope))
+                as _WaitingParentScopeElement;
+            childrenBefore = parent.childrenCount;
+
+            await tester.pumpWidget(
+              const Directionality(
+                textDirection: TextDirection.ltr,
+                child: SizedBox.shrink(),
+              ),
+            );
+            await _settle(tester, until: () => parent.disposed);
+          },
+          (error, stackTrace) => errors.add(error),
+        );
+
+        expect(
+          childrenBefore,
+          1,
+          reason: 'the scope registered with its parent before it was removed',
+        );
+        expect(
+          parent.childrenCount,
+          0,
+          reason: 'the scope left its parent despite the failed cancellation',
+        );
+        expect(
+          parent.disposed,
+          isTrue,
+          reason: 'the parent got past the wait and disposed of itself',
+        );
+        expect(
+          errors,
+          isEmpty,
+          reason: 'the failure no longer escapes into the zone',
+        );
+        expect(
+          tester.takeException(),
+          isA<StateError>(),
+          reason: 'the failure is reported, not swallowed',
+        );
+      },
+    );
+  });
+
   group('AsyncScope initialization that fails after the ready state', () {
     testWidgets(
       'reports the failure raised after the ready state instead of a '
@@ -543,6 +609,46 @@ Future<void> _settle(
     );
     await tester.pump(const Duration(milliseconds: 10));
   }
+}
+
+/// A scope whose initialization raises *while it is being cancelled*: the
+/// `finally` of its generator throws, and an `async*` generator delivers that
+/// failure through the `cancel()` future — the one `_performAsyncDispose`
+/// awaits before it has unregistered anything.
+final class _RaisingOnCancelScope extends AsyncScopeCore<_RaisingOnCancelScope,
+    _RaisingOnCancelScopeElement> {
+  const _RaisingOnCancelScope();
+
+  @override
+  _RaisingOnCancelScopeElement createScopeElement() =>
+      _RaisingOnCancelScopeElement(this);
+}
+
+final class _RaisingOnCancelScopeElement extends AsyncScopeElementBase<
+    _RaisingOnCancelScope, _RaisingOnCancelScopeElement> {
+  _RaisingOnCancelScopeElement(super.widget);
+
+  @override
+  Stream<AsyncScopeInitState> initAsync() async* {
+    try {
+      yield AsyncScopeProgress('step');
+      // Short enough for the disposal to catch the generator here, and
+      // bounded, so the cancellation can finish: a generator parked on a
+      // future that never completes can never be cancelled at all, which is
+      // a different problem from the one this scope is about.
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+      yield AsyncScopeReady();
+    } finally {
+      // The `finally` is where a cancelled generator resumes, so throwing
+      // here is the whole point of this fixture: it is how a failure reaches
+      // the `cancel()` future the disposal awaits.
+      // ignore: throw_in_finally
+      throw StateError('raised while being cancelled');
+    }
+  }
+
+  @override
+  Widget buildOnState(AsyncScopeState state) => const SizedBox.shrink();
 }
 
 /// Minimal [AsyncScopeCore] used to test the `_registerWithParent()`
