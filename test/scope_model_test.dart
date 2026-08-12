@@ -168,10 +168,14 @@ void main() {
 
 final class _Model {
   String name;
-  final int age;
+
+  /// Never changes: a selector on it must keep its dependent out of every
+  /// notification.
+  final int age = 30;
+
   int disposeCount = 0;
 
-  _Model(this.name, {this.age = 30});
+  _Model(this.name);
 
   void dispose() => disposeCount++;
 }
