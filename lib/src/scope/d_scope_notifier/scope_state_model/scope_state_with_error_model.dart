@@ -57,6 +57,7 @@ base class ScopeStateWithErrorNotifier<S extends Object>
   ScopeStateWithErrorModelView<S> asUnmodifiable() =>
 
       /// Wraps a notifier into a read-only view of it.
+      /// Wraps [notifier] into a read-only view of it.
       ScopeStateWithErrorModelView(this);
 }
 

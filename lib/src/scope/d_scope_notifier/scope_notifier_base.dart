@@ -47,6 +47,7 @@ abstract base class ScopeNotifierBase<W extends ScopeNotifierBase<W, M>,
   static ScopeModelContext<W, M>?
 
       /// The context of the nearest scope [W], or `null` if there is none.
+      /// The context of the nearest scope [W], or `null` if there is none.
       maybeOf<W extends ScopeNotifierBase<W, M>, M extends Listenable>(
     BuildContext context, {
     required bool listen,
@@ -58,6 +59,9 @@ abstract base class ScopeNotifierBase<W extends ScopeNotifierBase<W, M>,
 
   static ScopeModelContext<W, M>
 
+      /// The context of the nearest scope [W].
+      ///
+      /// Throws when there is no such scope above [context].
       /// The context of the nearest scope [W].
       ///
       /// Throws when there is no such scope above [context].

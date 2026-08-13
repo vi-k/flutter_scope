@@ -11,6 +11,10 @@ part 'scope_logger.dart';
 
 /// {@category debug}
 abstract final class ScopeConfig {
+  /// The logger of the package.
+  ///
+  /// Off by default. See the `debug` topic for levels, publishers and
+  /// transformers.
   static final logger = ScopeLogger('scopo')..level = ScopeLogLevel.off;
 
   /// Forces pause to be disabled during testing and debugging.

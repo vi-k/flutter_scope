@@ -66,6 +66,7 @@ abstract base class Scope<W extends Scope<W, D, S>, D extends ScopeDependencies,
   /// An optional duration to pause after initialization is successful.
   final Duration? pauseAfterInitialization;
 
+  /// Creates a scope.
   const Scope({
     super.key,
     super.tag,

@@ -23,6 +23,8 @@ class ListenableSelector<L extends Listenable, T extends Object?>
     L listenable,
     T value,
     Widget? child,
+
+    /// Builds the subtree from the selected value.
   ) builder;
 
   /// Passed back to [builder] untouched, to keep a subtree out of the

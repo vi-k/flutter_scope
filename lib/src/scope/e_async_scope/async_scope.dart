@@ -32,6 +32,7 @@ final class AsyncScope extends AsyncScopeBase<AsyncScope> {
     StackTrace stackTrace,
 
     /// Built when the initialization failed.
+    /// Built when the initialization failed.
   ) errorBuilder;
 
   /// Built once the scope is ready.

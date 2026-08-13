@@ -64,10 +64,18 @@ final class DepHelper {
 
   DepHelper._(this._dep);
 
+  /// The name of the dependency being initialized.
   String get name =>
       _dep?.name ?? (throw StateError('helper already disposed'));
 
+  /// Called synchronously when the scope leaves the tree.
+  ///
+  /// Assign it from the initializer for whatever cannot wait for the
+  /// asynchronous teardown — unsubscribing, for instance.
   void Function()? unmount;
 
+  /// Releases what this dependency acquired; awaited during the disposal.
+  ///
+  /// Leave it unset when the dependency owns nothing.
   FutureOr<void> Function()? dispose;
 }

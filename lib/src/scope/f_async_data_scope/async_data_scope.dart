@@ -12,6 +12,7 @@ final class AsyncDataScope<T extends Object?>
     ///
     /// Yields [AsyncDataScopeProgress] any number of times and
     /// [AsyncDataScopeReady] with the value once.
+    /// The initialization, ending with the value.
   ) init;
 
   /// Called synchronously when the scope leaves the tree.
@@ -36,6 +37,7 @@ final class AsyncDataScope<T extends Object?>
     StackTrace stackTrace,
     Object? progress,
 
+    /// Built when the initialization failed.
     /// Built when the initialization failed.
   ) errorBuilder;
 
@@ -91,6 +93,7 @@ final class AsyncDataScope<T extends Object?>
 
   static AsyncDataScopeContext<AsyncDataScope<T>, T>?
 
+      /// The nearest `AsyncDataScope<T>` above [context], or `null`.
       /// The nearest `AsyncDataScope<T>` above [context], or `null`.
       maybeOf<T extends Object?>(
     BuildContext context, {

@@ -24,6 +24,9 @@ abstract base class AsyncScopeCore<W extends AsyncScopeCore<W, E>,
       /// The element of the nearest scope [W] above [context].
       ///
       /// Throws when there is none.
+      /// The element of the nearest scope [W] above [context].
+      ///
+      /// Throws when there is none.
       of<W extends AsyncScopeCore<W, E>, E extends AsyncScopeElementBase<W, E>>(
     BuildContext context, {
     required bool listen,

@@ -11,6 +11,7 @@ final class ScopeAutoDependenciesProgress {
 
   final Progress _progress;
 
+  /// Creates a progress value for the dependency at [path].
   const ScopeAutoDependenciesProgress(this.path, this._progress);
 
   /// The name the dependency was declared with — the last segment of [path].
@@ -23,8 +24,13 @@ final class ScopeAutoDependenciesProgress {
     return separator < 0 ? path : path.substring(separator + 1);
   }
 
+  /// The dependencies initialized so far.
   int get number => _progress.number;
+
+  /// The dependencies there are in total.
   int get total => _progress.total;
+
+  /// The progress as a fraction between 0 and 1.
   double get progress => _progress.progress;
 
   @override

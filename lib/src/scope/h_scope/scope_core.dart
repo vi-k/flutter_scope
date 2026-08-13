@@ -9,6 +9,7 @@ abstract base class ScopeCore<
     E extends ScopeElementBase<W, E, D, S>,
     D extends ScopeDependencies,
     S extends ScopeCoreState<W, E, D, S>> extends LiteScopeCore<W, E, S> {
+  /// Creates the widget half of a scope.
   const ScopeCore({
     super.key,
     super.tag,
@@ -109,6 +110,7 @@ abstract base class ScopeElementBase<
         D extends ScopeDependencies,
         S extends ScopeCoreState<W, E, D, S>>
     extends LiteScopeElementBase<W, E, S> {
+  /// Creates the element of a scope.
   ScopeElementBase(super.widget);
 
   /// The initialized dependencies for this scope.
@@ -201,6 +203,7 @@ abstract base class ScopeCoreState<
     E extends ScopeElementBase<W, E, D, S>,
     D extends ScopeDependencies,
     S extends ScopeCoreState<W, E, D, S>> extends LiteScopeCoreState<W, E, S> {
+  /// The dependency container, ready before [initState] runs.
   D get dependencies => _scopeElement.dependencies;
 
   //

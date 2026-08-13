@@ -6,6 +6,8 @@ abstract base class ScopeDependencyGroup with ScopeDependencyMixin {
   final String name;
 
   late final List<ScopeDependency> _dependencies;
+
+  /// The children of this group, in declaration order.
   List<ScopeDependency> get dependencies => List.of(_dependencies);
 
   late final int _count;
