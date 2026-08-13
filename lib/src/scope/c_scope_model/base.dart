@@ -6,6 +6,7 @@ abstract interface class ScopeModelContext<W extends ScopeInheritedWidget,
   @override
   W get widget;
 
+  /// The model this scope owns.
   M get model;
 }
 

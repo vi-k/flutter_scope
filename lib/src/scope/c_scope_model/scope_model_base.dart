@@ -16,6 +16,7 @@ abstract base class ScopeModelBase<W extends ScopeModelBase<W, M>,
   @override
   final void Function(M model)? dispose;
 
+  /// Creates a scope that owns the model [create] returns.
   const ScopeModelBase({
     super.key,
     super.tag,
@@ -25,6 +26,7 @@ abstract base class ScopeModelBase<W extends ScopeModelBase<W, M>,
   })  : hasValue = false,
         value = null;
 
+  /// Creates a scope over a model somebody else owns.
   const ScopeModelBase.value({
     super.key,
     super.tag,
@@ -42,6 +44,8 @@ abstract base class ScopeModelBase<W extends ScopeModelBase<W, M>,
   Widget build(BuildContext context);
 
   static ScopeModelContext<W, M>?
+
+      /// The context of the nearest scope [W], or `null` if there is none.
       maybeOf<W extends ScopeModelBase<W, M>, M extends Object>(
     BuildContext context, {
     required bool listen,
@@ -52,6 +56,10 @@ abstract base class ScopeModelBase<W extends ScopeModelBase<W, M>,
           );
 
   static ScopeModelContext<W, M>
+
+      /// The context of the nearest scope [W].
+      ///
+      /// Throws when there is no such scope above [context].
       of<W extends ScopeModelBase<W, M>, M extends Object>(
     BuildContext context, {
     required bool listen,
@@ -61,6 +69,7 @@ abstract base class ScopeModelBase<W extends ScopeModelBase<W, M>,
             listen: listen,
           );
 
+  /// Subscribes to one value of the scope and returns it.
   static V select<W extends ScopeModelBase<W, M>, M extends Object,
           V extends Object?>(
     BuildContext context,

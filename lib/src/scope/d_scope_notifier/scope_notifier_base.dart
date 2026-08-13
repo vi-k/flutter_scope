@@ -17,6 +17,7 @@ abstract base class ScopeNotifierBase<W extends ScopeNotifierBase<W, M>,
   @override
   final void Function(M model)? dispose;
 
+  /// Creates a scope that owns the model [create] returns.
   const ScopeNotifierBase({
     super.key,
     super.tag,
@@ -26,6 +27,7 @@ abstract base class ScopeNotifierBase<W extends ScopeNotifierBase<W, M>,
   })  : hasValue = false,
         value = null;
 
+  /// Creates a scope over a model somebody else owns.
   const ScopeNotifierBase.value({
     super.key,
     super.tag,
@@ -43,6 +45,8 @@ abstract base class ScopeNotifierBase<W extends ScopeNotifierBase<W, M>,
   Widget build(BuildContext context);
 
   static ScopeModelContext<W, M>?
+
+      /// The context of the nearest scope [W], or `null` if there is none.
       maybeOf<W extends ScopeNotifierBase<W, M>, M extends Listenable>(
     BuildContext context, {
     required bool listen,
@@ -53,6 +57,10 @@ abstract base class ScopeNotifierBase<W extends ScopeNotifierBase<W, M>,
           );
 
   static ScopeModelContext<W, M>
+
+      /// The context of the nearest scope [W].
+      ///
+      /// Throws when there is no such scope above [context].
       of<W extends ScopeNotifierBase<W, M>, M extends Listenable>(
     BuildContext context, {
     required bool listen,
@@ -62,6 +70,7 @@ abstract base class ScopeNotifierBase<W extends ScopeNotifierBase<W, M>,
             listen: listen,
           );
 
+  /// Subscribes to one value of the scope and returns it.
   static V select<W extends ScopeNotifierBase<W, M>, M extends Listenable,
           V extends Object?>(
     BuildContext context,

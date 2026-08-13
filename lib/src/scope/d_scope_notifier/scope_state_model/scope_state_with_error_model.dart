@@ -6,10 +6,17 @@ abstract interface class ScopeStateWithErrorModel<S extends Object>
   @override
   S get state;
 
+  /// Whether the state carries an error.
   bool get hasError;
 
+  /// The error, when there is one.
+  ///
+  /// Throws a [StateError] otherwise.
   Object get error;
 
+  /// The stack trace of [error].
+  ///
+  /// Throws a [StateError] when there is no error.
   StackTrace get stackTrace;
 }
 
@@ -18,6 +25,7 @@ base class ScopeStateWithErrorNotifier<S extends Object>
     extends ScopeStateNotifier<S> implements ScopeStateWithErrorModel<S> {
   (Object, StackTrace)? _error;
 
+  /// Creates a notifier holding `initialState` and no error.
   ScopeStateWithErrorNotifier(super.initialState);
 
   @override
@@ -36,6 +44,10 @@ base class ScopeStateWithErrorNotifier<S extends Object>
   @override
   StackTrace get stackTrace => _error?.$2 ?? (throw StateError('No error'));
 
+  /// Puts the model into the failed state and notifies the listeners.
+  ///
+  /// Reading `state` afterwards rethrows [error] with its [stackTrace]
+  /// instead of returning a value.
   void setError(Object error, StackTrace stackTrace) {
     _error = (error, stackTrace);
     notifyListeners();
@@ -43,6 +55,8 @@ base class ScopeStateWithErrorNotifier<S extends Object>
 
   @override
   ScopeStateWithErrorModelView<S> asUnmodifiable() =>
+
+      /// Wraps a notifier into a read-only view of it.
       ScopeStateWithErrorModelView(this);
 }
 
