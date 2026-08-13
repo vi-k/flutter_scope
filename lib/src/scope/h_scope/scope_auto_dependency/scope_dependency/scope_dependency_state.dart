@@ -4,11 +4,13 @@ part of '../../../scope.dart';
 sealed class ScopeDependencyState {
   const ScopeDependencyState();
 
+  /// The state as it appears in a tree dump.
   String get description;
 
   @override
   String toString() => description;
 
+  /// Thrown when errors are asked of a state that holds none.
   static Never throwNoErrors() => throw StateError('No errors');
 }
 
@@ -72,6 +74,7 @@ sealed class ScopeDependencyCancelledStates extends _ScopeDependencyWithErrors {
 
 /// {@category Scope}
 final class ScopeDependencyInitial extends ScopeDependencySuccessStates {
+  /// Creates the state of a dependency not started yet.
   const ScopeDependencyInitial();
 
   @override
@@ -80,6 +83,7 @@ final class ScopeDependencyInitial extends ScopeDependencySuccessStates {
 
 /// {@category Scope}
 final class ScopeDependencyFailed extends ScopeDependencyFailedStates {
+  /// Creates the state of a dependency whose initialization failed.
   ScopeDependencyFailed(super.error, super.stackTrace);
 
   ScopeDependencyFailed._(super._errors) : super._();
@@ -96,6 +100,7 @@ final class ScopeDependencyFailed extends ScopeDependencyFailedStates {
 
 /// {@category Scope}
 final class ScopeDependencyCancelled extends ScopeDependencyCancelledStates {
+  /// Creates the state of a dependency whose initialization was cancelled.
   ScopeDependencyCancelled([super.error, super.stackTrace]);
 
   const ScopeDependencyCancelled._(super._errors) : super._();
@@ -114,6 +119,7 @@ final class ScopeDependencyCancelled extends ScopeDependencyCancelledStates {
 
 /// {@category Scope}
 final class ScopeDependencyInitialized extends ScopeDependencySuccessStates {
+  /// Creates the state of an initialized dependency.
   const ScopeDependencyInitialized();
 
   @override
@@ -122,6 +128,7 @@ final class ScopeDependencyInitialized extends ScopeDependencySuccessStates {
 
 /// {@category Scope}
 final class ScopeDependencyDisposalFailed extends ScopeDependencyFailedStates {
+  /// Creates the state of a dependency whose disposal failed.
   ScopeDependencyDisposalFailed(super.error, super.stackTrace);
 
   ScopeDependencyDisposalFailed._(super._errors) : super._();
@@ -139,6 +146,7 @@ final class ScopeDependencyDisposalFailed extends ScopeDependencyFailedStates {
 /// {@category Scope}
 final class ScopeDependencyDisposalCancelled
     extends ScopeDependencyCancelledStates {
+  /// Creates the state of a dependency whose disposal was cancelled.
   ScopeDependencyDisposalCancelled([super.error, super.stackTrace]);
 
   const ScopeDependencyDisposalCancelled._(super._errors) : super._();
@@ -160,6 +168,7 @@ final class ScopeDependencyDisposalCancelled
 
 /// {@category Scope}
 final class ScopeDependencyDisposed extends ScopeDependencySuccessStates {
+  /// Creates the state of a disposed dependency.
   const ScopeDependencyDisposed();
 
   @override
@@ -168,6 +177,7 @@ final class ScopeDependencyDisposed extends ScopeDependencySuccessStates {
 
 /// {@category Scope}
 final class ScopeDependencyNoDisposalRequired extends ScopeDependencyDisposed {
+  /// Creates the state of a dependency that had nothing to release.
   const ScopeDependencyNoDisposalRequired();
 
   @override

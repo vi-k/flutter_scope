@@ -9,8 +9,15 @@ abstract base class ScopeAutoDependencies<T extends ScopeDependencies,
     C extends Object?> implements ScopeDependencies {
   late final _log = log.withAddedName(() => '$T(#${shortHash(this)})');
 
+  /// Whether a failed initialization disposes of what it managed to build.
+  ///
+  /// On by default: the container is torn down before the error reaches
+  /// `buildOnError`. Turn it off to keep the half-built tree for inspection.
   bool get autoDisposeOnError => true;
 
+  /// The root of the dependency tree.
+  ///
+  /// Throws before [buildDependencies] has run.
   ScopeDependency get root =>
       _root ?? (throw StateError('dependencies not built'));
   ScopeDependency? _root;
@@ -110,21 +117,34 @@ abstract base class ScopeAutoDependencies<T extends ScopeDependencies,
     _log.d('disposed');
   }
 
+  /// A single dependency called [name].
+  ///
+  /// The `DepHelper` handed to `init` is where the teardown is registered.
+  /// The name must not be empty.
   ScopeDependency dep(String name, FutureOr<void> Function(DepHelper) init) =>
       ScopeDependency(name, init);
 
+  /// A group whose children are initialized one after another.
+  ///
+  /// They are disposed of in reverse order. An empty [name] adds no segment
+  /// to the paths of the children.
   ScopeDependency sequential(
     String name,
     Iterable<ScopeDependency> dependencies,
   ) =>
       ScopeDependency.sequential(name, dependencies);
 
+  /// A group whose children are initialized in parallel.
+  ///
+  /// Progress therefore arrives in completion order rather than declaration
+  /// order.
   ScopeDependency concurrent(
     String name,
     Iterable<ScopeDependency> dependencies,
   ) =>
       ScopeDependency.concurrent(name, dependencies);
 
+  /// Walks the tree depth-first.
   Iterable<ScopeDependencyInfo> flattenDependencies() sync* {
     yield* _extract(root, 0, '');
   }
@@ -149,6 +169,10 @@ abstract base class ScopeAutoDependencies<T extends ScopeDependencies,
     }
   }
 
+  /// The entries that hold a real error.
+  ///
+  /// A `ScopeDependencyException` propagated from a child is not one: this
+  /// narrows the walk to where something actually failed.
   Iterable<ScopeDependencyInfo> flattenDependenciesWithErrors() =>
       flattenDependencies().where(
         (info) => switch (info.dependency.state) {
@@ -162,16 +186,23 @@ abstract base class ScopeAutoDependencies<T extends ScopeDependencies,
 
 /// {@category Scope}
 final class ScopeDependencyInfo {
+  /// How deep in the tree the dependency sits.
   final int level;
+
+  /// The path of the enclosing groups, ending with `/` when not empty.
   final String path;
+
+  /// The dependency itself.
   final ScopeDependency dependency;
 
+  /// Creates an entry of a tree walk.
   const ScopeDependencyInfo({
     required this.level,
     required this.path,
     required this.dependency,
   });
 
+  /// The indentation matching [level], for printing a tree.
   String indent([String indent = '  ']) => indent * level;
 
   @override
