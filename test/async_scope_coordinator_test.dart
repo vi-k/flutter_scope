@@ -510,6 +510,90 @@ void main() {
   // silent by design -- it only calls the `onTimeout` it is given -- so
   // `FlutterError.reportError` survives solely because both call sites in
   // `async_scope_core.dart` pass a callback that does it.
+  testWidgets(
+    'the next scope on a key is let in only once the previous one has '
+    'finished disposing',
+    (tester) async {
+      // The one thing the key promises: the successor does not start while
+      // the holder is still releasing what it holds. `exit()` runs in the
+      // `finally` of `_performAsyncDispose`, *after* `disposeAsync()`, and
+      // this gate is what makes the difference observable — the holder sits
+      // inside its disposal for as long as the test likes.
+      final gate = Completer<void>();
+
+      Widget build({required bool holder, required bool successor}) =>
+          Directionality(
+            textDirection: TextDirection.ltr,
+            child: AsyncScopeCoordinator(
+              child: Column(
+                children: [
+                  if (holder)
+                    _TestScope(
+                      key: const ValueKey('holder'),
+                      testKey: 'k',
+                      disposeLabel: 'holder',
+                      disposeGate: gate,
+                    ),
+                  if (successor)
+                    const _TestScope(
+                      key: ValueKey('successor'),
+                      testKey: 'k',
+                      disposeLabel: 'successor',
+                    ),
+                ],
+              ),
+            ),
+          );
+
+      await tester.pumpWidget(build(holder: true, successor: false));
+      await tester.pumpAndSettle();
+
+      expect(_TestScopeElement.initialized, 1);
+
+      // The holder leaves and the successor arrives in the same frame, so the
+      // successor asks for the key while the holder is still inside
+      // `disposeAsync`.
+      await tester.pumpWidget(build(holder: false, successor: true));
+      await _settle(tester, until: () => _TestScopeElement.initialized > 1);
+
+      final successor = tester.element<_TestScopeElement>(
+        find.byKey(const ValueKey('successor')),
+      );
+
+      expect(
+        _TestScopeElement.initialized,
+        1,
+        reason: 'the successor is queued behind a key that is still held',
+      );
+      expect(
+        successor.state,
+        isA<AsyncScopeWaiting>(),
+        reason: 'and it has not started initializing',
+      );
+      expect(_TestScopeElement.disposalOrder, isEmpty);
+
+      gate.complete();
+      await _settle(tester, until: () => _TestScopeElement.initialized > 1);
+
+      expect(
+        _TestScopeElement.disposalOrder,
+        ['holder'],
+        reason: 'the holder finished disposing first',
+      );
+      expect(
+        _TestScopeElement.initialized,
+        2,
+        reason: 'and only then was the successor let in',
+      );
+      expect(
+        successor.keyTimedOut,
+        isFalse,
+        reason: 'it was handed the key, not let in on an expired wait',
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('an expired wait for a scopeKey is reported', (tester) async {
     ScopeConfig.defaultScopeKeysTimeout = const Duration(milliseconds: 50);
 
