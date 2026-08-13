@@ -16,6 +16,11 @@ mixin StateAsNotifier<T extends StatefulWidget> on State<T>
   }
 
   @protected
+
+  /// Notifies the listeners of this state.
+  ///
+  /// Does nothing while nobody listens: the notifier behind it is created
+  /// by the first [addListener].
   void notifyListeners() {
     // ignore: invalid_use_of_visible_for_testing_member, invalid_use_of_protected_member
     _notifier?.notifyListeners();

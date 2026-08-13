@@ -10,8 +10,13 @@ import 'listen.dart';
 /// {@category utils}
 class ListenableSelector<L extends Listenable, T extends Object?>
     extends StatefulWidget {
+  /// The listenable being watched.
   final L listenable;
+
+  /// Extracts the value this widget rebuilds for.
   final T Function(L listenable) selector;
+
+  /// Decides whether the selected value changed; `==` when omitted.
   final bool Function(T previous, T current)? compare;
   final Widget Function(
     BuildContext context,
@@ -19,6 +24,9 @@ class ListenableSelector<L extends Listenable, T extends Object?>
     T value,
     Widget? child,
   ) builder;
+
+  /// Passed back to [builder] untouched, to keep a subtree out of the
+  /// rebuild.
   final Widget? child;
 
   /// Creates a builder that responds to [selector] changes in [listenable].

@@ -133,6 +133,7 @@ final class CompositeListenableSubscription {
   final List<ListenableSubscription> _subscriptions = [];
   var _isDisposed = false;
 
+  /// Creates an empty group of subscriptions.
   CompositeListenableSubscription();
 
   /// Adds new subscription to this composite.

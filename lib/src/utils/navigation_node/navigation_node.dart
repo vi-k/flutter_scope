@@ -10,11 +10,26 @@ import 'package:flutter/material.dart';
 ///
 /// {@category utils}
 final class NavigationNode extends StatefulWidget {
+  /// Whether this node is the outermost one.
+  ///
+  /// A root node keeps a pop to itself; any other node forwards a pop it
+  /// cannot handle to the navigator above it.
   final bool isRoot;
+
+  /// The subtree the nested navigator shows first.
   final Widget child;
+
+  /// Gives access to the nested navigator from outside the node.
   final GlobalKey<NodeNavigatorState>? navigatorKey;
+
+  /// Intercepts the system back gesture.
+  ///
+  /// Return `true` to let the pop through, `false` to keep the route, or a
+  /// [Future] to decide after asking — a confirmation dialog, usually. The
+  /// `result` is what the popped route would have returned.
   final FutureOr<bool> Function(BuildContext context, Object? result)? onPop;
 
+  /// Creates a navigation node around [child].
   const NavigationNode({
     super.key,
     this.navigatorKey,
@@ -101,6 +116,9 @@ final class NodeNavigatorState extends NavigatorState {
 
 /// {@category utils}
 extension PreviousNavigatorExtension on NavigatorState {
+  /// The navigator above this one, if any.
+  ///
+  /// This is how a [NavigationNode] forwards a pop it cannot handle itself.
   NavigatorState? get previous {
     NavigatorState? prevNavigator;
 

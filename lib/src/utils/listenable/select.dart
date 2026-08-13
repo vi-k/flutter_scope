@@ -70,5 +70,6 @@ final class ListenableSelectSubscription<T extends Object?>
     this._value,
   ) : super._();
 
+  /// The value the selector returned last.
   T get value => _value;
 }

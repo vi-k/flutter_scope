@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 base class ListenableView<T extends Listenable> implements Listenable {
   final T _listenable;
 
+  /// Wraps [listenable] so that only listening is reachable through it.
   ListenableView(T listenable) : _listenable = listenable;
 
   @override
