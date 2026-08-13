@@ -134,6 +134,10 @@
   ошибки в тестах поднимать `async*`-потоком, который бросает после первого
   события; `Stream.error` — только внутри `tester.runAsync`. Разбор:
   `docs/records/2026-08-12[1]-stream-error-under-test-binding-report.md`.
+- Мелкая несогласованность публичного API, найдена при написании
+  `doc/d_scope_notifier.md`: у `ScopeNotifier.value` нет параметра `tag`, хотя
+  он есть у `ScopeNotifier`, `ScopeModel.value` и `ScopeNotifierBase.value`.
+  Не чинил — правка breaking-безопасная, но выходит за объём задачи.
 - В `git stash` лежит чужой давний стеш `90ccbbc update README` — не трогать.
 
 ## Пробелы в покрытии

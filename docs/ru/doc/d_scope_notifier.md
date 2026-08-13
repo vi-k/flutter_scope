@@ -1,6 +1,135 @@
 # ScopeNotifier
 
-> Перевод `doc/d_scope_notifier.md` (blob `221e53b7a4f4889906b34220d83ceffa68e3a02d`). Правится в том же коммите, что и
-> оригинал; проверка — `sh docs/ru/check.sh`.
->
-> **Оригинал — заглушка:** одна строка заголовка, переводить нечего.
+> Перевод `doc/d_scope_notifier.md` (blob `dbd34fe24d497fc46c11ee13c8db3fc1dba5b50f`).
+> Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
+
+`ScopeModel` для `Listenable`. Всё из той темы остаётся в силе — `create` и
+`dispose`, конструктор `.value`, три уровня семейства, — с одной добавкой,
+которая меняет способ применения: элемент подписывается на модель, поэтому
+`notifyListeners()` доходит до поддерева без того, чтобы что-то над скоупом
+перестраивалось.
+
+```dart
+ScopeNotifier<Counter>(
+  create: (context) => Counter(),
+  dispose: (counter) => counter.dispose(),
+  builder: (context) => const CounterText(),
+);
+```
+
+```dart
+class CounterText extends StatelessWidget {
+  const CounterText({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final value = ScopeNotifier.select<Counter, int>(
+      context,
+      (counter) => counter.value,
+    );
+
+    return TextButton(
+      onPressed: ScopeNotifier.of<Counter>(context, listen: false).increment,
+      child: Text('$value'),
+    );
+  }
+}
+```
+
+Нажатие кнопки меняет счётчик, счётчик уведомляет своих слушателей, скоуп
+уведомляет своих зависимых, и `CounterText` перестраивается — но лишь потому,
+что изменилось выбранное им значение. Сосед, выбравший что-то другое, это
+проспит, а поддерево между скоупом и кнопкой не перестраивается вовсе.
+
+## Вся разница
+
+```dart
+@override
+void init() {
+  model.addListener(notifyDependents);
+  super.init();
+}
+
+@override
+void dispose() {
+  super.dispose();
+  model.removeListener(notifyDependents);
+}
+```
+
+Это весь элемент целиком. `notifyDependents` описан в теме `ScopeWidget`; здесь
+важно, что он не перестраивает собственное поддерево скоупа, — благодаря этому
+часто меняющийся `Listenable` (анимация, позиция прокрутки, контроллер текста)
+становится посильным для скоупа.
+
+Подписка принадлежит элементу, поэтому живёт ровно столько же, сколько модель, а
+модель, созданную через `create`, утилизируют уже после того, как слушателя
+сняли.
+
+## Подмена модели
+
+Конструктор `.value` принимает `Listenable`, которым владеет кто-то другой, и на
+следующей сборке ему могут передать *другой*:
+
+```dart
+ScopeNotifier.value(value: currentPlayer, builder: ...)
+```
+
+Когда виджет перестраивают с другим `value`, элемент прежде всего переносит
+слушателя со старой модели на новую. Потомки затем видят новую модель через те
+же аксессоры, а их селекторы сравнивают с теми значениями, которые захватили от
+старой, — так что переход на модель с другими значениями перестроит ровно те
+виджеты, для которых эти значения различаются.
+
+Как и в случае `ScopeModel.value`, отданной таким образом моделью скоуп не
+владеет: `dispose` для неё не зовут.
+
+## Модели состояния
+
+Четыре типа этого семейства существуют для скоупов, чьё состояние — одно
+неизменяемое значение, меняющееся во времени. На них построен `AsyncScope`, и
+может быть построен ваш собственный скоуп:
+
+| тип | что это |
+| --- | --- |
+| `ScopeStateModel<S>` | `Listenable` со `state` типа `S` — сторона чтения |
+| `ScopeStateNotifier<S>` | `ChangeNotifier`, реализующий его, с `update(S)` |
+| `ScopeStateModelView<S>` | неизменяемое представление notifier'а |
+| `ScopeStateWithErrorModel<S>` / `ScopeStateWithErrorNotifier<S>` | то же плюс провальное состояние |
+
+`update(S value)` уведомляет, только если значение действительно изменилось, а
+что считать изменением — метод, который можно переопределить:
+
+```dart
+base class PlayerState extends ScopeStateNotifier<Player> {
+  PlayerState(super.initialState);
+
+  @override
+  bool equals(Player previous, Player current) => previous.id == current.id;
+}
+```
+
+`equals` по умолчанию возвращает `false` — уведомляет каждый `update`. Это
+безопасное поведение для изменяемого объекта, который переприсваивают;
+переопределяйте его, когда состояние — значимый тип и повторные одинаковые
+обновления обычны.
+
+`asUnmodifiable()` заворачивает notifier в `ScopeStateModelView`, который
+пробрасывает `state`, `addListener` и `removeListener` — и больше ничего.
+Отдавайте его поддереву, когда состояние должно читаться, но не устанавливаться
+снизу.
+
+Пара с ошибкой интереснее. `setError` сохраняет ошибку вместе со стеком вызовов,
+`hasError` о ней сообщает — а чтение `state` после этого **пробрасывает** эту
+ошибку с её исходным стеком, а не возвращает значение. Поэтому билдер, читающий
+`state`, на упавшем скоупе падает громко, а не рисует устаревшее значение, — и
+поэтому асинхронные семейства проверяют `hasError`, прежде чем трогать `state`.
+
+## Куда дальше
+
+| тема | о чём |
+| --- | --- |
+| `ScopeModel` | семейство, которое расширяет это: `create`, `dispose`, `.value`, время жизни |
+| `ScopeWidget` | `notifyDependents` и почему он пропускает поддерево |
+| `base` | `of`, `select`, `listen` |
+| `AsyncScope` | семейство, построенное на `ScopeStateWithErrorNotifier` |
