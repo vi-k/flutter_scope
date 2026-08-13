@@ -8,12 +8,16 @@ typedef _ScopeDependency<T extends Object, V extends Object?> = (
 /// {@category ScopeWidget}
 abstract base class ScopeWidgetCore<W extends ScopeWidgetCore<W, E>,
     E extends ScopeWidgetElementBase<W, E>> extends ScopeInheritedWidget {
+  /// Creates the widget half of a scope.
   const ScopeWidgetCore({
     super.key,
     super.tag,
     super.child, // Not used by default. You can use it at your own discretion.
   });
 
+  /// Creates the element of this scope.
+  ///
+  /// The one method a family has to provide here.
   E createScopeElement();
 
   @override
@@ -27,6 +31,7 @@ abstract base class ScopeWidgetCore<W extends ScopeWidgetCore<W, E>,
       '$W${tag == null ? showHashCode //
           ? '(#${shortHash(this)})' : '' : '($tag)'}';
 
+  /// The element of the nearest scope [W] above [context], or `null`.
   static E? maybeOf<W extends ScopeWidgetCore<W, E>,
           E extends ScopeWidgetElementBase<W, E>>(
     BuildContext context, {
@@ -34,6 +39,9 @@ abstract base class ScopeWidgetCore<W extends ScopeWidgetCore<W, E>,
   }) =>
       ScopeContext.maybeOf<W, E>(context, listen: listen);
 
+  /// The element of the nearest scope [W] above [context].
+  ///
+  /// Throws when there is no such scope.
   static E of<W extends ScopeWidgetCore<W, E>,
           E extends ScopeWidgetElementBase<W, E>>(
     BuildContext context, {
@@ -41,6 +49,7 @@ abstract base class ScopeWidgetCore<W extends ScopeWidgetCore<W, E>,
   }) =>
       ScopeContext.of<W, E>(context, listen: listen);
 
+  /// Subscribes to one value of the scope and returns it.
   static V select<W extends ScopeWidgetCore<W, E>,
           E extends ScopeWidgetElementBase<W, E>, V extends Object?>(
     BuildContext context,
@@ -71,6 +80,7 @@ abstract base class ScopeWidgetElementBase<W extends ScopeWidgetCore<W, E>,
   /// Whether the element must rebuild anyway, ignoring [_shouldOnlyNotify].
   bool _forceRebuild = true;
 
+  /// Creates the element and runs its [init].
   ScopeWidgetElementBase(W super.widget) {
     init();
   }
@@ -84,6 +94,10 @@ abstract base class ScopeWidgetElementBase<W extends ScopeWidgetCore<W, E>,
     super.unmount();
   }
 
+  /// Whether the subtree must be rebuilt on every notification.
+  ///
+  /// A scope whose [buildChild] returns a different branch as its state
+  /// advances sets this; the rest keep the notify-only rebuild.
   bool get autoSelfDependence => false;
 
   @override
