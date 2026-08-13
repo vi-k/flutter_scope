@@ -79,10 +79,8 @@ abstract base class AsyncDataScopeBase<W extends AsyncDataScopeBase<W, T>,
   _AsyncDataScopeElement<W, T> createScopeElement() =>
       _AsyncDataScopeElement<W, T>(this as W);
 
+  /// The nearest scope [W] above [context], or `null`.
   static AsyncDataScopeContext<W, T>?
-
-      /// The nearest scope [W] above [context], or `null`.
-      /// The nearest scope [W] above [context], or `null`.
       maybeOf<W extends AsyncDataScopeBase<W, T>, T extends Object?>(
     BuildContext context, {
     required bool listen,
@@ -92,14 +90,10 @@ abstract base class AsyncDataScopeBase<W extends AsyncDataScopeBase<W, T>,
             listen: listen,
           );
 
+  /// The nearest scope [W] above [context].
+  ///
+  /// Throws when there is none.
   static AsyncDataScopeContext<W, T>
-
-      /// The nearest scope [W] above [context].
-      ///
-      /// Throws when there is none.
-      /// The nearest scope [W] above [context].
-      ///
-      /// Throws when there is none.
       of<W extends AsyncDataScopeBase<W, T>, T extends Object?>(
     BuildContext context, {
     required bool listen,

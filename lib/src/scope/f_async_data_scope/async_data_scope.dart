@@ -91,10 +91,8 @@ final class AsyncDataScope<T extends Object?>
   @override
   Widget buildOnReady(BuildContext context, T data) => builder(context, data);
 
+  /// The nearest `AsyncDataScope<T>` above [context], or `null`.
   static AsyncDataScopeContext<AsyncDataScope<T>, T>?
-
-      /// The nearest `AsyncDataScope<T>` above [context], or `null`.
-      /// The nearest `AsyncDataScope<T>` above [context], or `null`.
       maybeOf<T extends Object?>(
     BuildContext context, {
     required bool listen,

@@ -53,17 +53,16 @@ base class ScopeStateWithErrorNotifier<S extends Object>
     notifyListeners();
   }
 
+  /// A view of this notifier that can be read and listened to, not set.
   @override
   ScopeStateWithErrorModelView<S> asUnmodifiable() =>
-
-      /// Wraps a notifier into a read-only view of it.
-      /// Wraps [notifier] into a read-only view of it.
       ScopeStateWithErrorModelView(this);
 }
 
 /// {@category ScopeNotifier}
 base class ScopeStateWithErrorModelView<S extends Object>
     extends ScopeStateModelView<S> implements ScopeStateWithErrorModel<S> {
+  /// Wraps a notifier into a read-only view of it.
   ScopeStateWithErrorModelView(
     ScopeStateWithErrorNotifier<S> super.notifier,
   );

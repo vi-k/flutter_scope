@@ -191,11 +191,10 @@ abstract base class LiteScopeElementBase<
           buildOnError(state.error, state.stackTrace, state.progress),
       };
 
-  @mustCallSuper
-
   /// Builds the ready branch, the state and its wrapper.
   ///
   /// From here on a notification no longer rebuilds the subtree.
+  @mustCallSuper
   Widget buildOnReady() {
     _autoSelfDependence = false;
 
@@ -426,9 +425,8 @@ abstract base class LiteScopeCoreState<
   /// Called after the state has been successfully initialized.
   void onInitialized() {}
 
-  @mustCallSuper
-
   /// Rebuilds the descendants subscribed to a value that changed.
+  @mustCallSuper
   void notifyDependents() {
     _scopeElement.notifyDependents();
   }

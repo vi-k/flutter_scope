@@ -43,10 +43,8 @@ abstract base class ScopeModelBase<W extends ScopeModelBase<W, M>,
   @override
   Widget build(BuildContext context);
 
+  /// The context of the nearest scope [W], or `null` if there is none.
   static ScopeModelContext<W, M>?
-
-      /// The context of the nearest scope [W], or `null` if there is none.
-      /// The context of the nearest scope [W], or `null` if there is none.
       maybeOf<W extends ScopeModelBase<W, M>, M extends Object>(
     BuildContext context, {
     required bool listen,
@@ -56,14 +54,10 @@ abstract base class ScopeModelBase<W extends ScopeModelBase<W, M>,
             listen: listen,
           );
 
+  /// The context of the nearest scope [W].
+  ///
+  /// Throws when there is no such scope above [context].
   static ScopeModelContext<W, M>
-
-      /// The context of the nearest scope [W].
-      ///
-      /// Throws when there is no such scope above [context].
-      /// The context of the nearest scope [W].
-      ///
-      /// Throws when there is no such scope above [context].
       of<W extends ScopeModelBase<W, M>, M extends Object>(
     BuildContext context, {
     required bool listen,

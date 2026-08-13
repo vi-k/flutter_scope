@@ -107,16 +107,14 @@ abstract interface class ScopeInheritedElement<W extends ScopeInheritedWidget>
   @override
   W get widget;
 
-  @mustCallSuper
-
   /// Called once, when the element is created.
   ///
   /// Everything the scope owns is acquired here and released in [dispose].
+  @mustCallSuper
   void init();
 
-  @mustCallSuper
-
   /// Called once, when the element is unmounted.
+  @mustCallSuper
   void dispose();
 
   /// Builds what the scope shows.
