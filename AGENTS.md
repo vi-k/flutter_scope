@@ -93,37 +93,36 @@
 
 ## 6. Проверки
 
-Тулчейн — **глобальный `flutter` с `PATH`** (сейчас 3.44.9). Пина нет: `.fvmrc`
-удалён, `fvm` не используется. Заявленный в `pubspec.yaml` пол — Flutter 3.27 /
-Dart 3.6, и локально он больше ничем не проверяется.
+Тулчейн — **Flutter 3.29.0 через fvm** (`.fvmrc`; сам файл, `.fvm/` и
+`.vscode/settings.json` не под контролем версий). Это ровно тот пол, что
+заявлен в `pubspec.yaml`, поэтому отдельная проверка пола не нужна: шесть
+команд ниже и есть проверка пола.
 
 ```sh
-flutter test                     # 144 теста, должны быть зелёными
-flutter analyze                  # корень
-(cd example/minimal && flutter analyze)
-(cd example/scopo_demo && flutter analyze)
-dart format --set-exit-if-changed lib test
-dart doc --dry-run               # 0 warnings, 0 errors
-dart pub publish --dry-run       # 0 warnings
+fvm flutter test                     # 144 теста, должны быть зелёными
+fvm flutter analyze                  # корень
+(cd example/minimal && fvm flutter analyze)
+(cd example/scopo_demo && fvm flutter analyze)
+fvm dart format --set-exit-if-changed lib test
+fvm dart doc --dry-run               # 0 warnings, 0 errors
+fvm dart pub publish --dry-run       # 0 warnings
 ```
 
 Перед мержем в `main` проходят все шесть. Утверждать «работает» без вывода
 команды нельзя: сначала прогон, потом заявление.
 
-**Пол поддерживаемых версий проверяют отдельно — перед выпуском.** Заявленный
-в `pubspec.yaml` минимум (Flutter 3.29.0) стоит через `fvm` и вызывается
-точечно, не подменяя обычный тулчейн:
+**Прогнал что-то другим SDK** — глобальным `flutter` с `PATH` (там 3.44.9) или
+через `fvm spawn <версия>` — сразу после этого:
 
 ```sh
-fvm spawn 3.29.0 pub get
-fvm spawn 3.29.0 test                # 144 теста
-fvm spawn 3.29.0 analyze
-flutter clean && flutter pub get     # обязательно после
+fvm flutter clean && fvm flutter pub get
 ```
 
-Последняя строка не косметика: прогон другим SDK оставляет в `.dart_tool` кеш
-своего движка, и следующий `flutter test` падает на
-`Asset 'shaders/ink_sparkle.frag' ... Expected 2, got 0`. Это не дефект кода.
+Это не косметика: чужой движок оставляет в `.dart_tool` свой кеш, и следующий
+`fvm flutter test` падает на
+`Asset 'shaders/ink_sparkle.frag' ... Expected 2, got 0`. Дефекта в коде при
+этом нет. По той же причине `pub get` чужим SDK перерешивает локи примеров —
+коммитить их можно только после закреплённого тулчейна.
 
 **`docs/` не публикуется.** Она исключена в `.pubignore` вместе с `AGENTS.md`,
 `CLAUDE.md` и рабочими каталогами агентов: потребителю пакета всё это не
@@ -133,9 +132,9 @@ flutter clean && flutter pub get     # обязательно после
 
 Особенности: у `example/minimal` и `example/scopo_demo` свои `pubspec`, при
 обновлении зависимостей их обновляют отдельно; корневой `pubspec.lock` в
-`.gitignore`, локи примеров закоммичены. `dart format` на 6 файлах
-`example/scopo_demo` расходится с форматтером — это известная проблема, см.
-`docs/handoff.md`.
+`.gitignore`, локи примеров закоммичены и пересозданы закреплённым тулчейном.
+`dart format` на 6 файлах `example/scopo_demo` расходится с форматтером — это
+известная проблема, см. `docs/handoff.md`.
 
 ## 7. Язык и терминология
 
