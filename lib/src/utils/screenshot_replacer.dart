@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -47,8 +48,7 @@ class _ScreenshotReplacerState extends State<ScreenshotReplacer> {
   @override
   void initState() {
     super.initState();
-    // ignore: discarded_futures
-    WidgetsBinding.instance.addPostFrameCallback((_) => _capture());
+    WidgetsBinding.instance.addPostFrameCallback((_) => unawaited(_capture()));
   }
 
   @override
@@ -102,7 +102,7 @@ class _ScreenshotReplacerState extends State<ScreenshotReplacer> {
 
     WidgetsBinding.instance
       ..scheduleFrame()
-      ..addPostFrameCallback((_) => _capture());
+      ..addPostFrameCallback((_) => unawaited(_capture()));
   }
 
   Future<void> _capture() async {

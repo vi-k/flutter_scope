@@ -1,9 +1,15 @@
+// [ScopeConfig] is a namespace for the package-wide switches and has no
+// instance members by design. The suppression is file-wide on purpose: the
+// two toolchains anchor this diagnostic at different lines — Flutter 3.29.2
+// at the dartdoc comment, 3.44.9 at the class name — so no placement of a
+// single-line `ignore` holds for both.
+// ignore_for_file: avoid_classes_with_only_static_members
+
 import 'package:logger_builder/logger_builder.dart';
 
 part 'scope_logger.dart';
 
 /// {@category debug}
-// ignore: avoid_classes_with_only_static_members
 abstract final class ScopeConfig {
   static final logger = ScopeLogger('scopo')..level = ScopeLogLevel.off;
 
