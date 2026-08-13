@@ -112,20 +112,93 @@ void main() {
       expect(scope.selfNotifications, 1);
     });
   });
+
+  group('what a dependent subscribes to', () {
+    testWidgets('a selector is the only thing that wakes a dependent up', (
+      tester,
+    ) async {
+      var builds = 0;
+
+      await tester.pumpWidget(
+        _Host(
+          builder: (context) {
+            builds++;
+            ScopeWidgetCore.select<_Scope, _ScopeElement, int>(
+              context,
+              (element) => element.value,
+            );
+
+            return const SizedBox.shrink();
+          },
+        ),
+      );
+      final scope = tester.element(find.byType(_Scope)) as _ScopeElement;
+
+      expect(builds, 1);
+
+      scope.bumpOther();
+      await tester.pump();
+      expect(
+        builds,
+        1,
+        reason: 'a change of a value nobody selected reaches nobody',
+      );
+
+      scope.bump();
+      await tester.pump();
+      expect(builds, 2, reason: 'the selected value did change');
+    });
+
+    testWidgets('listening to the scope subsumes any selector on it', (
+      tester,
+    ) async {
+      var builds = 0;
+
+      await tester.pumpWidget(
+        _Host(
+          builder: (context) {
+            builds++;
+            ScopeWidgetCore.select<_Scope, _ScopeElement, int>(
+              context,
+              (element) => element.value,
+            );
+            ScopeWidgetCore.of<_Scope, _ScopeElement>(context, listen: true);
+
+            return const SizedBox.shrink();
+          },
+        ),
+      );
+      final scope = tester.element(find.byType(_Scope)) as _ScopeElement;
+
+      expect(builds, 1);
+
+      scope.bumpOther();
+      await tester.pump();
+      expect(
+        builds,
+        2,
+        reason: 'a subscription to everything cannot be narrowed by a selector',
+      );
+    });
+  });
 }
 
 final class _Host extends StatelessWidget {
-  const _Host();
+  final WidgetBuilder? builder;
+
+  const _Host({this.builder});
 
   @override
-  Widget build(BuildContext context) => const Directionality(
+  Widget build(BuildContext context) => Directionality(
         textDirection: TextDirection.ltr,
-        child: _Scope(),
+        child: _Scope(builder: builder),
       );
 }
 
 final class _Scope extends ScopeWidgetCore<_Scope, _ScopeElement> {
-  const _Scope();
+  final WidgetBuilder? builder;
+
+  const _Scope({this.builder});
 
   @override
   _ScopeElement createScopeElement() => _ScopeElement(this);
@@ -136,10 +209,17 @@ final class _ScopeElement
   _ScopeElement(super.widget);
 
   int value = 0;
+  int other = 0;
   int selfNotifications = 0;
 
   void bump() {
     value++;
+    notifyDependents();
+  }
+
+  /// Changes a value nobody selects.
+  void bumpOther() {
+    other++;
     notifyDependents();
   }
 
@@ -158,5 +238,7 @@ final class _ScopeElement
   }
 
   @override
-  Widget buildChild() => const SizedBox.shrink();
+  Widget buildChild() => Builder(
+        builder: widget.builder ?? (_) => const SizedBox.shrink(),
+      );
 }
