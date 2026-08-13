@@ -6,8 +6,6 @@
 
 ## Код
 
-- `ScopeAutoDependenciesProgress` — добавить `name` (а `name` переименовать в
-  `path`).
 - `example` для `ScopeWidgetCore`.
 
 ## Документация

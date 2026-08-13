@@ -150,11 +150,12 @@ ScopeAutoDependenciesStream<HomeDependencies> initDependencies(
 With a `BuildContext` container, forward the `context` of `initDependencies`
 instead of `null`.
 
-Every event of that stream carries a `ScopeAutoDependenciesProgress`: `name` —
-the path of the dependency that has just been initialized — plus the step
-counter of a `ProgressIterator` (`number`, `total`, and `progress` as a fraction
-between 0 and 1). That object is what `buildOnInitializing` receives, so a
-progress bar with a caption needs nothing else:
+Every event of that stream carries a `ScopeAutoDependenciesProgress`: `path` —
+the path of the dependency that has just been initialized — `name`, the last
+segment of that path, which is the name the dependency was declared with, plus
+the step counter of a `ProgressIterator` (`number`, `total`, and `progress` as a
+fraction between 0 and 1). That object is what `buildOnInitializing` receives,
+so a progress bar with a caption needs nothing else:
 
 ```dart
 @override
@@ -166,7 +167,7 @@ Widget buildOnInitializing(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         LinearProgressIndicator(value: progress?.progress ?? 0),
-        Text(progress?.name ?? ''),
+        Text(progress?.path ?? ''),
       ],
     );
 ```
@@ -212,7 +213,7 @@ sequential('', [
 ```
 
 the paths are `dep1`, `concurrent1/dep2` and `concurrent1/sequential1/dep3`.
-The same strings appear in four places: in `ScopeAutoDependenciesProgress.name`,
+The same strings appear in four places: in `ScopeAutoDependenciesProgress.path`,
 in `ScopeDependencyInfo.path`, in the `debug` log of the initialization and of
 the disposal, and in `ScopeDependencyException.name`.
 

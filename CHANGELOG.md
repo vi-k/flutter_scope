@@ -41,6 +41,12 @@
 * [breaking changes] Unify dependency path format: no leading `/` in
   `ScopeDependencyException.name`, `ScopeDependencyInfo.path` and progress
   paths; anonymous groups add no separator.
+* [breaking changes] `ScopeAutoDependenciesProgress.name` is renamed to `path`,
+  which is what it always held. `name` stays, and is now the name the
+  dependency was declared with — the last segment of `path`.
+  * **Silent behaviour change:** `progress.name` keeps compiling and starts
+    reporting the leaf name instead of the whole path. A caption that is meant
+    to show the whole path becomes `progress.path`.
 * [breaking changes] Remove dead API: `LiteScopeInitState`/`Waiting`/
   `Progress`/`Ready`; rename `ScopeDependencyNoDisposalRequred` to
   `ScopeDependencyNoDisposalRequired`.

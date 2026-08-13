@@ -117,6 +117,29 @@ final class TestDependenciesAnonNested
   String toString() => '$TestDependenciesAnonNested';
 }
 
+/// Дерево с именованной вложенной группой: путь листа состоит из нескольких
+/// сегментов, и только на таком дереве видно разницу между полным путём и
+/// собственным именем зависимости.
+final class TestDependenciesNamedNested
+    extends ScopeAutoDependencies<TestDependenciesNamedNested, void> {
+  static const step = Duration(milliseconds: 10);
+
+  FutureOr<void> Function(DepHelper) initDep(Duration delay) => (dep) async {
+        await Future<void>.delayed(delay);
+      };
+
+  @override
+  ScopeDependency buildDependencies(_) => sequential('', [
+        dep('dep1', initDep(step)),
+        sequential('group1', [
+          dep('dep2', initDep(step)),
+        ]),
+      ]);
+
+  @override
+  String toString() => '$TestDependenciesNamedNested';
+}
+
 final class TestDependenciesConcurrentNoDispose
     extends ScopeAutoDependencies<TestDependenciesConcurrentNoDispose, void> {
   static const step = Duration(milliseconds: 10);
@@ -1409,6 +1432,47 @@ void main() {
           ['', 'depA', '', 'depB'],
         );
       });
+    });
+  });
+
+  group('ScopeAutoDependenciesProgress', () {
+    test('carries the full path and the own name of the dependency', () {
+      final dependencies = TestDependenciesNamedNested();
+      final events = <ScopeAutoDependenciesProgress>[];
+
+      myFakeAsync((async) {
+        final completer = Completer<void>();
+        final subscription = dependencies.init(null).listen(
+          (state) {
+            switch (state) {
+              case ScopeProgress(:final progress?):
+                events.add(progress);
+              case ScopeProgress():
+              case ScopeReady():
+                break;
+            }
+          },
+          onDone: completer.complete,
+        );
+        async.waitFuture(completer.future);
+        unawaited(subscription.cancel());
+      });
+
+      expect(
+        events.map((event) => event.path).toList(),
+        ['dep1', 'group1/dep2'],
+        reason: 'path is the whole path from the root of the tree',
+      );
+      expect(
+        events.map((event) => event.name).toList(),
+        ['dep1', 'dep2'],
+        reason: 'name is the own name of the dependency, not its path',
+      );
+      expect(
+        '${events.last}',
+        'group1/dep2 (2/2)',
+        reason: 'the readable form keeps naming the dependency in full',
+      );
     });
   });
 
