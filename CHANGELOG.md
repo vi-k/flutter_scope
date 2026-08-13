@@ -1,5 +1,14 @@
 ## 0.10.0
 
+* [breaking changes] Raise the Flutter floor to 3.29.0. The declared `>=3.27.0`
+  never resolved: `logger_builder` requires `meta ^1.16.0` while the
+  `flutter_test` of 3.27 pins `meta` to 1.15.0, so `pub get` failed for anyone
+  who took the constraint at its word. The suite is now run on 3.29.0 itself
+  before a release. The Dart constraint stays `^3.6.0` — the code needs nothing
+  newer, and raising it would switch `dart format` to the tall style and
+  reformat the package for no gain.
+* `meta` is no longer a dependency: nothing under `lib/` imports it. A single
+  test utility does, so it is a dev dependency now.
 * [breaking changes] An expired `waitForChildren` now drops the children it
   was awaiting, so `hasChildren` and `childrenCount` fall to zero for them.
   Children registered while the wait was already running are kept.
