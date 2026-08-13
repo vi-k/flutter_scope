@@ -7,6 +7,8 @@ import 'package:flutter/material.dart';
 /// A widget that creates a nested `Navigator`. It allows you to include bottom
 /// sheets, dialogs, and other screens in the current scope, ensuring they have
 /// access to all components located above them in the widget tree.
+///
+/// {@category utils}
 final class NavigationNode extends StatefulWidget {
   final bool isRoot;
   final Widget child;
@@ -97,6 +99,7 @@ final class NodeNavigatorState extends NavigatorState {
   }
 }
 
+/// {@category utils}
 extension PreviousNavigatorExtension on NavigatorState {
   NavigatorState? get previous {
     NavigatorState? prevNavigator;

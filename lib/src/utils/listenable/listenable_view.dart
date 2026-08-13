@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+/// {@category utils}
 base class ListenableView<T extends Listenable> implements Listenable {
   final T _listenable;
 

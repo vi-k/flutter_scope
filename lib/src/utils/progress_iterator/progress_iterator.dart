@@ -16,6 +16,8 @@
 ///   ...
 /// }
 /// ```
+///
+/// {@category utils}
 final class ProgressIterator {
   /// The total number of steps.
   final int total;
@@ -42,6 +44,7 @@ final class ProgressIterator {
   Progress nextStep() => add(1);
 }
 
+/// {@category utils}
 final class Progress {
   final int number;
   final int total;

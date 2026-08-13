@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 
+/// {@category utils}
 mixin StateAsNotifier<T extends StatefulWidget> on State<T>
     implements Listenable {
   ChangeNotifier? _notifier;

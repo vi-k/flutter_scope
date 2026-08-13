@@ -6,6 +6,8 @@ import 'package:flutter/rendering.dart';
 
 /// A widget that renders its [child] once, captures a screenshot of it,
 /// and then replaces the child with the captured image.
+///
+/// {@category utils}
 class ScreenshotReplacer extends StatefulWidget {
   /// The number of extra frames the capture waits for the [child] to be
   /// painted before giving up.

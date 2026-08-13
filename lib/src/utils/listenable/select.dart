@@ -3,6 +3,8 @@ part of 'listen.dart';
 /// A helper extension that adds a [select] method to [Listenable]. It allows
 /// listening to a specific value of the [Listenable] (selector), triggering the
 /// listener only when that value changes.
+///
+/// {@category utils}
 extension ListenableSelectExtension<L extends Listenable> on L {
   /// Listen to a specific value of the [Listenable].
   ///
@@ -56,6 +58,8 @@ extension ListenableSelectExtension<L extends Listenable> on L {
 }
 
 /// A subscription on selected value changes from a [Listenable].
+///
+/// {@category utils}
 final class ListenableSelectSubscription<T extends Object?>
     extends ListenableSubscription {
   T _value;

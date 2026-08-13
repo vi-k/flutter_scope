@@ -18,6 +18,8 @@ dartdoc:
       markdown: doc/h_scope.md
     debug:
       markdown: doc/i_debug.md
+    utils:
+      markdown: doc/j_utils.md
   categoryOrder:
     [
       base,
@@ -29,6 +31,7 @@ dartdoc:
       LiteScope,
       Scope,
       debug,
+      utils,
     ]
   # includeExternal: ["bin/unusually_located_library.dart"]
   # nodoc: ["lib/sekret/*.dart"]

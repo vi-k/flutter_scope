@@ -6,6 +6,8 @@ import 'listen.dart';
 /// A widget that rebuilds when a value selected from a `Listenable` changes.
 ///
 /// See [ListenableSelectExtension.select].
+///
+/// {@category utils}
 class ListenableSelector<L extends Listenable, T extends Object?>
     extends StatefulWidget {
   final L listenable;

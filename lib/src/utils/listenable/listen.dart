@@ -9,6 +9,8 @@ part 'select.dart';
 /// A helper extension that adds a `listen` method to `Listenable`, similar to
 /// `Stream.listen`. It returns a `ListenableSubscription` that can be easily
 /// canceled.
+///
+/// {@category utils}
 extension ListenableListenExtension on Listenable {
   /// Listen to the [Listenable].
   ///
@@ -66,6 +68,8 @@ extension ListenableListenExtension on Listenable {
 /// ...
 /// subscription.cancel();
 /// ```
+///
+/// {@category utils}
 final class ListenableSubscription {
   final Listenable _listenable;
   final void Function() _callback;
@@ -123,6 +127,8 @@ final class ListenableSubscription {
 ///
 /// composite.cancel();
 /// ```
+///
+/// {@category utils}
 final class CompositeListenableSubscription {
   final List<ListenableSubscription> _subscriptions = [];
   var _isDisposed = false;
