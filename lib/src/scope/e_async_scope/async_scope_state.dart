@@ -7,6 +7,7 @@ sealed class AsyncScopeState {
 
 /// {@category AsyncScope}
 final class AsyncScopeWaiting extends AsyncScopeState {
+  /// Creates the waiting state.
   AsyncScopeWaiting();
 
   @override
@@ -23,8 +24,10 @@ sealed class AsyncScopeInitState extends AsyncScopeState {
 
 /// {@category AsyncScope}
 final class AsyncScopeProgress extends AsyncScopeInitState {
+  /// Whatever the initialization reported — a caption, a fraction, a step.
   final Object? progress;
 
+  /// Reports that the initialization has advanced.
   AsyncScopeProgress([this.progress]);
 
   @override
@@ -34,6 +37,7 @@ final class AsyncScopeProgress extends AsyncScopeInitState {
 
 /// {@category AsyncScope}
 final class AsyncScopeReady extends AsyncScopeInitState {
+  /// Reports that the initialization is over.
   AsyncScopeReady();
 
   @override
@@ -42,10 +46,16 @@ final class AsyncScopeReady extends AsyncScopeInitState {
 
 /// {@category AsyncScope}
 final class AsyncScopeError extends AsyncScopeState {
+  /// What the initialization failed with.
   final Object error;
+
+  /// The stack trace of [error].
   final StackTrace stackTrace;
+
+  /// The last progress reported before the failure.
   final Object? progress;
 
+  /// Creates the failed state.
   AsyncScopeError(this.error, this.stackTrace, {this.progress});
 
   @override
