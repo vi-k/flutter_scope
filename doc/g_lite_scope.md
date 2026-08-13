@@ -1,2 +1,151 @@
 # LiteScope
 
+A state class with the whole scope lifecycle behind it, and no dependency
+container in front of it. `initState` and `dispose` as usual, plus an
+asynchronous `initAsync` and `disposeAsync` that the scope awaits, plus
+`notifyDependents`, `close()`, `scopeKey` and the waiting for child scopes.
+
+This is the family for per-screen state that owns things worth releasing
+properly — controllers, subscriptions, a socket. `Scope` adds a dependency
+container in front of the state; `AsyncScope` drops the state and keeps only
+the lifecycle.
+
+```dart
+final class ScreenScope extends LiteScope<ScreenScope, ScreenScopeState> {
+  const ScreenScope({super.key, super.scopeKey});
+
+  @override
+  Widget? buildOnWaiting(BuildContext context) => const SizedBox.shrink();
+
+  @override
+  ScreenScopeState createState() => ScreenScopeState();
+
+  static ScreenScopeState of(BuildContext context) =>
+      LiteScope.of<ScreenScope, ScreenScopeState>(context);
+}
+
+final class ScreenScopeState
+    extends LiteScopeState<ScreenScope, ScreenScopeState> {
+  final controller = ScrollController();
+
+  @override
+  Future<void> disposeAsync() async => controller.dispose();
+
+  @override
+  Widget build(BuildContext context) =>
+      ListView(controller: controller, children: const [Text('item')]);
+}
+```
+
+## The state
+
+`LiteScopeState` is a `State` with four additions:
+
+| member | what it is |
+| --- | --- |
+| `initAsync()` | asynchronous initialization, awaited before the state is shown as ready |
+| `disposeAsync()` | asynchronous teardown, awaited before the scope is gone |
+| `notifyDependents()` | rebuild the subscribed descendants, not the subtree |
+| `close()` | run the teardown while the scope is still on screen |
+
+and three of its own properties: `params` — the scope widget, so its
+constructor parameters are readable from the state; `isInitialized`; and
+`onInitialized()`, the hook called once the initialization has fully completed.
+
+The ordinary `initState` and `dispose` of a `State` still work and still run
+synchronously. `initAsync` is where an `await` belongs, and `disposeAsync` is
+what makes a parent scope — and `close()` — wait for the release to finish
+rather than fire and forget it.
+
+## Two initializations
+
+There are two phases, and they are not the same thing.
+
+`LiteScope.init()` on the **widget** is a pre-initialization: a stream of
+`AsyncScopeInitState`, exactly as in the `AsyncScope` topic, running *before*
+the state is created. Its default yields `AsyncScopeReady()` at once, which is
+why most scopes never override it. Override it when something has to be ready
+before `createState`, and then `buildOnInitializing` and `buildOnError` have to
+be overridden too — their default implementations throw
+`UnimplementedError`, on the reasoning that a progress branch nobody wrote is a
+mistake rather than a blank screen.
+
+`LiteScopeState.initAsync()` on the **state** is the usual one: it runs after
+the state exists, and the ready branch waits for it.
+
+`buildOnWaiting` covers the gap before either of them has produced anything —
+the frames spent waiting for a `scopeKey` and for the first event. Returning
+`null` from it is allowed only when `buildOnInitializing` is overridden, since
+something has to be on screen.
+
+`wrapState` wraps the ready branch alone, so a widget every branch needs is
+built inside each builder instead.
+
+## Access from the subtree
+
+```dart
+ScreenScope.of(context).controller;                    // the state
+LiteScope.select<ScreenScope, ScreenScopeState, int>(  // one value from it
+  context,
+  (state) => state.itemCount,
+);
+LiteScope.paramsOf<ScreenScope, ScreenScopeState>(context, listen: false);
+LiteScope.selectParam<ScreenScope, ScreenScopeState, Object?>(
+  context,
+  (widget) => widget.scopeKey,
+);
+```
+
+`of` and `maybeOf` return the state and never subscribe — they are for calling
+methods. `select` subscribes to one value derived from the state, and the
+caller is rebuilt only when that value changes **and** only when the state
+called `notifyDependents()`. Nothing else in the state is observed: a field
+mutated without that call reaches nobody, which is the same contract a
+`StatefulWidget` has with `setState`.
+
+`paramsOf` and `selectParam` do the same for the scope widget's own
+parameters. Re-exposing all of this as named statics on the scope, as `of`
+above, is the usual practice.
+
+## close()
+
+```dart
+await ScreenScope.of(context).close();
+```
+
+`close()` starts the teardown while the scope is still on screen, and completes
+when the disposal is over. The ready subtree is frozen into a screenshot,
+`buildOnClosing` is shown on top of it, and the element stays mounted until the
+end — which is the point: a scope that takes a noticeable time to release
+things shows "closing…" instead of freezing on its last frame.
+
+The screenshot is best-effort in a precise sense: it is installed only when the
+scope is actually ready and still mounted, because in any other state nothing
+would ever release the barrier and the future would hang. A subtree that is
+never painted — inside an `Offstage`, or in the unselected branch of an
+`IndexedStack` — cannot be captured either; after `ScreenshotReplacer.maxRetries`
+frames `close()` proceeds and `buildOnClosing` is drawn over the live subtree.
+
+Calling `close()` twice does not restart anything: the second call joins the
+disposal already running rather than installing a second barrier.
+
+## The teardown, and what waits for it
+
+The order is the one from the `AsyncScope` topic, with the state's own steps in
+it: the pre-initialization is cancelled, the child scopes are awaited
+(`waitForChildrenTimeout`), `disposeAsync()` of the state runs, the ordinary
+`dispose()` follows, and the `scopeKey` is released last so that the next scope
+with that key starts only when this one is finished.
+
+A `LiteScope` is an `AsyncScopeParent` like every asynchronous scope: the
+scopes below it register with it, and it waits for them before disposing of
+itself.
+
+## Where to go next
+
+| topic | what it covers |
+| --- | --- |
+| `AsyncScope` | the lifecycle in full: states, teardown order, `scopeKey`, the coordinator |
+| `Scope` | a dependency container in front of the same state |
+| `ScopeWidget` | what `notifyDependents` does to the subtree |
+| `debug` | the log of every step, and the timeout settings |
