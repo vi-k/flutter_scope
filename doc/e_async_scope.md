@@ -100,8 +100,8 @@ awaited:
    (`ScopeConfig.defaultWaitForChildrenTimeout` by default). An expiry is
    reported through `FlutterError.reportError` and the disposal proceeds.
 6. **`disposeAsync`** — the scope's own teardown, awaited when it returns a
-   future. A scope that never got past waiting has nothing to release, and the
-   step is skipped.
+   future. It runs only when the initialization succeeded: a scope that never
+   became ready — still waiting, or failed — has nothing to release.
 7. **The scope unregisters from its parent and releases its `scopeKey`**, which
    lets the next scope waiting on that key through.
 
