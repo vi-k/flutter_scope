@@ -10,7 +10,7 @@ import 'package:scopo/scopo.dart';
 /// with. Turn it on for one run without touching the code:
 ///
 /// ```sh
-/// SCOPO_LOG=debug fvm flutter test test/scope_auto_dependencies_test.dart
+/// SCOPO_LOG=debug flutter test test/scope_auto_dependencies_test.dart
 /// ```
 ///
 /// or ask for a level explicitly with `logInit(level: ScopeLogLevel.debug)`.

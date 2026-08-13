@@ -1,8 +1,8 @@
 // [ScopeConfig] is a namespace for the package-wide switches and has no
-// instance members by design. The suppression is file-wide on purpose: the
-// two toolchains anchor this diagnostic at different lines — Flutter 3.29.2
-// at the dartdoc comment, 3.44.9 at the class name — so no placement of a
-// single-line `ignore` holds for both.
+// instance members by design. The suppression is file-wide because analyzers
+// disagree on where a documented declaration starts — some anchor this
+// diagnostic at the dartdoc comment, some at the class name — and a
+// single-line `ignore` then lands on the wrong side of it.
 // ignore_for_file: avoid_classes_with_only_static_members
 
 import 'package:logger_builder/logger_builder.dart';

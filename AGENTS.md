@@ -93,16 +93,18 @@
 
 ## 6. Проверки
 
-Тулчейн через **fvm** (Flutter 3.29.2, см. `.fvmrc`).
+Тулчейн — **глобальный `flutter` с `PATH`** (сейчас 3.44.9). Пина нет: `.fvmrc`
+удалён, `fvm` не используется. Заявленный в `pubspec.yaml` пол — Flutter 3.27 /
+Dart 3.6, и локально он больше ничем не проверяется.
 
 ```sh
-fvm flutter test                     # 144 теста, должны быть зелёными
-fvm flutter analyze                  # корень
-(cd example/minimal && fvm flutter analyze)
-(cd example/scopo_demo && fvm flutter analyze)
-fvm dart format --set-exit-if-changed lib test
-fvm dart doc --dry-run               # 0 warnings, 0 errors
-fvm dart pub publish --dry-run       # 0 warnings
+flutter test                     # 144 теста, должны быть зелёными
+flutter analyze                  # корень
+(cd example/minimal && flutter analyze)
+(cd example/scopo_demo && flutter analyze)
+dart format --set-exit-if-changed lib test
+dart doc --dry-run               # 0 warnings, 0 errors
+dart pub publish --dry-run       # 0 warnings
 ```
 
 Перед мержем в `main` проходят все шесть. Утверждать «работает» без вывода
@@ -111,14 +113,14 @@ fvm dart pub publish --dry-run       # 0 warnings
 **`docs/` не публикуется.** Она исключена в `.pubignore` вместе с `AGENTS.md`,
 `CLAUDE.md` и рабочими каталогами агентов: потребителю пакета всё это не
 нужно. Не путать с `doc/` — это страницы dartdoc, они в архив входят. Добавил
-файл в корень репозитория — прогони `fvm dart pub publish --dry-run` и посмотри
+файл в корень репозитория — прогони `dart pub publish --dry-run` и посмотри
 список: всё лишнее сразу в `.pubignore`.
 
 Особенности: у `example/minimal` и `example/scopo_demo` свои `pubspec`, при
 обновлении зависимостей их обновляют отдельно; корневой `pubspec.lock` в
 `.gitignore`, локи примеров закоммичены. `dart format` на 6 файлах
-`example/scopo_demo` расходится с текущим форматтером — это известная
-проблема, см. `docs/handoff.md`.
+`example/scopo_demo` расходится с форматтером — это известная проблема, см.
+`docs/handoff.md`.
 
 ## 7. Язык и терминология
 
