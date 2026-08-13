@@ -12,8 +12,8 @@
 
 - Написать нормальную документацию.
 - Описать все примеры.
-- Заполнить оставшиеся 4 заглушки `doc/*.md`: `e_async_scope`,
-  `f_async_data_scope`, `g_lite_scope`, `j_utils` (`h_scope` и `i_debug`
-  написаны в 0.10.0; `a_base`, `b_scope_widget`, `c_scope_model` и
-  `d_scope_notifier` — в этой сессии).
+- Заполнить оставшиеся 3 заглушки `doc/*.md`: `f_async_data_scope`,
+  `g_lite_scope`, `j_utils` (`h_scope` и `i_debug` написаны в 0.10.0;
+  `a_base`, `b_scope_widget`, `c_scope_model`, `d_scope_notifier` и
+  `e_async_scope` — в этой сессии).
 - Скриншоты для pub.dev: секция `screenshots:` в `pubspec.yaml` отсутствует.
