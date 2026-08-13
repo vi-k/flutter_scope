@@ -314,6 +314,8 @@ final class _LiteScopeCoreWidget<
 }
 
 /// The core state base class for [LiteScopeCore].
+///
+/// {@category LiteScope}
 abstract base class LiteScopeCoreState<
         W extends LiteScopeCore<W, E, S>,
         E extends LiteScopeElementBase<W, E, S>,

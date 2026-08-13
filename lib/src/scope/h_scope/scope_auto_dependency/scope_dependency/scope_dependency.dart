@@ -37,6 +37,7 @@ abstract interface class ScopeDependency {
   String stateToString();
 }
 
+/// {@category Scope}
 extension ScopeDependencyExtension on ScopeDependency {
   bool get isGroup => this is ScopeDependencyGroup;
 

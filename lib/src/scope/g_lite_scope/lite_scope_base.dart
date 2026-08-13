@@ -211,6 +211,8 @@ final class _LiteScopeElement<W extends LiteScope<W, S>,
 /// The state implementation for [LiteScope].
 ///
 /// Extends [LiteScopeCoreState].
+///
+/// {@category LiteScope}
 abstract base class LiteScopeState<W extends LiteScope<W, S>,
         S extends LiteScopeState<W, S>>
     extends LiteScopeCoreState<W, _LiteScopeElement<W, S>, S> {

@@ -194,6 +194,8 @@ abstract base class ScopeElementBase<
 ///
 /// Provides convenient access to the initialized [dependencies] and supports
 /// asynchronous initialization and disposal.
+///
+/// {@category Scope}
 abstract base class ScopeCoreState<
     W extends ScopeCore<W, E, D, S>,
     E extends ScopeElementBase<W, E, D, S>,

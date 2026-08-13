@@ -1,10 +1,12 @@
 part of '../../scope.dart';
 
+/// {@category ScopeNotifier}
 abstract interface class ScopeStateModel<S extends Object>
     implements Listenable {
   S get state;
 }
 
+/// {@category ScopeNotifier}
 base class ScopeStateNotifier<S extends Object> extends ChangeNotifier
     implements ScopeStateModel<S> {
   S _state;
@@ -26,6 +28,7 @@ base class ScopeStateNotifier<S extends Object> extends ChangeNotifier
   ScopeStateModelView<S> asUnmodifiable() => ScopeStateModelView(this);
 }
 
+/// {@category ScopeNotifier}
 base class ScopeStateModelView<S extends Object> implements ScopeStateModel<S> {
   final ScopeStateNotifier<S> _notifier;
 

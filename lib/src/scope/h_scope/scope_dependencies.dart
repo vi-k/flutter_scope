@@ -13,6 +13,8 @@ abstract interface class ScopeDependencies {
 }
 
 /// Extension on [ScopeDependencies] to provide streaming capabilities.
+///
+/// {@category Scope}
 extension ScopeDependenciesExtension on ScopeDependencies {
   /// Converts the dependencies into a stream emitting a [ScopeReady] state.
   Stream<ScopeInitState<P, T>>

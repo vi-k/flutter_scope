@@ -1,5 +1,6 @@
 part of '../../../scope.dart';
 
+/// {@category Scope}
 final class ScopeDependencyException implements Exception {
   /// The path of the dependency that raised the error, without a leading
   /// slash.

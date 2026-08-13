@@ -1,5 +1,6 @@
 part of '../../scope.dart';
 
+/// {@category ScopeNotifier}
 abstract interface class ScopeStateWithErrorModel<S extends Object>
     implements ScopeStateModel<S> {
   @override
@@ -12,6 +13,7 @@ abstract interface class ScopeStateWithErrorModel<S extends Object>
   StackTrace get stackTrace;
 }
 
+/// {@category ScopeNotifier}
 base class ScopeStateWithErrorNotifier<S extends Object>
     extends ScopeStateNotifier<S> implements ScopeStateWithErrorModel<S> {
   (Object, StackTrace)? _error;
@@ -44,6 +46,7 @@ base class ScopeStateWithErrorNotifier<S extends Object>
       ScopeStateWithErrorModelView(this);
 }
 
+/// {@category ScopeNotifier}
 base class ScopeStateWithErrorModelView<S extends Object>
     extends ScopeStateModelView<S> implements ScopeStateWithErrorModel<S> {
   ScopeStateWithErrorModelView(

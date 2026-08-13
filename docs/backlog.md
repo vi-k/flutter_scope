@@ -16,7 +16,8 @@
   `c_scope_model`, `d_scope_notifier`, `e_async_scope`, `f_async_data_scope`,
   `g_lite_scope` (`h_scope` и `i_debug` написаны в 0.10.0).
 - Скриншоты для pub.dev: секция `screenshots:` в `pubspec.yaml` отсутствует.
-- В категорию Scope не попадают `ScopeState`, `ScopeDependencyException`,
-  `ScopeDependencyInfo`, `DepHelper`, `ScopeDependenciesExtension`,
-  `ScopeDependencyExtension` — у них нет `{@category Scope}`. Аналогично
-  проверить остальные 8 категорий.
+- Категории dartdoc: слои скоупов разобраны, остались 15 утилит из
+  `lib/src/utils/**` (listenable-хелперы, `NavigationNode`, `ProgressIterator`,
+  `CompareUtils`, `IsBuildingExtension`, `ScreenshotReplacer`) — они не входят
+  ни в одну из девяти категорий. Решить: заводить им свою категорию со своей
+  страницей или отнести к `base`.

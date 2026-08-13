@@ -160,6 +160,7 @@ abstract base class ScopeAutoDependencies<T extends ScopeDependencies,
       );
 }
 
+/// {@category Scope}
 final class ScopeDependencyInfo {
   final int level;
   final String path;

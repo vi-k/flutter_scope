@@ -58,6 +58,7 @@ final class _ScopeDependencyImpl with ScopeDependencyMixin {
   String stateToString() => '$state';
 }
 
+/// {@category Scope}
 final class DepHelper {
   _ScopeDependencyImpl? _dep;
 

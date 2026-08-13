@@ -231,6 +231,8 @@ final class _ScopeElement<W extends Scope<W, D, S>, D extends ScopeDependencies,
 /// The state implementation for [Scope].
 ///
 /// Extends [ScopeCoreState] to give convenient access to the [dependencies].
+///
+/// {@category Scope}
 abstract base class ScopeState<W extends Scope<W, D, S>,
         D extends ScopeDependencies, S extends ScopeState<W, D, S>>
     extends ScopeCoreState<W, _ScopeElement<W, D, S>, D, S> {
