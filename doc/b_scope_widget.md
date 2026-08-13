@@ -84,18 +84,25 @@ final class MyScopeElement
 
   @override
   void init() {
-    // Acquire whatever the scope owns.
+    // Acquire whatever the scope owns…
+    super.init();
   }
 
   @override
   void dispose() {
-    // Release it. Both are @mustCallSuper.
+    super.dispose();
+    // …and release it here.
   }
 
   @override
   Widget buildChild() => const SizedBox.shrink();
 }
 ```
+
+Both hooks are `@mustCallSuper`, and the order above is the one the package's
+own families keep: acquire before `super.init()`, release after
+`super.dispose()`. The two halves mirror each other, so whatever a layer owns
+outlives everything the layers under it set up.
 
 That is the whole contract: a widget that knows how to create its element, and
 an element that knows what to build. `ScopeWidgetBase` is exactly this, with

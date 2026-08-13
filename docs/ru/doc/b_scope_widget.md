@@ -1,6 +1,6 @@
 # ScopeWidget
 
-> Перевод `doc/b_scope_widget.md` (blob `7926394392802d29f038f09e4c1b4712184856d6`).
+> Перевод `doc/b_scope_widget.md` (blob `19a71a461ddbbbce6288fc9a5889bdf1879b138a`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 Под этим именем живут две вещи. `ScopeWidgetBase` — простейший скоуп пакета,
@@ -86,18 +86,25 @@ final class MyScopeElement
 
   @override
   void init() {
-    // Acquire whatever the scope owns.
+    // Acquire whatever the scope owns…
+    super.init();
   }
 
   @override
   void dispose() {
-    // Release it. Both are @mustCallSuper.
+    super.dispose();
+    // …and release it here.
   }
 
   @override
   Widget buildChild() => const SizedBox.shrink();
 }
 ```
+
+Оба хука помечены `@mustCallSuper`, и порядок выше — тот, которого держатся
+семейства самого пакета: захватывать до `super.init()`, освобождать после
+`super.dispose()`. Половины зеркальны, поэтому то, чем владеет слой, живёт
+дольше всего, что настроили слои под ним.
 
 Вот и весь контракт: виджет, который умеет создать свой элемент, и элемент,
 который знает, что строить. `ScopeWidgetBase` — ровно это, только `buildChild()`
