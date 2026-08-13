@@ -487,7 +487,21 @@ void main() {
 ## Documentation
 
 - [API reference](https://pub.dev/documentation/scopo/latest/)
-- [Scope topic](https://pub.dev/documentation/scopo/latest/topics/Scope-topic.html)
-- [debug topic](https://pub.dev/documentation/scopo/latest/topics/debug-topic.html)
 - [pub.dev package page](https://pub.dev/packages/scopo)
 - [changelog](https://github.com/vi-k/scopo/blob/main/CHANGELOG.md)
+
+One topic per family, each covering what the API reference cannot: the order
+things happen in, the trade-offs, and the traps.
+
+| topic | start here for |
+| --- | --- |
+| [base](https://pub.dev/documentation/scopo/latest/topics/base-topic.html) | `of`, `select`, `listen`, and how a scope is found at all |
+| [ScopeWidget](https://pub.dev/documentation/scopo/latest/topics/ScopeWidget-topic.html) | the widget/element pair every family extends |
+| [ScopeModel](https://pub.dev/documentation/scopo/latest/topics/ScopeModel-topic.html) | owning a plain object |
+| [ScopeNotifier](https://pub.dev/documentation/scopo/latest/topics/ScopeNotifier-topic.html) | owning a `Listenable` |
+| [AsyncScope](https://pub.dev/documentation/scopo/latest/topics/AsyncScope-topic.html) | the asynchronous lifecycle, `scopeKey`, the coordinator |
+| [AsyncDataScope](https://pub.dev/documentation/scopo/latest/topics/AsyncDataScope-topic.html) | the same, producing a value |
+| [LiteScope](https://pub.dev/documentation/scopo/latest/topics/LiteScope-topic.html) | a state class with that lifecycle, and `close()` |
+| [Scope](https://pub.dev/documentation/scopo/latest/topics/Scope-topic.html) | the full family: dependencies, state, four branches |
+| [debug](https://pub.dev/documentation/scopo/latest/topics/debug-topic.html) | logging, timeouts, and the test setup |
+| [utils](https://pub.dev/documentation/scopo/latest/topics/utils-topic.html) | the helpers that come with the package |
