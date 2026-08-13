@@ -4,13 +4,25 @@ part of '../scope.dart';
 abstract base class AsyncDataScopeBase<W extends AsyncDataScopeBase<W, T>,
         T extends Object?>
     extends AsyncDataScopeCore<W, _AsyncDataScopeElement<W, T>, T> {
+  /// Serializes this scope with the others that share the key.
   final Object? scopeKey;
+
+  /// How long to wait for [scopeKey]; `null` waits indefinitely.
   final Duration? scopeKeyTimeout;
+
+  /// Called when the wait for [scopeKey] expires.
   final void Function()? onScopeKeyTimeout;
+
+  /// How long to wait for the child scopes; `null` waits indefinitely.
   final Duration? waitForChildrenTimeout;
+
+  /// Called when the wait for the child scopes expires.
   final void Function()? onWaitForChildrenTimeout;
+
+  /// Holds the ready branch back for this long after the initialization.
   final Duration? pauseAfterInitialization;
 
+  /// Creates an asynchronous scope producing a value.
   const AsyncDataScopeBase({
     super.key,
     super.tag,
@@ -27,18 +39,27 @@ abstract base class AsyncDataScopeBase<W extends AsyncDataScopeBase<W, T>,
   // Overriding block
   //
 
+  /// Called when the scope is mounted, before the initialization starts.
   void onMount(BuildContext context) {}
 
+  /// The initialization, ending with the value.
   Stream<AsyncDataScopeInitState<Object, T>> initData(BuildContext context);
 
+  /// Called synchronously when the scope leaves the tree.
+  ///
+  /// The value is `null` when the initialization never finished.
   void onUnmount(T? data) {}
 
+  /// Releases the value [initData] produced; awaited.
   FutureOr<void> disposeData(T data);
 
+  /// Built while waiting for a `scopeKey` and for the first event.
   Widget? buildOnWaiting(BuildContext context) => null;
 
+  /// Built while the initialization is running.
   Widget buildOnInitializing(BuildContext context, Object? progress);
 
+  /// Built when the initialization failed.
   Widget buildOnError(
     BuildContext context,
     Object error,
@@ -46,6 +67,7 @@ abstract base class AsyncDataScopeBase<W extends AsyncDataScopeBase<W, T>,
     Object? progress,
   );
 
+  /// Built once the value is there, and receives it.
   Widget buildOnReady(BuildContext context, T data);
 
   //
@@ -58,6 +80,8 @@ abstract base class AsyncDataScopeBase<W extends AsyncDataScopeBase<W, T>,
       _AsyncDataScopeElement<W, T>(this as W);
 
   static AsyncDataScopeContext<W, T>?
+
+      /// The nearest scope [W] above [context], or `null`.
       maybeOf<W extends AsyncDataScopeBase<W, T>, T extends Object?>(
     BuildContext context, {
     required bool listen,
@@ -68,6 +92,10 @@ abstract base class AsyncDataScopeBase<W extends AsyncDataScopeBase<W, T>,
           );
 
   static AsyncDataScopeContext<W, T>
+
+      /// The nearest scope [W] above [context].
+      ///
+      /// Throws when there is none.
       of<W extends AsyncDataScopeBase<W, T>, T extends Object?>(
     BuildContext context, {
     required bool listen,
@@ -77,6 +105,7 @@ abstract base class AsyncDataScopeBase<W extends AsyncDataScopeBase<W, T>,
             listen: listen,
           );
 
+  /// Subscribes to one value of the scope and returns it.
   static V select<W extends AsyncDataScopeBase<W, T>, T extends Object?,
           V extends Object?>(
     BuildContext context,

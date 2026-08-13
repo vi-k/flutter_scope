@@ -3,22 +3,46 @@ part of '../scope.dart';
 /// {@category AsyncDataScope}
 final class AsyncDataScope<T extends Object?>
     extends AsyncDataScopeBase<AsyncDataScope<T>, T> {
+  /// Called when the scope is mounted, before the initialization starts.
   final void Function(BuildContext context)? mount;
   final Stream<AsyncDataScopeInitState<Object, T>> Function(
     BuildContext context,
+
+    /// The initialization.
+    ///
+    /// Yields [AsyncDataScopeProgress] any number of times and
+    /// [AsyncDataScopeReady] with the value once.
   ) init;
+
+  /// Called synchronously when the scope leaves the tree.
+  ///
+  /// The value is `null` when the initialization never finished.
   final void Function(T? data)? unmount;
+
+  /// Releases the value [init] produced.
+  ///
+  /// Awaited, and called only when the initialization succeeded — so the
+  /// value always exists here.
   final FutureOr<void> Function(T data) dispose;
+
+  /// Built while waiting for a `scopeKey` and for the first event.
   final Widget Function(BuildContext context)? waitingBuilder;
+
+  /// Built while the initialization is running.
   final Widget Function(BuildContext context, Object? progress) initBuilder;
   final Widget Function(
     BuildContext context,
     Object error,
     StackTrace stackTrace,
     Object? progress,
+
+    /// Built when the initialization failed.
   ) errorBuilder;
+
+  /// Built once the value is there, and receives it.
   final Widget Function(BuildContext context, T data) builder;
 
+  /// Creates an asynchronous scope producing a value.
   const AsyncDataScope({
     super.key,
     super.tag,
@@ -66,6 +90,8 @@ final class AsyncDataScope<T extends Object?>
   Widget buildOnReady(BuildContext context, T data) => builder(context, data);
 
   static AsyncDataScopeContext<AsyncDataScope<T>, T>?
+
+      /// The nearest `AsyncDataScope<T>` above [context], or `null`.
       maybeOf<T extends Object?>(
     BuildContext context, {
     required bool listen,
@@ -76,6 +102,9 @@ final class AsyncDataScope<T extends Object?>
             listen: listen,
           );
 
+  /// The nearest `AsyncDataScope<T>` above [context].
+  ///
+  /// Throws when there is none.
   static AsyncDataScopeContext<AsyncDataScope<T>, T> of<T extends Object?>(
     BuildContext context, {
     required bool listen,
@@ -86,6 +115,7 @@ final class AsyncDataScope<T extends Object?>
         listen: listen,
       );
 
+  /// Subscribes to one value of the scope and returns it.
   static V select<V extends Object?, T extends Object?>(
     BuildContext context,
     V Function(AsyncDataScopeContext<AsyncDataScope<T>, T> context) selector,

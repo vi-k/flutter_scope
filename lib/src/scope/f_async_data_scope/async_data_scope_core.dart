@@ -5,12 +5,14 @@ abstract base class AsyncDataScopeCore<
     W extends AsyncDataScopeCore<W, E, T>,
     E extends AsyncDataScopeElementBase<W, E, T>,
     T extends Object?> extends AsyncScopeCore<W, E> {
+  /// Creates the widget half of a scope producing a value.
   const AsyncDataScopeCore({
     super.key,
     super.tag,
     super.child, // Not used by default. You can use it at your own discretion.
   });
 
+  /// The element of the nearest scope [W] above [context], or `null`.
   static E? maybeOf<W extends AsyncDataScopeCore<W, E, T>,
           E extends AsyncDataScopeElementBase<W, E, T>, T extends Object?>(
     BuildContext context, {
@@ -21,6 +23,9 @@ abstract base class AsyncDataScopeCore<
         listen: listen,
       );
 
+  /// The element of the nearest scope [W] above [context].
+  ///
+  /// Throws when there is none.
   static E of<W extends AsyncDataScopeCore<W, E, T>,
           E extends AsyncDataScopeElementBase<W, E, T>, T extends Object?>(
     BuildContext context, {
@@ -31,6 +36,7 @@ abstract base class AsyncDataScopeCore<
         listen: listen,
       );
 
+  /// Subscribes to one value of the scope and returns it.
   static V select<
           W extends AsyncDataScopeCore<W, E, T>,
           E extends AsyncDataScopeElementBase<W, E, T>,
@@ -61,6 +67,7 @@ abstract base class AsyncDataScopeElementBase<
   @override
   Duration? get pauseAfterInitialization => null;
 
+  /// The initialization, ending with the value.
   Stream<AsyncDataScopeInitState<Object, T>> initDataAsync();
 
   @override
@@ -83,6 +90,7 @@ abstract base class AsyncDataScopeElementBase<
   @override
   T? get dataOrNull => _data;
 
+  /// Creates the element of a scope producing a value.
   AsyncDataScopeElementBase(super.widget);
 
   @override
