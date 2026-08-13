@@ -96,7 +96,7 @@
 Тулчейн через **fvm** (Flutter 3.29.2, см. `.fvmrc`).
 
 ```sh
-fvm flutter test                     # 92 теста, должны быть зелёными
+fvm flutter test                     # 144 теста, должны быть зелёными
 fvm flutter analyze                  # корень
 (cd example/minimal && fvm flutter analyze)
 (cd example/scopo_demo && fvm flutter analyze)
