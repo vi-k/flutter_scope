@@ -12,6 +12,7 @@ final class KeyedAccessQueues {
   /// The number of keys currently held.
   int get length => _queues.length;
 
+  /// Whether anything is queued for [key] right now.
   bool containsKey(Object key) => _queues.containsKey(key);
 
   /// Takes [entry] into the queue of [key] and completes once it has access.
@@ -43,12 +44,16 @@ final class AccessEntry {
   final _cancelCompleter = Completer<void>();
   bool _isWaiting = false;
 
+  /// Creates an entry named [_debugName] in the log and in timeout reports.
   AccessEntry(this._debugName);
 
+  /// Whether the entry has been let through.
   bool get isCompleted => _completer.isCompleted;
 
+  /// Whether the entry is queued and waiting.
   bool get isWaiting => _isWaiting;
 
+  /// Whether the entry gave up before it was let through.
   bool get isCancelled => _cancelCompleter.isCompleted;
 
   /// Releases the key.
@@ -154,10 +159,13 @@ final class _AccessQueue {
 final class ChildRegistry {
   final _children = <ChildEntry>[];
 
+  /// Whether any child is registered.
   bool get hasChildren => _children.isNotEmpty;
 
+  /// How many children are registered.
   int get childrenCount => _children.length;
 
+  /// Registers a child and returns the entry it completes when it is done.
   ChildEntry registerChild(String debugName) {
     final entry = ChildEntry._(debugName, this);
     _children.add(entry);

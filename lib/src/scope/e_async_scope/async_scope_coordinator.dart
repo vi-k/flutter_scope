@@ -14,6 +14,7 @@ part of '../scope.dart';
 /// {@category AsyncScope}
 final class AsyncScopeCoordinator extends ScopeWidgetCore<AsyncScopeCoordinator,
     _AsyncScopeCoordinatorElement> {
+  /// Creates a coordinator over [child].
   const AsyncScopeCoordinator({
     super.key,
     super.tag,

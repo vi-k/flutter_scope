@@ -8,6 +8,7 @@ abstract base class LiteScopeCore<
     W extends LiteScopeCore<W, E, S>,
     E extends LiteScopeElementBase<W, E, S>,
     S extends LiteScopeCoreState<W, E, S>> extends AsyncScopeCore<W, E> {
+  /// Creates the widget half of a lite scope.
   const LiteScopeCore({
     super.key,
     super.tag,
@@ -115,6 +116,7 @@ abstract base class LiteScopeElementBase<
   Completer<void>? _closeCompleter;
   Completer<void>? _screenshotCompleter;
 
+  /// Creates the element of a lite scope.
   LiteScopeElementBase(super.widget);
 
   //
@@ -190,6 +192,10 @@ abstract base class LiteScopeElementBase<
       };
 
   @mustCallSuper
+
+  /// Builds the ready branch, the state and its wrapper.
+  ///
+  /// From here on a notification no longer rebuilds the subtree.
   Widget buildOnReady() {
     _autoSelfDependence = false;
 
@@ -421,6 +427,8 @@ abstract base class LiteScopeCoreState<
   void onInitialized() {}
 
   @mustCallSuper
+
+  /// Rebuilds the descendants subscribed to a value that changed.
   void notifyDependents() {
     _scopeElement.notifyDependents();
   }

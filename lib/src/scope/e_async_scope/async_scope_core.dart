@@ -4,12 +4,14 @@ part of '../scope.dart';
 abstract base class AsyncScopeCore<W extends AsyncScopeCore<W, E>,
         E extends AsyncScopeElementBase<W, E>>
     extends ScopeModelCore<W, E, AsyncScopeModel> {
+  /// Creates the widget half of an asynchronous scope.
   const AsyncScopeCore({
     super.key,
     super.tag,
     super.child, // Not used by default. You can use it at your own discretion.
   });
 
+  /// The element of the nearest scope [W] above [context], or `null`.
   static E? maybeOf<W extends AsyncScopeCore<W, E>,
           E extends AsyncScopeElementBase<W, E>>(
     BuildContext context, {
@@ -18,12 +20,17 @@ abstract base class AsyncScopeCore<W extends AsyncScopeCore<W, E>,
       ScopeContext.maybeOf<W, E>(context, listen: listen);
 
   static E
+
+      /// The element of the nearest scope [W] above [context].
+      ///
+      /// Throws when there is none.
       of<W extends AsyncScopeCore<W, E>, E extends AsyncScopeElementBase<W, E>>(
     BuildContext context, {
     required bool listen,
   }) =>
           ScopeContext.of<W, E>(context, listen: listen);
 
+  /// Subscribes to one value of the scope and returns it.
   static V select<W extends AsyncScopeCore<W, E>,
           E extends AsyncScopeElementBase<W, E>, V extends Object?>(
     BuildContext context,
@@ -87,20 +94,28 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
   /// releases the old key on its way out.
   Object? get scopeKey => null;
 
+  /// Holds the ready branch back for this long; `null` shows it at once.
   Duration? get pauseAfterInitialization => null;
 
+  /// How long to wait for the `scopeKey`; `null` takes the default.
   Duration? get scopeKeyTimeout => null;
 
+  /// Called when the wait for the `scopeKey` expires.
   void onScopeKeyTimeout() {}
 
+  /// How long to wait for the child scopes; `null` takes the default.
   Duration? get waitForChildrenTimeout => null;
 
+  /// Called when the wait for the child scopes expires.
   void onWaitForChildrenTimeout() {}
 
+  /// The initialization; ready at once by default.
   Stream<AsyncScopeInitState> initAsync() => Stream.value(AsyncScopeReady());
 
+  /// Releases what [initAsync] acquired; awaited.
   FutureOr<void> disposeAsync() {}
 
+  /// Builds the branch belonging to [state].
   Widget buildOnState(AsyncScopeState state);
 
   //
@@ -221,6 +236,7 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
         AsyncScopeError(:final stackTrace) => stackTrace,
       };
 
+  /// Creates the element of an asynchronous scope.
   AsyncScopeElementBase(super.widget);
 
   @override

@@ -27,6 +27,7 @@ abstract base class LiteScope<W extends LiteScope<W, S>,
   /// An optional duration to pause after initialization is successful.
   final Duration? pauseAfterInitialization;
 
+  /// Creates a lite scope.
   const LiteScope({
     super.key,
     super.tag,

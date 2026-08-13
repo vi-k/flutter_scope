@@ -11,8 +11,10 @@ part of '../scope.dart';
 mixin AsyncScopeParent on Diagnosticable {
   final _childRegistry = ChildRegistry();
 
+  /// Whether any scope is registered with this parent.
   bool get hasChildren => _childRegistry.hasChildren;
 
+  /// How many scopes are registered with this parent.
   int get childrenCount => _childRegistry.childrenCount;
 
   /// Completes once the children registered with this parent at the time of
