@@ -2,7 +2,7 @@
 
 > **Состояние на 2026-08-12:** замечания ревью закрыты, волна смержена в `main` (9ee497d). Исторический документ, не поддерживается.
 > **Что это:** итоговый отчёт предмержевого ревью волны исправлений 2026-07-30.
-> **Связанные записи:** план — `2026-07-30[1]-audit-fixes-plan.md`, задачи — `2026-07-30[2]-audit-fixes-tasks.md`.
+> **Связанные записи:** план — `2026-07-30[1]-audit-fixes-plan.md`, задачи — `2026-07-30[2]-audit-fixes-log.md`.
 
 Branch: worktree-audit-fixes (worktree at
 /Users/user/development/my/scopo/.claude/worktrees/audit-fixes)

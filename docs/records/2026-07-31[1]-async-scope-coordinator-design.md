@@ -1,6 +1,6 @@
 # Редизайн координации AsyncScope
 
-> **Состояние на 2026-08-12:** реализовано и смержено в `main` (12b4c9f); описанный здесь API — действующий (`AsyncScopeCoordinator`, `KeyedAccessQueues`, `ChildRegistry`). Позднее уточнён исправлениями из `2026-08-01[1]-cross-review-fixes.md`, поэтому детали поведения сверяйте с кодом и `docs/architecture.md`.
+> **Состояние на 2026-08-12:** реализовано и смержено в `main` (12b4c9f); описанный здесь API — действующий (`AsyncScopeCoordinator`, `KeyedAccessQueues`, `ChildRegistry`). Позднее уточнён исправлениями из `2026-08-01[1]-cross-review-fixes-report.md`, поэтому детали поведения сверяйте с кодом и `docs/architecture.md`.
 > **Что это:** спецификация редизайна координации `AsyncScope`: отказ от глобального `asyncScopeRoot` в пользу координатора, владеющего очередями `scopeKey` своего поддерева.
 > **Связанные записи:** план реализации — `2026-07-31[2]-async-scope-coordinator-plan.md`.
 

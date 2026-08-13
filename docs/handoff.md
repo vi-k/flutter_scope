@@ -17,7 +17,7 @@
 Версия **0.10.0 подготовлена, но не опубликована** на pub.dev.
 
 Незавершённой работы нет. Последние эпизоды (подробности — в
-`docs/records/2026-08-13[1]-debt-and-coverage.md`):
+`docs/records/2026-08-13[1]-debt-and-coverage-report.md`):
 
 * **Технический долг и `TODO(nashol)`** — разобран. Попутно найден и исправлен
   реальный дефект (`d801d83`): провал отмены инициализации бросал утилизацию,
@@ -64,7 +64,7 @@
   через `asyncMap` — а именно так подписывается `_performAsyncInit`. Ветку
   ошибки в тестах поднимать `async*`-потоком, который бросает после первого
   события; `Stream.error` — только внутри `tester.runAsync`. Разбор:
-  `docs/records/2026-08-12[1]-stream-error-under-test-binding.md`.
+  `docs/records/2026-08-12[1]-stream-error-under-test-binding-report.md`.
 - В `git stash` лежит чужой давний стеш `90ccbbc update README` — не трогать.
 
 ## Пробелы в покрытии
