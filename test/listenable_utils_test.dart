@@ -120,10 +120,10 @@ void main() {
         compare: (previous, current) => previous == current,
       );
 
+      // ignore: cascade_invocations
       notifier.touch();
       expect(calls, 1, reason: 'unchanged, and that is what compare reports');
 
-      // ignore: cascade_invocations
       notifier.value = 5;
       expect(calls, 1, reason: 'changed, so this compare stays silent');
     });

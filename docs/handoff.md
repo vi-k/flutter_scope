@@ -29,7 +29,8 @@
 `f_async_data_scope` (`test/async_data_scope_test.dart`). Каждый набор проверен
 мутациями. Общий хелпер `test/utils/settle.dart` прогоняет реальное время,
 которого требует утилизация. Отдельно закрыт последний пробел по корректности:
-освобождение `scopeKey` после утилизации предыдущего владельца.
+освобождение `scopeKey` после утилизации предыдущего владельца. Затем закрыты
+и остальные пробелы: обычные пути скоупов и утилиты из `lib/src/utils`.
 
 2026-08-12 настроен регламент работы агентов: точка входа `AGENTS.md`
 (`CLAUDE.md` только импортирует её), этот файл, `docs/backlog.md`,
@@ -48,7 +49,7 @@
 
 ## Проверки
 
-Прогон 2026-08-13: `fvm flutter test` — **118 тестов, все зелёные**; `analyze`
+Прогон 2026-08-13: `fvm flutter test` — **143 теста, все зелёные**; `analyze`
 в обоих примерах чист, в корне — 2 замечания (см. ниже); `dart format` без
 изменений, `dart doc` 0/0, `pub publish --dry-run` 0 предупреждений.
 
@@ -82,27 +83,27 @@
 
 ## Пробелы в покрытии
 
-Слоёв без единого теста больше нет; освобождение `scopeKey` доказано
-(`test/async_scope_coordinator_test.dart`, «the next scope on a key is let in
-only once the previous one has finished disposing»): тест ловит и полное
-отсутствие `exit()`, и его перенос до `disposeAsync()` — мутант, который
-выживал при ревью batch3. Осталось:
+Крупных пробелов не осталось. Покрыты все слои, освобождение `scopeKey`
+(`test/async_scope_coordinator_test.dart`), обычные пути `waitingBuilder`,
+`tag` и `pauseAfterInitialization` (`test/async_scope_paths_test.dart`),
+утилиты (`test/listenable_utils_test.dart`, `test/progress_iterator_test.dart`,
+`test/navigation_node_test.dart`).
 
-- `e_async_scope` и `g_lite_scope` покрыты регрессионными сценариями 0.10.0
-  плотно, но не системно: обычные пути (`waitingBuilder`, `tag`,
-  `pauseAfterInitialization`, вложенные координаторы) не проверены;
-- `NavigationNode`, `ProgressIterator`, `ListenableSelector` и остальные
-  утилиты из `lib/src/utils` тестов не имеют.
+Что осознанно не покрыто:
+
+- `NavigationNode.onPop` и `isRoot`: перехват системного «назад» и проброс попа
+  наружу через `_HookEntry` — нужен сценарий с системной кнопкой, тестов нет;
+- `run_stream_guarded` и `throwWhenDisposed` проверяются только косвенно, через
+  дерево зависимостей и подписки;
+- `ScreenshotReplacer` покрыт со стороны `LiteScope.close()`, отдельных тестов
+  на сам виджет нет.
 
 ## Что дальше
 
 Приоритет не выбран владельцем. Кандидаты, от наиболее готового к работе:
 
-1. **Остатки покрытия** — обычные пути `e_async_scope`/`g_lite_scope`
-   (`waitingBuilder`, `tag`, `pauseAfterInitialization`, вложенные
-   координаторы) и утилиты из `lib/src/utils`.
-2. **Документация** — 7 заглушек `doc/*.md`, категории dartdoc, скриншоты для
+1. **Документация** — 7 заглушек `doc/*.md`, категории dartdoc, скриншоты для
    pub.dev (см. `docs/backlog.md`).
-3. **Публикация 0.10.0** — тесты, `dart doc` и `pub publish --dry-run` чистые;
+2. **Публикация 0.10.0** — тесты, `dart doc` и `pub publish --dry-run` чистые;
    до публикации стоит закрыть 2 замечания `analyze` и решение о выпуске — за
    владельцем.
