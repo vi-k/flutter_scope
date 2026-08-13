@@ -26,13 +26,12 @@ final class AsyncScope extends AsyncScopeBase<AsyncScope> {
 
   /// Built while the initialization is running.
   final Widget Function(BuildContext context) initBuilder;
+
+  /// Built when the initialization failed.
   final Widget Function(
     BuildContext context,
     Object error,
     StackTrace stackTrace,
-
-    /// Built when the initialization failed.
-    /// Built when the initialization failed.
   ) errorBuilder;
 
   /// Built once the scope is ready.

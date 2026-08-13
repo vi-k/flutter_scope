@@ -5,14 +5,13 @@ final class AsyncDataScope<T extends Object?>
     extends AsyncDataScopeBase<AsyncDataScope<T>, T> {
   /// Called when the scope is mounted, before the initialization starts.
   final void Function(BuildContext context)? mount;
+
+  /// The initialization, ending with the value.
   final Stream<AsyncDataScopeInitState<Object, T>> Function(
     BuildContext context,
 
     /// The initialization.
     ///
-    /// Yields [AsyncDataScopeProgress] any number of times and
-    /// [AsyncDataScopeReady] with the value once.
-    /// The initialization, ending with the value.
   ) init;
 
   /// Called synchronously when the scope leaves the tree.
@@ -31,14 +30,13 @@ final class AsyncDataScope<T extends Object?>
 
   /// Built while the initialization is running.
   final Widget Function(BuildContext context, Object? progress) initBuilder;
+
+  /// Built when the initialization failed.
   final Widget Function(
     BuildContext context,
     Object error,
     StackTrace stackTrace,
     Object? progress,
-
-    /// Built when the initialization failed.
-    /// Built when the initialization failed.
   ) errorBuilder;
 
   /// Built once the value is there, and receives it.

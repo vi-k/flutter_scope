@@ -214,7 +214,7 @@ linter:
     # prefer_spread_collections: true # [recommended]
     # prefer_typing_uninitialized_variables: true # [core]
     # provide_deprecation_message: true # [core]
-    # public_member_api_docs: true # DO document all public members.
+    public_member_api_docs: true # DO document all public members.
     # recursive_getters: true # [recommended]
     require_trailing_commas: true
     # sized_box_for_whitespace: true # [flutter]

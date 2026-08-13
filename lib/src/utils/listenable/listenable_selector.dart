@@ -18,13 +18,13 @@ class ListenableSelector<L extends Listenable, T extends Object?>
 
   /// Decides whether the selected value changed; `==` when omitted.
   final bool Function(T previous, T current)? compare;
+
+  /// Builds the subtree from the selected value.
   final Widget Function(
     BuildContext context,
     L listenable,
     T value,
     Widget? child,
-
-    /// Builds the subtree from the selected value.
   ) builder;
 
   /// Passed back to [builder] untouched, to keep a subtree out of the
