@@ -95,6 +95,7 @@ void main() {
       notifier.touch();
       expect(seen, isEmpty, reason: 'the selected value did not change');
 
+      // ignore: cascade_invocations
       notifier.value = 1;
       expect(seen, [1]);
       expect(subscription.value, 1);
@@ -122,6 +123,7 @@ void main() {
       notifier.touch();
       expect(calls, 1, reason: 'unchanged, and that is what compare reports');
 
+      // ignore: cascade_invocations
       notifier.value = 5;
       expect(calls, 1, reason: 'changed, so this compare stays silent');
     });
@@ -238,11 +240,13 @@ void main() {
       void listener() => calls++;
       state.addListener(listener);
 
+      // ignore: cascade_invocations
       state.bump();
       expect(calls, 1);
 
-      state.removeListener(listener);
-      state.bump();
+      state
+        ..removeListener(listener)
+        ..bump();
       expect(calls, 1);
 
       // The mixin disposes of the notifier it created; a listener left behind

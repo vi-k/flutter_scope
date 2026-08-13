@@ -31,8 +31,7 @@ void main() {
     });
 
     test('a step past the total is a mistake in the caller', () {
-      final iterator = ProgressIterator(1);
-      iterator.nextStep();
+      final iterator = ProgressIterator(1)..nextStep();
 
       expect(iterator.nextStep, throwsA(isA<AssertionError>()));
     });
