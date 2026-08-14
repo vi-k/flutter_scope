@@ -80,17 +80,20 @@ abstract base class ScopeWidgetElementBase<W extends ScopeWidgetCore<W, E>,
   /// Whether the element must rebuild anyway, ignoring [_shouldOnlyNotify].
   bool _forceRebuild = true;
 
-  /// Creates the element and runs its [init].
-  ScopeWidgetElementBase(W super.widget) {
-    init();
-  }
+  /// Whether [init] has completed successfully.
+  bool _didInit = false;
+
+  /// Creates the element.
+  ScopeWidgetElementBase(W super.widget);
 
   @override
   W get widget => super.widget as W;
 
   @override
   void unmount() {
-    dispose();
+    if (_didInit) {
+      dispose();
+    }
     super.unmount();
   }
 
@@ -252,7 +255,14 @@ abstract base class ScopeWidgetElementBase<W extends ScopeWidgetCore<W, E>,
 
   @nonVirtual
   @override
-  Widget build() => buildChild();
+  Widget build() {
+    if (!_didInit) {
+      init();
+      _didInit = true;
+    }
+
+    return buildChild();
+  }
 
   @override
   String toStringShort({bool showHashCode = false}) =>

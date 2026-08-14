@@ -1,5 +1,15 @@
 ## 0.10.0
 
+* Fix `ScopeModel.create(context)` running before the element was mounted: the
+  context can now read ancestor scopes with `listen: false`, while the model
+  and notifier subscriptions are still ready before the first subtree build.
+  The same mounted-before-build timing now applies to custom
+  `ScopeWidgetElementBase.init()` overrides. Synchronous initialization
+  failures stay inside Flutter's build error boundary and initialization is
+  retried on the next build. A failed initialization can also be removed
+  safely before retry: the normal element disposer now runs only after
+  initialization has completed successfully. `AsyncScope` starts its async
+  phase only after that successful synchronous initialization, and only once.
 * [breaking changes] Raise the Flutter floor to 3.29.0. The declared `>=3.27.0`
   never resolved: `logger_builder` requires `meta ^1.16.0` while the
   `flutter_test` of 3.27 pins `meta` to 1.15.0, so `pub get` failed for anyone

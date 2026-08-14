@@ -9,6 +9,154 @@ void main() {
   });
 
   group('ScopeModel', () {
+    testWidgets('retries a synchronous create failure on the next build', (
+      tester,
+    ) async {
+      final scopeKey = GlobalKey();
+      var createAttempts = 0;
+
+      Widget buildTree() => Directionality(
+            textDirection: TextDirection.ltr,
+            child: ScopeModel<_Model>(
+              key: scopeKey,
+              create: (context) {
+                createAttempts++;
+                if (createAttempts == 1) {
+                  throw StateError('controlled create failure');
+                }
+
+                return _Model('recovered');
+              },
+              dispose: (model) {},
+              builder: (context) {
+                final model = ScopeModel.of<_Model>(context, listen: false);
+
+                return Text('name: ${model.name}');
+              },
+            ),
+          );
+
+      await tester.pumpWidget(buildTree());
+
+      expect(createAttempts, 1);
+      expect(
+        tester.takeException(),
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          'controlled create failure',
+        ),
+      );
+
+      await tester.pumpWidget(buildTree());
+
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: 'the keyed scope remains a real child and can be rebuilt',
+      );
+      expect(createAttempts, 2);
+      expect(find.text('name: recovered'), findsOneWidget);
+    });
+
+    testWidgets(
+      'removes a failed initialization before reusing its key successfully',
+      (tester) async {
+        final scopeKey = GlobalKey();
+        final disposed = <_Model>[];
+        var createAttempts = 0;
+        var failCreate = true;
+
+        Widget buildTree() => Directionality(
+              textDirection: TextDirection.ltr,
+              child: ScopeModel<_Model>(
+                key: scopeKey,
+                create: (context) {
+                  createAttempts++;
+                  if (failCreate) {
+                    throw StateError('controlled create failure');
+                  }
+
+                  return _Model('recovered after removal');
+                },
+                dispose: disposed.add,
+                builder: (context) {
+                  final model = ScopeModel.of<_Model>(context, listen: false);
+
+                  return Text('name: ${model.name}');
+                },
+              ),
+            );
+
+        await tester.pumpWidget(buildTree());
+
+        expect(createAttempts, 1);
+        expect(
+          tester.takeException(),
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            'controlled create failure',
+          ),
+        );
+
+        await tester.pumpWidget(const SizedBox.shrink());
+        final removalException = tester.takeException();
+
+        failCreate = false;
+        await tester.pumpWidget(buildTree());
+        final retryException = tester.takeException();
+
+        expect(
+          removalException,
+          isNull,
+          reason: 'failed initialization has no model to dispose',
+        );
+        expect(
+          retryException,
+          isNull,
+          reason: 'unmount released the GlobalKey for a fresh scope',
+        );
+        expect(createAttempts, 2);
+        expect(find.text('name: recovered after removal'), findsOneWidget);
+        expect(disposed, isEmpty);
+
+        await tester.pumpWidget(const SizedBox.shrink());
+
+        expect(disposed, hasLength(1));
+        expect(disposed.single.name, 'recovered after removal');
+      },
+    );
+
+    testWidgets('create can read an ancestor scope before the first build', (
+      tester,
+    ) async {
+      const session = _Session('alice');
+
+      await tester.pumpWidget(
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: ScopeModel<_Session>.value(
+            value: session,
+            builder: (context) => ScopeModel<_Repository>(
+              create: (context) => _Repository(
+                ScopeModel.of<_Session>(context, listen: false),
+              ),
+              dispose: (repository) {},
+              builder: (context) {
+                final repository =
+                    ScopeModel.of<_Repository>(context, listen: false);
+
+                return Text('session: ${repository.session.name}');
+              },
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('session: alice'), findsOneWidget);
+    });
+
     testWidgets('creates the model once and provides it to the subtree', (
       tester,
     ) async {
@@ -164,6 +312,18 @@ void main() {
       expect(find.text('reader: bob'), findsOneWidget);
     });
   });
+}
+
+final class _Session {
+  final String name;
+
+  const _Session(this.name);
+}
+
+final class _Repository {
+  final _Session session;
+
+  const _Repository(this.session);
 }
 
 final class _Model {

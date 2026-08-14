@@ -173,6 +173,60 @@ void main() {
   // to `disposeAsync()` at all.
   group('AsyncScope failed initialization', () {
     testWidgets(
+      'defers asynchronous initialization until the first successful sync init',
+      (tester) async {
+        final scopeKey = GlobalKey();
+        var failSyncInit = true;
+
+        Widget buildTree() => Directionality(
+              textDirection: TextDirection.ltr,
+              child: _SyncRetryAsyncScope(
+                key: scopeKey,
+                failSyncInit: failSyncInit,
+              ),
+            );
+
+        await tester.pumpWidget(buildTree());
+
+        final element = tester.element(find.byType(_SyncRetryAsyncScope))
+            as _SyncRetryAsyncScopeElement;
+
+        expect(element.syncInitAttempts, 1);
+        expect(element.asyncInitStarts, 0);
+        expect(
+          tester.takeException(),
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            'controlled sync init failure',
+          ),
+        );
+
+        failSyncInit = false;
+        await tester.pumpWidget(buildTree());
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(element.syncInitAttempts, 2);
+        expect(
+          element.asyncInitStarts,
+          1,
+          reason: 'a successful retry starts the async phase exactly once',
+        );
+
+        await tester.pumpWidget(
+          const Directionality(
+            textDirection: TextDirection.ltr,
+            child: SizedBox.shrink(),
+          ),
+        );
+        await _settle(tester, until: () => element.disposeCount == 1);
+
+        expect(element.disposeCount, 1);
+      },
+    );
+
+    testWidgets(
       'an error raised inside the init stream reaches the model with the last '
       'progress, and the error branch is built',
       (tester) async {
@@ -900,6 +954,51 @@ final class _WaitingParentScopeElement extends AsyncScopeElementBase<
 
   @override
   Widget buildOnState(AsyncScopeState state) => widget.child;
+}
+
+/// A scope whose synchronous setup can fail before its normal base setup, then
+/// recover on the next rebuild.
+final class _SyncRetryAsyncScope
+    extends AsyncScopeCore<_SyncRetryAsyncScope, _SyncRetryAsyncScopeElement> {
+  final bool failSyncInit;
+
+  const _SyncRetryAsyncScope({super.key, required this.failSyncInit});
+
+  @override
+  _SyncRetryAsyncScopeElement createScopeElement() =>
+      _SyncRetryAsyncScopeElement(this);
+}
+
+final class _SyncRetryAsyncScopeElement extends AsyncScopeElementBase<
+    _SyncRetryAsyncScope, _SyncRetryAsyncScopeElement> {
+  int syncInitAttempts = 0;
+  int asyncInitStarts = 0;
+  int disposeCount = 0;
+
+  _SyncRetryAsyncScopeElement(super.widget);
+
+  @override
+  void init() {
+    syncInitAttempts++;
+    if (widget.failSyncInit) {
+      throw StateError('controlled sync init failure');
+    }
+    super.init();
+  }
+
+  @override
+  Stream<AsyncScopeInitState> initAsync() {
+    asyncInitStarts++;
+    return Stream.value(AsyncScopeReady());
+  }
+
+  @override
+  FutureOr<void> disposeAsync() {
+    disposeCount++;
+  }
+
+  @override
+  Widget buildOnState(AsyncScopeState state) => const SizedBox.shrink();
 }
 
 /// A scope whose initialization fails before `_subscription` exists.

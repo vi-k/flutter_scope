@@ -1,6 +1,17 @@
 # Перенос инициализации элемента после mount — план реализации
 
-> **Состояние на 2026-08-15:** план готов; реализация не начата.
+> **Состояние на 2026-08-15:** план выполнен и уточнён после финального review;
+> волна завершена в единственном amended commit, независимое финальное review
+> чистое. Guarded `init()` выполняется из
+> `build()` под error boundary `ComponentElement`; normal `dispose()` — только
+> после успешного `init()`, а `super.unmount()` освобождает `GlobalKey` до retry.
+> Третья финальная TDD-волна устранила запуск async-фазы после failed sync init:
+> она начинается в `AsyncScopeElementBase.performRebuild()` ровно один раз после
+> успеха. Постоянная async-регрессия и две мутации дали ожидаемые RED и restored
+> GREEN. Тело ниже остаётся историческим; актуальный результат определяют шапка
+> и код. Полный гейт: 151/151, три чистых analyze, форматтер 76/0, dartdoc 0/0,
+> publish dry-run 0 warnings на clean clone точного publishable будущего дерева
+> и 13 актуальных зеркал.
 > **Что это:** пошаговый TDD-план исправления P1 №1 полного ревью.
 > **Связанные записи:** `2026-08-15[1]-scope-init-after-mount-design.md`,
 > `2026-08-14[10]-project-review.md`.
@@ -54,7 +65,7 @@
   конструктора и проходят только когда элемент уже подключён к предкам до
   первой сборки.
 
-- [ ] **Шаг 1. Добавить тест документированного `ScopeModel.create(context)`**
+- [x] **Шаг 1. Добавить тест документированного `ScopeModel.create(context)`**
 
 В группу `ScopeModel` файла `test/scope_model_test.dart` добавить:
 
@@ -108,7 +119,7 @@ final class _Repository {
 Этот тест ловит возврат `widget.create!(this)` в фазу до mount: родительский
 `ScopeModel<_Session>` тогда недоступен и текст первой сборки не появляется.
 
-- [ ] **Шаг 2. Добавить тест базового lifecycle hook**
+- [x] **Шаг 2. Добавить тест базового lifecycle hook**
 
 В `test/scope_widget_test.dart` добавить отдельную группу перед
 `notifyDependents`:
@@ -194,7 +205,7 @@ final class _InitReaderScopeElement
 Этот тест защищает именно общий hook, поэтому узкий lazy-fix только в
 `ScopeModel` его не удовлетворит.
 
-- [ ] **Шаг 3. Запустить оба файла и подтвердить RED по исходной причине**
+- [x] **Шаг 3. Запустить оба файла и подтвердить RED по исходной причине**
 
 Команда:
 
@@ -223,7 +234,7 @@ rtk fvm flutter test test/scope_model_test.dart test/scope_widget_test.dart
 - Производит: неизменённую публичную сигнатуру `void init()`, вызываемую один
   раз после mount и до первого `buildChild()`.
 
-- [ ] **Шаг 1. Сделать минимальную production-правку**
+- [x] **Шаг 1. Сделать минимальную production-правку**
 
 Заменить конструктор с виртуальным вызовом:
 
@@ -252,7 +263,7 @@ if (!_didInit) {
 выполняет первую сборку. Не добавлять lazy-инициализацию в `model` и не менять
 сигнатуры hook.
 
-- [ ] **Шаг 2. Подтвердить GREEN на двух затронутых семействах**
+- [x] **Шаг 2. Подтвердить GREEN на двух затронутых семействах**
 
 ```sh
 rtk fvm flutter test test/scope_model_test.dart test/scope_widget_test.dart
@@ -262,7 +273,7 @@ rtk fvm flutter test test/scope_model_test.dart test/scope_widget_test.dart
 `creates the model once and provides it to the subtree` подтверждает, что
 `create` не повторяется при обновлении виджета.
 
-- [ ] **Шаг 3. Проверить старшие семейства**
+- [x] **Шаг 3. Проверить старшие семейства**
 
 ```sh
 rtk fvm flutter test test/scope_notifier_test.dart test/async_scope_test.dart test/async_data_scope_test.dart
@@ -272,7 +283,7 @@ rtk fvm flutter test test/scope_notifier_test.dart test/async_scope_test.dart te
 `AsyncScopeElementBase.mount()` запускает `_performAsyncInit()` после возврата
 `super.mount()`, когда синхронный `init()` уже завершён.
 
-- [ ] **Шаг 4. Выполнить mutation-check**
+- [x] **Шаг 4. Выполнить mutation-check**
 
 Временно вернуть `init();` в тело конструктора и удалить его guarded-вызов из
 `performRebuild`, не трогая тесты. Повторить:
@@ -305,7 +316,7 @@ rtk fvm flutter test test/scope_model_test.dart test/scope_widget_test.dart
 - Производит: единый английский и русский контракт — после mount, до первой
   сборки, поиск предков только без подписки.
 
-- [ ] **Шаг 1. Обновить dartdoc базового hook и конструктора элемента**
+- [x] **Шаг 1. Обновить dartdoc базового hook и конструктора элемента**
 
 Для `ScopeInheritedElement.init()` использовать смысл:
 
@@ -321,7 +332,7 @@ void init();
 Для конструктора `ScopeWidgetElementBase` оставить формулировку `Creates the
 element`; возле `_didInit` и guarded-вызова сохранить комментарии из задачи 2.
 
-- [ ] **Шаг 2. Добавить строку текущей версии в CHANGELOG**
+- [x] **Шаг 2. Добавить строку текущей версии в CHANGELOG**
 
 В `## 0.10.0` добавить английский пункт:
 
@@ -333,7 +344,7 @@ element`; возле `_didInit` и guarded-вызова сохранить ко�
   `ScopeWidgetElementBase.init()` overrides.
 ```
 
-- [ ] **Шаг 3. Синхронно поправить три тематические страницы**
+- [x] **Шаг 3. Синхронно поправить три тематические страницы**
 
 В `doc/a_base.md` заменить «when the element is created» на точный порядок
 «once after mount and before the first `buildChild`» и добавить, что предков
@@ -350,7 +361,7 @@ element`; возле `_didInit` и guarded-вызова сохранить ко�
 В `docs/ru/doc/a_base.md`, `b_scope_widget.md`, `c_scope_model.md` внести те же
 смысловые изменения по-русски, не ограничиваясь заменой stamp-хеша.
 
-- [ ] **Шаг 4. Обновить stamp-хеши и проверить зеркала**
+- [x] **Шаг 4. Обновить stamp-хеши и проверить зеркала**
 
 ```sh
 rtk sh docs/ru/stamp.sh
@@ -375,7 +386,7 @@ rtk sh docs/ru/check.sh
 - Производит: один проверенный коммит P1 №1 и handoff, указывающий на P1 №2 как
   следующую волну.
 
-- [ ] **Шаг 1. Обновить исторические шапки и handoff**
+- [x] **Шаг 1. Обновить исторические шапки и handoff**
 
 В design-документе отметить: «реализовано и проверено в коммите этой волны» —
 без заранее неизвестного хеша. В этом плане отметить выполненные checkbox и
@@ -387,7 +398,7 @@ mutation-check и полного гейта и назвать P1 №2 (`Navigati
 back) следующей волной. Публикация остаётся заблокированной до закрытия всех
 18 исходных находок и финального ревью.
 
-- [ ] **Шаг 2. Запустить полный обязательный гейт**
+- [x] **Шаг 2. Запустить полный обязательный гейт**
 
 Последовательно выполнить:
 
@@ -408,7 +419,7 @@ rtk sh docs/ru/check.sh
 разбиения/объединения новых сценариев, записать реальное число в handoff и
 план; любой failed тест блокирует коммит.
 
-- [ ] **Шаг 3. Проверить точный diff и индекс**
+- [x] **Шаг 3. Проверить точный diff и индекс**
 
 ```sh
 rtk git diff --check
@@ -421,7 +432,7 @@ rtk git diff --stat
 `docs/backlog.md` остаётся unstaged пользовательской правкой. Добавить в индекс
 только перечисленные файлы поимённо и выполнить `git diff --cached --check`.
 
-- [ ] **Шаг 4. Создать один коммит исправления**
+- [x] **Шаг 4. Создать один коммит исправления**
 
 ```sh
 rtk git commit -m "fix: initialize scope elements after mount"

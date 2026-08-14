@@ -35,11 +35,15 @@ build; the element already owns the exact model it created, so it hands that
 instance to the callback directly instead of asking teardown code to look it
 up through the tree.
 
-`create` runs once, when the element is created; `dispose` runs once, when it is
-unmounted. The `context` handed to `create` is the scope's own element, so an
-ancestor scope can be read from it — `ScopeModel.of<Session>(context, listen:
-false)` — but with `listen: false` only: `create` runs outside a build, and a
-subscription taken there would have nothing to rebuild.
+`create` runs after the element is mounted, before its first subtree build. If
+it throws, the next build retries it; after the first successful return it does
+not run again. `dispose` runs once when that successfully-created model's
+element is unmounted; a failed `create` attempt has no model to hand to
+`dispose`. The `context` handed to `create` is the scope's own element, so an
+ancestor scope can be read from it —
+`ScopeModel.of<Session>(context, listen: false)` — but with `listen: false`
+only: `create` runs outside a build, and a subscription taken there would have
+nothing to rebuild.
 
 `ScopeModel.value` takes a model somebody else owns:
 
@@ -119,8 +123,10 @@ change only when the tree above them changes.
 
 ## Lifetime
 
-`create` is called from `init()` of the element, before the first `build` of the
-subtree, so the model is ready for anything below it.
+`create` is called from `init()` once the element is mounted and before its
+first subtree build, so a successfully-created model is ready for anything
+below it. A thrown `create` is retried on the next build; after success it is
+not called again.
 
 `dispose` is called from `dispose()` of the element, after the base class has
 run its own teardown. It is called only for a model the scope created — a

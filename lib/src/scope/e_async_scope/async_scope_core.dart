@@ -238,11 +238,8 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
   /// Creates the element of an asynchronous scope.
   AsyncScopeElementBase(super.widget);
 
-  @override
-  void mount(Element? parent, Object? newSlot) {
-    super.mount(parent, newSlot);
-    _performAsyncInit(); // ignore: discarded_futures
-  }
+  /// Whether the asynchronous initialization has started.
+  bool _didStartAsyncInit = false;
 
   @override
   void dispose() {
@@ -288,6 +285,15 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
     // own state.
     assert(_debugCheckScopeKeyOwnership());
     super.performRebuild();
+
+    // `super.performRebuild()` invokes the common sync [init] inside
+    // Flutter's build error boundary. A thrown init leaves `_didInit` false,
+    // so do not start work that the failed scope would then be unable to
+    // dispose. A later successful rebuild starts the async phase once.
+    if (_didInit && !_didStartAsyncInit) {
+      _didStartAsyncInit = true;
+      _performAsyncInit(); // ignore: discarded_futures
+    }
   }
 
   /// Fails when [scopeKey] no longer gives the answer the initialization read,

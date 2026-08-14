@@ -3,6 +3,24 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:scopo/scopo.dart';
 
 void main() {
+  group('lifecycle', () {
+    testWidgets('init sees ancestors and finishes before the first build', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        const Directionality(
+          textDirection: TextDirection.ltr,
+          child: _AncestorScope(
+            value: 'ready',
+            child: _InitReaderScope(),
+          ),
+        ),
+      );
+
+      expect(find.text('init: ready; completed: true'), findsOneWidget);
+    });
+  });
+
   group('notifyDependents', () {
     setUp(() {
       _ValueText.buildCount = 0;
@@ -100,6 +118,60 @@ void main() {
       },
     );
   });
+}
+
+final class _AncestorScope
+    extends ScopeWidgetCore<_AncestorScope, _AncestorScopeElement> {
+  final String value;
+  @override
+  // ignore: overridden_fields
+  final Widget child;
+
+  const _AncestorScope({required this.value, required this.child});
+
+  static String valueOf(BuildContext context) =>
+      ScopeWidgetCore.of<_AncestorScope, _AncestorScopeElement>(
+        context,
+        listen: false,
+      ).widget.value;
+
+  @override
+  _AncestorScopeElement createScopeElement() => _AncestorScopeElement(this);
+}
+
+final class _AncestorScopeElement
+    extends ScopeWidgetElementBase<_AncestorScope, _AncestorScopeElement> {
+  _AncestorScopeElement(super.widget);
+
+  @override
+  Widget buildChild() => widget.child;
+}
+
+final class _InitReaderScope
+    extends ScopeWidgetCore<_InitReaderScope, _InitReaderScopeElement> {
+  const _InitReaderScope();
+
+  @override
+  _InitReaderScopeElement createScopeElement() => _InitReaderScopeElement(this);
+}
+
+final class _InitReaderScopeElement
+    extends ScopeWidgetElementBase<_InitReaderScope, _InitReaderScopeElement> {
+  _InitReaderScopeElement(super.widget);
+
+  String? _ancestorValue;
+  bool _initCompleted = false;
+
+  @override
+  void init() {
+    _ancestorValue = _AncestorScope.valueOf(this);
+    _initCompleted = true;
+    super.init();
+  }
+
+  @override
+  Widget buildChild() =>
+      Text('init: $_ancestorValue; completed: $_initCompleted');
 }
 
 /// The tree under test: a scope whose parameter can be changed from above.

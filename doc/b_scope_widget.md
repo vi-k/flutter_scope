@@ -104,6 +104,10 @@ own families keep: acquire before `super.init()`, release after
 `super.dispose()`. The two halves mirror each other, so whatever a layer owns
 outlives everything the layers under it set up.
 
+`init()` runs after the element is connected to its ancestors and before its
+first `buildChild`. Resources acquired there, including a notifier listener,
+are therefore ready for the first subtree build.
+
 That is the whole contract: a widget that knows how to create its element, and
 an element that knows what to build. `ScopeWidgetBase` is exactly this, with
 `buildChild()` delegating to the `build` of the widget. Everything else the

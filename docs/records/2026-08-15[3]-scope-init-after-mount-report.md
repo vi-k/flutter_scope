@@ -1,0 +1,52 @@
+# Финальный async lifecycle-fix для инициализации скоупа
+
+> **Состояние на 2026-08-15:** реализовано и полностью проверено в единственном
+> amended commit; независимое финальное review чистое.
+> **Что это:** отчёт о третьей TDD-волне P1 №1, закрывающей запуск async-фазы
+> после неуспешного sync `init()`.
+> **Связанные записи:** `2026-08-15[1]-scope-init-after-mount-design.md`,
+> `2026-08-15[2]-scope-init-after-mount-plan.md`,
+> `2026-08-14[10]-project-review.md`.
+
+## Причина
+
+После переноса общего `init()` в `ScopeWidgetElementBase.build()` синхронная
+ошибка корректно ловится boundary `ComponentElement.performRebuild()`. Но
+`AsyncScopeElementBase.mount()` продолжал безусловно вызывать
+`_performAsyncInit()` после возвращения `super.mount()`. Поэтому скоуп, чей
+sync `init()` бросил до `super.init()`, всё равно читал `scopeKey`, ставил
+post-frame регистрацию у родителя и запускал `initAsync()`. При последующем
+удалении общий failed-init guard пропускал normal `dispose()`, и эти async
+ресурсы не попадали в normal cleanup.
+
+Это регресс текущей P1 №1, а не исходный P1 №3: sync hook мог не приобрести
+ничего, а async-ресурсы ошибочно появлялись уже после его провала.
+
+## TDD
+
+Новый widget-тест использует реальный минимальный `AsyncScopeElementBase`.
+Первая sync-инициализация намеренно бросает до `super.init()`: RED на исходном
+коде показал `asyncInitStarts == 1` вместо ожидаемого нуля. После rebuild с
+успешным sync hook тест требует ровно один async-старт и normal `disposeAsync()`
+при removal.
+
+Минимальная реализация убрала async-старт из `mount()`. После
+`super.performRebuild()` она проверяет успешный общий `_didInit` и отдельный
+`_didStartAsyncInit`, затем запускает `_performAsyncInit()` один раз. Мутации
+подтвердили нагрузку обеих ветвей: без `_didInit` снова получается исходный RED;
+без once-проверки повторный rebuild запускает async-инициализацию повторно и
+нарушает её state-assert. Восстановленный тест зелёный.
+
+## Контракт и проверки
+
+Публичные dartdoc, страницы base/ScopeModel, русские зеркала и CHANGELOG теперь
+явно говорят: `init()`/`create()` повторяется до первого успешного возврата,
+после этого больше не вызывается, а normal disposer вызывается только после
+успешной инициализации.
+
+Полный гейт Flutter 3.29.0: 151/151 тестов; root и оба example analyze без
+замечаний; форматтер 76/0; dartdoc 0 warnings/0 errors; 13 актуальных зеркал.
+Live `pub publish --dry-run` имеет единственное ожидаемое dirty-tree warning.
+На чистом temporary clone с точным publishable будущим деревом — 0 warnings.
+
+Исходный P1 №3 о частично созданных ресурсах не менялся.

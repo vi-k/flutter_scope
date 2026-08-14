@@ -59,11 +59,17 @@ abstract interface class ScopeInheritedElement<W extends ScopeInheritedWidget>
 }
 ```
 
-`init()` runs when the element is created, `dispose()` when it is unmounted,
-and both are `@mustCallSuper`: a family that overrides them extends the
-lifecycle rather than replacing it. Everything a scope owns — a model, a
-notifier subscription, a dependency container, a place in the queue of a
-`scopeKey` — is acquired in the first and released in the second.
+`init()` runs after the element is mounted and before its first `buildChild`.
+If it throws, the next build retries it; after its first successful return, it
+does not run again. `dispose()` runs when an element that initialized
+successfully is unmounted. A failed `init()` attempt does not call that normal
+cleanup hook. Both are `@mustCallSuper`: a family that overrides them extends
+the lifecycle rather than replacing it. The mounted element is connected to its
+ancestors, so an `init()` hook may look one up with `listen: false`; subscribing
+from the hook is not supported. Everything a scope owns after successful
+initialization — a model, a notifier subscription, a dependency container, a
+place in the queue of a `scopeKey` — is acquired in the first and released in
+the second.
 
 The element is also the `ScopeContext` of its own scope: what a descendant
 receives from `of` is this object, which is why `select` can read the current

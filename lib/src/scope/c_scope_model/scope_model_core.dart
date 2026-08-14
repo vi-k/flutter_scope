@@ -69,6 +69,8 @@ abstract base class ScopeModelElementBase<
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(MessageProperty('model', '$model'));
+    if (_didInit) {
+      properties.add(MessageProperty('model', '$model'));
+    }
   }
 }

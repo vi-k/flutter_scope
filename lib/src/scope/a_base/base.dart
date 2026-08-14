@@ -107,13 +107,21 @@ abstract interface class ScopeInheritedElement<W extends ScopeInheritedWidget>
   @override
   W get widget;
 
-  /// Called once, when the element is created.
+  /// Called after the element is mounted and before its first [buildChild].
+  ///
+  /// If it throws, the next build retries it. After its first successful
+  /// return, it is not called again.
+  ///
+  /// The element is already connected to its ancestors, so implementations may
+  /// look a scope up from this context with `listen: false`.
   ///
   /// Everything the scope owns is acquired here and released in [dispose].
   @mustCallSuper
   void init();
 
-  /// Called once, when the element is unmounted.
+  /// Called when an element that initialized successfully is unmounted.
+  ///
+  /// A failed [init] attempt does not call this normal cleanup hook.
   @mustCallSuper
   void dispose();
 
