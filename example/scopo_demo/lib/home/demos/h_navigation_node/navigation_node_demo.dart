@@ -73,7 +73,8 @@ class _Usecases extends StatelessWidget {
   const _Usecases();
 
   Future<void> _openDialog(BuildContext context) => showAdaptiveDialog<void>(
-        // Keep the dialog inside the nearest navigation node and scope subtree.
+        // Use the nearest navigator; only a local NavigationNode keeps the
+        // dialog under the local counter scope.
         useRootNavigator: false,
         context: context,
         barrierDismissible: true,

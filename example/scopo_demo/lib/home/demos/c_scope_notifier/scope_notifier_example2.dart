@@ -89,7 +89,7 @@ final class CounterScope
   CounterScopeElement createScopeElement() => CounterScopeElement(this);
 }
 
-/// Owns the notifier and detaches scope dependents before disposing it.
+/// Owns the notifier and unsubscribes the scope from it before disposing it.
 final class CounterScopeElement extends ScopeNotifierElementBase<CounterScope,
     CounterScopeElement, CounterModel> {
   final _CounterModelImpl _model = _CounterModelImpl();
@@ -101,7 +101,7 @@ final class CounterScopeElement extends ScopeNotifierElementBase<CounterScope,
 
   @override
   void dispose() {
-    // Detach scope dependents before disposing the notifier they reference.
+    // Unsubscribe the scope from the notifier before disposing it.
     super.dispose();
     _model.dispose();
   }
