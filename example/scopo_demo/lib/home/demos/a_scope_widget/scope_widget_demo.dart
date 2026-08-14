@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'scope_widget_core_example.dart';
 import 'scope_widget_example.dart';
 
 class ScopeWidgetDemo extends StatelessWidget {
@@ -7,6 +8,12 @@ class ScopeWidgetDemo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const ScopeWidgetExample();
+    return const Column(
+      children: [
+        Expanded(child: ScopeWidgetExample()),
+        Divider(),
+        Expanded(child: ScopeWidgetCoreExample()),
+      ],
+    );
   }
 }

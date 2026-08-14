@@ -14,7 +14,7 @@ Nine tabs, one per family plus two scenarios that need a screen of their own:
 
 | tab | what it demonstrates |
 | --- | --- |
-| ScopeWidget | a scope over the widget's own parameters, and per-parameter subscriptions |
+| ScopeWidget | widget parameters through `ScopeWidgetBase`, plus element-owned mutable state and selective rebuilds through `ScopeWidgetCore` |
 | ScopeModel | owning a plain object: `create`/`dispose`, `.value`, a named scope |
 | ScopeNotifier | the same for a `Listenable`, with selectors filtering the rebuilds |
 | AsyncScope | asynchronous initialization and disposal without a container |

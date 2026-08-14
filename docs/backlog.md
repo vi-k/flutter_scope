@@ -6,7 +6,6 @@
 
 ## Код
 
-- `example` для `ScopeWidgetCore`.
 - Задокументировать examples в коде.
 
 ## Документация
