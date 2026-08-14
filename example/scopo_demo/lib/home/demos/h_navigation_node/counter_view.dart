@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../../../common/presentation/blinking_box.dart';
 import 'counter_scope.dart';
 
+/// Reads and updates the nearest tagged counter from both the original
+/// subtree and routes pushed by the local navigator.
 class CounterView extends StatelessWidget {
   const CounterView({super.key});
 

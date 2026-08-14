@@ -5,6 +5,8 @@ import 'package:scopo/scopo.dart';
 
 import '../../../utils/console/console.dart';
 
+/// Initializes four dependencies sequentially and gives each one a delayed
+/// disposer so closing remains visible.
 final class ScreenDependencies
     extends ScopeAutoDependencies<ScreenDependencies, BuildContext> {
   ScreenDependencies();
@@ -46,6 +48,8 @@ final class ScreenDependencies
       ]);
 }
 
+/// A full screen scope whose navigation pop awaits `close()` and whose
+/// closing branch overlays a frozen image of the removed ready subtree.
 final class ScreenScope
     extends Scope<ScreenScope, ScreenDependencies, ScreenState> {
   const ScreenScope({
@@ -110,6 +114,7 @@ final class ScreenScope
       NavigationNode(
         onPop: (context, result) async {
           console.log(ScreenScope, 'close');
+          // Keep the route mounted until dependencies and state finish disposing.
           await ScreenScope.of(context).close();
           console.log(ScreenScope, 'closed');
           return true;
@@ -158,6 +163,8 @@ final class ScreenScope
   }
 }
 
+/// Builds moving ready-state content so the frozen closing image is easy to
+/// distinguish from the removed live widgets.
 final class ScreenState
     extends ScopeState<ScreenScope, ScreenDependencies, ScreenState> {
   @override

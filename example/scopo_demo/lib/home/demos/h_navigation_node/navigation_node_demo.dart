@@ -5,6 +5,8 @@ import 'child_screen.dart';
 import 'counter_scope.dart';
 import 'counter_view.dart';
 
+/// Places identical route use cases beside each other with and without a
+/// local `NavigationNode` under the counter scope.
 class NavigationNodeDemo extends StatelessWidget {
   const NavigationNodeDemo({super.key});
 
@@ -71,6 +73,7 @@ class _Usecases extends StatelessWidget {
   const _Usecases();
 
   Future<void> _openDialog(BuildContext context) => showAdaptiveDialog<void>(
+        // Keep the dialog inside the nearest navigation node and scope subtree.
         useRootNavigator: false,
         context: context,
         barrierDismissible: true,

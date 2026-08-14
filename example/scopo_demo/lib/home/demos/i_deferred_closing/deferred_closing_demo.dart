@@ -4,6 +4,8 @@ import 'package:scopo_demo/utils/console/console_view.dart';
 import '../../../utils/console/console.dart';
 import 'screen_scope.dart';
 
+/// Opens a scope-backed screen whose route waits for asynchronous disposal.
+/// The console shows the close request and completion around that wait.
 class DeferredClosingDemo extends StatelessWidget {
   const DeferredClosingDemo({super.key});
 

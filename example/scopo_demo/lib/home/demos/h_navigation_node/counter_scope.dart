@@ -11,6 +11,8 @@ final class CounterModel with ChangeNotifier {
   }
 }
 
+/// Supplies a tagged local counter so routes can reveal which inherited
+/// scope remains visible from their navigator.
 final class CounterScope extends ScopeNotifierBase<CounterScope, CounterModel> {
   final String title;
 

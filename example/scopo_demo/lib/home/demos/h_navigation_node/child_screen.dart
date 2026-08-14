@@ -5,6 +5,8 @@ import 'package:scopo/scopo.dart';
 
 import 'counter_view.dart';
 
+/// A lifecycle-aware route used to show whether a pushed screen can still
+/// reach the counter scope beneath the selected navigator.
 final class ChildScreen extends LiteScope<ChildScreen, ChildScreenState> {
   final bool withNode;
 
@@ -27,6 +29,8 @@ final class ChildScreen extends LiteScope<ChildScreen, ChildScreenState> {
   }
 }
 
+/// Delays disposal so `NavigationNode.onPop` visibly waits for `close()`
+/// before allowing the route to pop.
 final class ChildScreenState
     extends LiteScopeState<ChildScreen, ChildScreenState> {
   @override
@@ -59,6 +63,7 @@ final class ChildScreenState
     return params.withNode
         ? NavigationNode(
             onPop: (context, result) async {
+              // Finish the scope lifecycle before the local navigator removes the route.
               await ChildScreen.of(context).close();
               return true;
             },
