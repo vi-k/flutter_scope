@@ -40,7 +40,7 @@ pub.dev. Рабочее дерево чистое.
 release-сборка остаётся universal (`arm64` + `x86_64`) во всех исполняемых
 бинарниках. Исправление уже есть в Flutter начиная с 3.35.0; на заявленном
 полу 3.29.0 warning ожидаем и не маскируем. Разбор — в
-`docs/records/2026-08-14[8]-xcode-destination-warning-report.md`.
+`docs/records/2026-08-14[8]-xcode-destination-warning-report.md` (`b9b0694`).
 
 Во вкладке `ScopeWidget` теперь рядом показаны `ScopeWidgetBase` и
 `ScopeWidgetCore`: второй пример хранит счётчик в собственном элементе,
