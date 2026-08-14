@@ -34,7 +34,7 @@
 `flutter run`. Это ограничение Flutter CLI, а не scopo; код не менялся.
 Подтверждение и рабочий обход через `flutter build macos --release` с прямым
 запуском `.app` — в
-`docs/records/2026-08-14[7]-release-run-hang-report.md`.
+`docs/records/2026-08-14[7]-release-run-hang-report.md` (`84ea052`).
 
 Во вкладке `ScopeWidget` теперь рядом показаны `ScopeWidgetBase` и
 `ScopeWidgetCore`: второй пример хранит счётчик в собственном элементе,
