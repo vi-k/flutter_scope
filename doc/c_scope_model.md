@@ -27,6 +27,14 @@ ScopeModel<Cart>(
 );
 ```
 
+`builder` deliberately receives only a context. That context belongs to the
+scope's element, so the model is already available through `ScopeModel.of`
+and `ScopeModel.select`, with the same lookup and subscription rules that
+descendants use. `dispose` runs at the other end of the lifecycle, outside a
+build; the element already owns the exact model it created, so it hands that
+instance to the callback directly instead of asking teardown code to look it
+up through the tree.
+
 `create` runs once, when the element is created; `dispose` runs once, when it is
 unmounted. The `context` handed to `create` is the scope's own element, so an
 ancestor scope can be read from it — `ScopeModel.of<Session>(context, listen:
