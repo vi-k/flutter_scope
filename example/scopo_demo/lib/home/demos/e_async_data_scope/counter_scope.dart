@@ -6,6 +6,8 @@ import 'package:scopo/scopo.dart';
 import '../../../common/presentation/blinking_box.dart';
 import '../../../utils/console/console.dart';
 
+/// Produces progress events followed by the notifier consumed as scope data.
+/// Cancellation before readiness is visible in the demo console.
 final class CounterModel with ChangeNotifier {
   static const int steps = 10;
 
@@ -52,6 +54,7 @@ final class CounterModel with ChangeNotifier {
       console.log(debugSource, '$debugName: initialized');
     } finally {
       if (!isInitialized) {
+        // An interrupted initialization never yielded a ready model to dispose.
         console.log(debugSource, '$debugName: cancelled');
       }
     }
@@ -70,6 +73,8 @@ final class CounterModel with ChangeNotifier {
   }
 }
 
+/// An `AsyncDataScopeBase` that turns the initialization stream into a
+/// ready `CounterModel` and owns its later disposal.
 final class CounterScope
     extends AsyncDataScopeBase<CounterScope, CounterModel> {
   final String? title;

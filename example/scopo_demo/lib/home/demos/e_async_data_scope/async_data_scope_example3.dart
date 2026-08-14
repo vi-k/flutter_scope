@@ -4,6 +4,8 @@ import 'counter_scope.dart';
 
 int _num = 0;
 
+/// Demonstrates a keyed parent waiting for its child scope during disposal.
+/// The console shows child-first teardown before the next parent starts.
 class AsyncDataScopeExample3 extends StatefulWidget {
   const AsyncDataScopeExample3({super.key});
 

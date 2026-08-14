@@ -6,6 +6,8 @@ import 'package:scopo/scopo.dart';
 import '../../../common/presentation/blinking_box.dart';
 import '../../../utils/console/console.dart';
 
+/// A notifier initialized and disposed explicitly by `CounterScopeElement`.
+/// Its nullable count makes accidental reads before readiness fail loudly.
 final class CounterModel with ChangeNotifier {
   final Object debugSource;
   final String debugName;
@@ -37,6 +39,8 @@ final class CounterModel with ChangeNotifier {
   }
 }
 
+/// An `AsyncScopeCore` whose custom element owns the asynchronous model.
+/// The widget carries configuration while the element implements lifecycle.
 final class CounterScope
     extends AsyncScopeCore<CounterScope, CounterScopeElement> {
   final Object? scopeKey;
@@ -70,12 +74,15 @@ final class CounterScope
       );
 }
 
+/// Maps model initialization and disposal onto the `AsyncScope` state
+/// machine and publishes the ready model to descendants.
 final class CounterScopeElement
     extends AsyncScopeElementBase<CounterScope, CounterScopeElement> {
   late final CounterModel _model;
 
   CounterScopeElement(super.widget);
 
+  // The coordinator serializes instances only when the widget supplies a key.
   @override
   Object? get scopeKey => widget.scopeKey;
 
