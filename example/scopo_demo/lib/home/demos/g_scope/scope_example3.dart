@@ -4,6 +4,9 @@ import 'counter_scope.dart';
 
 int _num = 0;
 
+/// Demonstrates a keyed parent waiting for its child scope during disposal.
+/// The console shows child-first teardown before the next parent starts.
+/// The child is mounted only after the parent state reports initialization.
 class ScopeExample3 extends StatefulWidget {
   const ScopeExample3({super.key});
 

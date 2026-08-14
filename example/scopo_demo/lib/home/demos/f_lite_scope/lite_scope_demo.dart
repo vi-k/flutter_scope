@@ -5,6 +5,11 @@ import 'lite_scope_example1.dart';
 import 'lite_scope_example2.dart';
 import 'lite_scope_example3.dart';
 
+/// Rebuilds three asynchronous scope variants together so the console makes
+/// their initialization and disposal ordering visible.
+///
+/// The variants compare no `scopeKey`, a shared `scopeKey`, and a keyed
+/// parent with a child scope.
 class LiteScopeDemo extends StatefulWidget {
   const LiteScopeDemo({super.key});
 

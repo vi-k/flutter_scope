@@ -6,6 +6,7 @@ import 'package:scopo/scopo.dart';
 import '../../../common/presentation/blinking_box.dart';
 import '../../../utils/console/console.dart';
 
+/// The notifier created and released by `CounterDependencies`.
 final class CounterController with ChangeNotifier {
   final Object debugSource;
   final String debugName;
@@ -37,6 +38,8 @@ final class CounterController with ChangeNotifier {
   }
 }
 
+/// Builds the scope dependency tree and records each disposer with the node
+/// that initialized the resource.
 final class CounterDependencies
     extends ScopeAutoDependencies<CounterDependencies, BuildContext> {
   final Object debugSource;
@@ -58,6 +61,7 @@ final class CounterDependencies
 
   @override
   ScopeDependency buildDependencies(BuildContext context) {
+    // Independent nodes initialize together while still reporting progress.
     return concurrent('', [
       dep('counterController', (dep) async {
         counterController = CounterController(
@@ -77,6 +81,8 @@ final class CounterDependencies
   }
 }
 
+/// Combines widget parameters, asynchronously initialized dependencies, and
+/// a lifecycle-aware state in one full `Scope`.
 final class CounterScope
     extends Scope<CounterScope, CounterDependencies, CounterState> {
   final String? title;
@@ -186,6 +192,8 @@ final class CounterScope
   CounterState createState() => CounterState();
 }
 
+/// Initializes after dependencies are ready and builds the scope's ready
+/// subtree with direct access to those dependencies.
 final class CounterState
     extends ScopeState<CounterScope, CounterDependencies, CounterState> {
   late final Object _debugSource;

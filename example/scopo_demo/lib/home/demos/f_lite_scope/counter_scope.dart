@@ -6,6 +6,7 @@ import 'package:scopo/scopo.dart';
 import '../../../common/presentation/blinking_box.dart';
 import '../../../utils/console/console.dart';
 
+/// A notifier owned by `CounterState` after its asynchronous initialization.
 final class CounterController with ChangeNotifier {
   final Object debugSource;
   final String debugName;
@@ -37,6 +38,8 @@ final class CounterController with ChangeNotifier {
   }
 }
 
+/// A `LiteScope` that exposes immutable widget parameters separately from
+/// its lifecycle-aware `CounterState`.
 final class CounterScope extends LiteScope<CounterScope, CounterState> {
   final String? title;
   final Widget? childScope;
@@ -114,6 +117,8 @@ final class CounterScope extends LiteScope<CounterScope, CounterState> {
   CounterState createState() => CounterState();
 }
 
+/// Owns asynchronous initialization, disposal, and the ready subtree for the
+/// lightweight scope.
 final class CounterState extends LiteScopeState<CounterScope, CounterState> {
   late final Object _debugSource;
   late final String _debugName;
@@ -146,6 +151,7 @@ final class CounterState extends LiteScopeState<CounterScope, CounterState> {
 
   @override
   Widget build(BuildContext context) {
+    // The state object exists before its asynchronous fields are ready.
     if (!CounterScope.isInitializedOf(context)) {
       return const Center(
         child: Text('State initializing…'),

@@ -5,6 +5,11 @@ import 'scope_example1.dart';
 import 'scope_example2.dart';
 import 'scope_example3.dart';
 
+/// Rebuilds three asynchronous scope variants together so the console makes
+/// their initialization and disposal ordering visible.
+///
+/// The variants compare no `scopeKey`, a shared `scopeKey`, and a keyed
+/// parent with a child scope.
 class ScopeDemo extends StatefulWidget {
   const ScopeDemo({super.key});
 

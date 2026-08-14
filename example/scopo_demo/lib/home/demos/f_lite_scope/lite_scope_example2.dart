@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import 'counter_scope.dart';
 
+/// Reuses a `scopeKey` so initialization waits for the previous instance to
+/// finish disposing.
 class LiteScopeExample2 extends StatelessWidget {
   static int _num = 0;
 
