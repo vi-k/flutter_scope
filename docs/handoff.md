@@ -9,8 +9,9 @@
 1. Прочитай этот файл целиком, потом `docs/backlog.md`.
 2. Сверься: `git log --oneline -5`, `git status`.
 3. Документация учебного кода всех девяти демонстраций `example/scopo_demo`
-   завершена: исполняемый Dart-код не менялся, полный гейт пройден. Дизайн и
-   выполненный план — в
+   завершена: исполняемый Dart-код не менялся, после исправлений финального
+   ревью в `9023f0c` полный гейт повторно пройден. Дизайн и выполненный план —
+   в
    `docs/records/2026-08-14[5]-example-code-documentation-design.md` и
    `docs/records/2026-08-14[6]-example-code-documentation-plan.md`.
 
@@ -18,8 +19,9 @@
 
 Ветка `main`. Все девять демонстраций `example/scopo_demo` получили
 содержательные английские комментарии; исполняемый Dart-код не менялся.
-Полный гейт пройден, включая post-commit `dart pub publish --dry-run` с
-0 warnings. Служебный UI, fake-сервисы и `example/minimal` в охват не входят.
+Полный гейт повторно пройден после финального ревью, включая
+`dart pub publish --dry-run` с 0 warnings. Служебный UI, fake-сервисы и
+`example/minimal` в охват не входят.
 В бэклоге остались только невыполненные записи владельца. Рабочее дерево
 `docs/backlog.md` при этом содержит две владельческие записи о warning
 `xcodebuild` и зависании release-приложения после закрытия; они намеренно
@@ -61,11 +63,9 @@
 
 ## Проверки
 
-Полный гейт после комментариев учебного кода пройден на рабочем тулчейне
-(Flutter 3.29.0 / Dart 3.7.0 через fvm, он же заявленный пол). Pre-commit
-`dart pub publish --dry-run` дал ровно 1 dirty-git warning о семи
-незакоммиченных package Dart-файлах; validator не видит `docs/`, поэтому
-проверка потребовала post-commit повтор. Сразу после коммита он дал 0 warnings.
+Полный гейт повторно пройден после исправлений финального ревью в `9023f0c`
+на рабочем тулчейне (Flutter 3.29.0 / Dart 3.7.0 через fvm, он же заявленный
+пол).
 
 Дополнительный widget-тест нового example тоже прошёл: 1/1.
 
@@ -76,7 +76,7 @@
 | `analyze` в обоих `example/*` | `No issues found!` в каждом |
 | `fvm dart format --set-exit-if-changed lib test` | 76 файлов, 0 changed |
 | `fvm dart doc --dry-run` | 0 warnings, 0 errors |
-| `fvm dart pub publish --dry-run` | pre-commit: 1 dirty-git warning о 7 Dart-файлах; сразу post-commit: 0 warnings |
+| `fvm dart pub publish --dry-run` | 0 warnings |
 | `sh docs/ru/check.sh` | переводы актуальны: 13 |
 
 Тот же набор до перехода на 3.29.0 прошёл и на глобальном 3.44.9 — пакет
