@@ -4,6 +4,8 @@ import 'scope_model_example1.dart';
 import 'scope_model_example2.dart';
 import 'scope_model_example3.dart';
 
+/// Compares an externally owned model, an element-owned model, and a `State`
+/// exposed as a model.
 class ScopeModelDemo extends StatelessWidget {
   const ScopeModelDemo({super.key});
 

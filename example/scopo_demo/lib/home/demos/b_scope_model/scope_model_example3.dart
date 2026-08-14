@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:scopo/scopo.dart';
 import 'package:scopo_demo/common/presentation/blinking_box.dart';
 
+/// Exposes a regular Flutter `State` through `ScopeModel.value`.
 class ScopeModelExample3 extends StatelessWidget {
   const ScopeModelExample3({super.key});
 
@@ -11,6 +12,7 @@ class ScopeModelExample3 extends StatelessWidget {
   }
 }
 
+/// Provides typed `of` and `select` accessors for `CounterScopeState`.
 class CounterScope extends StatefulWidget {
   const CounterScope({super.key});
 
@@ -27,6 +29,8 @@ class CounterScope extends StatefulWidget {
   State<CounterScope> createState() => CounterScopeState();
 }
 
+/// Owns the count as normal Flutter state and publishes itself as the scoped
+/// model.
 class CounterScopeState extends State<CounterScope> {
   int _count = 0;
   int get count => _count;

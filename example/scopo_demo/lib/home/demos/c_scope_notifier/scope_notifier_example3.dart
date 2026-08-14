@@ -3,6 +3,7 @@ import 'package:scopo/scopo.dart';
 
 import '../../../common/presentation/blinking_box.dart';
 
+/// Exposes a Flutter `State` as a notifier through `ScopeNotifier.value`.
 class ScopeNotifierExample3 extends StatelessWidget {
   const ScopeNotifierExample3({super.key});
 
@@ -12,6 +13,7 @@ class ScopeNotifierExample3 extends StatelessWidget {
   }
 }
 
+/// Provides typed access to the `StateAsNotifier` below it.
 class CounterScope extends StatefulWidget {
   const CounterScope({super.key});
 
@@ -28,6 +30,8 @@ class CounterScope extends StatefulWidget {
   State<CounterScope> createState() => CounterScopeState();
 }
 
+/// Uses `notifyListeners` instead of `setState` so selectors decide what
+/// rebuilds.
 class CounterScopeState extends State<CounterScope> with StateAsNotifier {
   int _count = 0;
   int get count => _count;

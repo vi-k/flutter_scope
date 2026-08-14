@@ -3,6 +3,8 @@ import 'package:scopo/scopo.dart';
 
 import '../../../common/presentation/blinking_box.dart';
 
+/// Uses `ScopeNotifierCore` to keep the concrete notifier private behind a
+/// narrow interface.
 class ScopeNotifierExample2 extends StatelessWidget {
   const ScopeNotifierExample2({super.key});
 
@@ -12,6 +14,7 @@ class ScopeNotifierExample2 extends StatelessWidget {
   }
 }
 
+/// The public `Listenable` contract exposed without the concrete notifier type.
 abstract interface class CounterModel implements Listenable {
   int get count;
 
@@ -31,6 +34,8 @@ final class _CounterModelImpl with ChangeNotifier implements CounterModel {
   }
 }
 
+/// Returns the interface from `of` while its custom element retains the
+/// implementation.
 final class CounterScope
     extends ScopeNotifierCore<CounterScope, CounterScopeElement, CounterModel> {
   const CounterScope({super.key});
@@ -84,6 +89,7 @@ final class CounterScope
   CounterScopeElement createScopeElement() => CounterScopeElement(this);
 }
 
+/// Owns the notifier and detaches scope dependents before disposing it.
 final class CounterScopeElement extends ScopeNotifierElementBase<CounterScope,
     CounterScopeElement, CounterModel> {
   final _CounterModelImpl _model = _CounterModelImpl();
@@ -95,7 +101,7 @@ final class CounterScopeElement extends ScopeNotifierElementBase<CounterScope,
 
   @override
   void dispose() {
-    // Именно в таком порядке!
+    // Detach scope dependents before disposing the notifier they reference.
     super.dispose();
     _model.dispose();
   }

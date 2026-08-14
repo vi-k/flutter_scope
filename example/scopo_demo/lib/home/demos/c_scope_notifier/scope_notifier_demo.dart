@@ -4,6 +4,7 @@ import 'scope_notifier_example1.dart';
 import 'scope_notifier_example2.dart';
 import 'scope_notifier_example3.dart';
 
+/// Compares base, core, and `StateAsNotifier` ways to expose a `Listenable`.
 class ScopeNotifierDemo extends StatelessWidget {
   const ScopeNotifierDemo({super.key});
 

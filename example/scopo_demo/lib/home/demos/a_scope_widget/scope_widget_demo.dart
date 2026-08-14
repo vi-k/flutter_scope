@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'scope_widget_core_example.dart';
 import 'scope_widget_example.dart';
 
+/// Compares immutable widget parameters with mutable state owned by a custom
+/// scope element.
 class ScopeWidgetDemo extends StatelessWidget {
   const ScopeWidgetDemo({super.key});
 

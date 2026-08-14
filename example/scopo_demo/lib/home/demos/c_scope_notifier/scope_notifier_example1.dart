@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:scopo/scopo.dart';
 import 'package:scopo_demo/common/presentation/blinking_box.dart';
 
+/// Lets `ScopeNotifierBase` create, listen to, and dispose a `ChangeNotifier`.
 class ScopeNotifierExample1 extends StatelessWidget {
   const ScopeNotifierExample1({super.key});
 
@@ -11,6 +12,7 @@ class ScopeNotifierExample1 extends StatelessWidget {
   }
 }
 
+/// Notifies the scope whenever its selected count changes.
 final class CounterModel with ChangeNotifier {
   int _count = 0;
   int get count => _count;
@@ -21,6 +23,8 @@ final class CounterModel with ChangeNotifier {
   }
 }
 
+/// Owns the notifier through `create` and `dispose` and exposes command and
+/// selector accessors.
 final class CounterScope extends ScopeNotifierBase<CounterScope, CounterModel> {
   CounterScope({super.key})
       : super(

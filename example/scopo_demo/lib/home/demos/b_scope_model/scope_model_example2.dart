@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:scopo/scopo.dart';
 import 'package:scopo_demo/common/presentation/blinking_box.dart';
 
+/// Lets a `ScopeModelCore` element create, own, and expose a plain model.
 class ScopeModelExample2 extends StatelessWidget {
   const ScopeModelExample2({super.key});
 
@@ -11,6 +12,7 @@ class ScopeModelExample2 extends StatelessWidget {
   }
 }
 
+/// The plain model kept inside `CounterScopeElement` for the element lifetime.
 final class CounterModel {
   int _count = 0;
   int get count => _count;
@@ -20,6 +22,7 @@ final class CounterModel {
   }
 }
 
+/// Separates commands through `of` from selective reads through `countOf`.
 final class CounterScope
     extends ScopeModelCore<CounterScope, CounterScopeElement, CounterModel> {
   const CounterScope({super.key});
@@ -59,11 +62,13 @@ final class CounterScope
   CounterScopeElement createScopeElement() => CounterScopeElement(this);
 }
 
+/// The public model-and-command surface implemented by the custom element.
 abstract interface class CounterScopeContext {
   CounterModel get model;
   void increment();
 }
 
+/// Owns the model and explicitly notifies dependents after mutating it.
 final class CounterScopeElement extends ScopeModelElementBase<CounterScope,
     CounterScopeElement, CounterModel> implements CounterScopeContext {
   CounterScopeElement(super.widget);
@@ -77,6 +82,7 @@ final class CounterScopeElement extends ScopeModelElementBase<CounterScope,
   @override
   void increment() {
     model.increment();
+    // A plain model cannot notify the scope, so the owning element does it.
     notifyDependents();
   }
 }

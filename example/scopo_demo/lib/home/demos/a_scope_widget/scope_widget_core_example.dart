@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:scopo/scopo.dart';
 import 'package:scopo_demo/common/presentation/blinking_box.dart';
 
+/// Demonstrates `ScopeWidgetCore` with mutable state stored in its custom
+/// element.
 class ScopeWidgetCoreExample extends StatelessWidget {
   const ScopeWidgetCoreExample({super.key});
 
@@ -9,6 +11,8 @@ class ScopeWidgetCoreExample extends StatelessWidget {
   Widget build(BuildContext context) => const CounterScope();
 }
 
+/// Publishes a narrow command context through `of` and a selectively watched
+/// count through `countOf`.
 final class CounterScope
     extends ScopeWidgetCore<CounterScope, CounterScopeElement> {
   const CounterScope({super.key});
@@ -47,11 +51,15 @@ final class CounterScope
   CounterScopeElement createScopeElement() => CounterScopeElement(this);
 }
 
+/// The command-facing interface exposed to descendants without revealing the
+/// element implementation.
 abstract interface class CounterScopeContext {
   int get count;
   void increment();
 }
 
+/// Owns the count for the lifetime of the mounted scope and notifies selector
+/// dependents after each increment.
 final class CounterScopeElement
     extends ScopeWidgetElementBase<CounterScope, CounterScopeElement>
     implements CounterScopeContext {
@@ -68,6 +76,7 @@ final class CounterScopeElement
   @override
   void increment() {
     _count++;
+    // Re-evaluate selectors after the element-owned value changes.
     notifyDependents();
   }
 }

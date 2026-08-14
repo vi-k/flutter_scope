@@ -3,6 +3,8 @@ import 'package:scopo/scopo.dart';
 
 import '../../../common/presentation/blinking_box.dart';
 
+/// Demonstrates `ScopeWidgetBase` exposing a value owned and updated by the
+/// parent widget.
 class ScopeWidgetExample extends StatefulWidget {
   const ScopeWidgetExample({super.key});
 
@@ -47,6 +49,8 @@ class _ScopeWidgetExampleState extends State<ScopeWidgetExample> {
   }
 }
 
+/// Exposes the current widget parameter and lets only dependents whose selected
+/// value changed rebuild.
 final class CounterScope extends ScopeWidgetBase<CounterScope> {
   final int count;
 

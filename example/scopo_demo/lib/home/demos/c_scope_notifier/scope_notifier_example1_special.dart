@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:scopo/scopo.dart';
 
-// Проверка одновременной работы notifyDependents и обновление скоупа через
-// setState родителя.
-
+/// Exercises a parent rebuild and a notifier update in the same callback.
+/// The widget parameter and notifier value update their own dependents.
 class ScopeNotifierExample1Special extends StatefulWidget {
   const ScopeNotifierExample1Special({super.key});
 

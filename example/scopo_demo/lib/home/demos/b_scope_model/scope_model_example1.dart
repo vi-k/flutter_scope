@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:scopo/scopo.dart';
 import 'package:scopo_demo/common/presentation/blinking_box.dart';
 
+/// A plain mutable value whose owner is responsible for rebuilding the scope
+/// widget.
 final class CounterModel {
   int _count = 0;
   int get count => _count;
@@ -11,6 +13,7 @@ final class CounterModel {
   }
 }
 
+/// Passes a parent-owned `CounterModel` through `ScopeModelBase.value`.
 class ScopeModelExample1 extends StatefulWidget {
   const ScopeModelExample1({super.key});
 
@@ -53,6 +56,8 @@ class _ScopeModelExample1State extends State<ScopeModelExample1> {
   }
 }
 
+/// Selects the count from the externally owned model without taking over its
+/// lifecycle.
 final class CounterScope extends ScopeModelBase<CounterScope, CounterModel> {
   const CounterScope({super.key, required CounterModel model})
       : super.value(value: model);
