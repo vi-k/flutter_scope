@@ -108,7 +108,10 @@
   не завершает resident runner по `exitCode` дочернего процесса. Поведение
   подтверждено на закреплённом Flutter 3.29.0; тот же путь кода остаётся в
   локальных 3.44.4 и stable. Это не утечка scopo: процесс `scopo_demo`
-  исчезает. Для проверки release собирать через
+  исчезает. Это известный открытый баг Flutter tools:
+  `flutter/flutter#58459` (`P3`, `triaged-tool`, `tool-still-valid`, все три
+  desktop-платформы); дубликат `#135019` закрыт именно как дубликат, а не как
+  исправленный. Для проверки release собирать через
   `fvm flutter build macos --release` и открывать `.app` напрямую. Разбор:
   `docs/records/2026-08-14[7]-release-run-hang-report.md`.
 - Скоуп, чей `initAsync()`-генератор приостановлен на future, который никогда
