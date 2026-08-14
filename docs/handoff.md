@@ -8,14 +8,15 @@
 
 1. Прочитай этот файл целиком, потом `docs/backlog.md`.
 2. Сверься: `git log --oneline -5`, `git status`.
-3. В работе example для `ScopeWidgetCore`. Дизайн согласован и записан в
-   `docs/records/2026-08-14[3]-scope-widget-core-example-design.md`;
-   реализация ещё не начата.
+3. В работе example для `ScopeWidgetCore`. Дизайн и план согласованы:
+   `docs/records/2026-08-14[3]-scope-widget-core-example-design.md` и
+   `docs/records/2026-08-14[4]-scope-widget-core-example-plan.md`; реализация
+   ещё не начата.
 
 ## Где мы сейчас
 
-Ветка `main`. В работе example для `ScopeWidgetCore`; дизайн согласован,
-реализация ещё не начата. Других веток и worktree нет.
+Ветка `main`. В работе example для `ScopeWidgetCore`; дизайн и план
+согласованы, реализация ещё не начата. Других веток и worktree нет.
 Версия **0.10.0 подготовлена, но не опубликована** на pub.dev.
 
 Владелец добавил следующий отдельный пункт: задокументировать examples в коде.
