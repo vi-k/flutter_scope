@@ -53,7 +53,10 @@ final class _NavigationNodeState extends State<NavigationNode> {
   Widget build(BuildContext context) => PopScope(
         canPop: widget.onPop == null,
         onPopInvokedWithResult: (didPop, result) {
-          if (didPop) return;
+          if (didPop || _navigator.canPop()) return;
+
+          // A NavigatorPopHandler that blocks this route also makes every
+          // PopScope on it receive didPop: false. It handles the inner pop.
 
           void restoreMarker() {
             _observer._addHook();
@@ -80,11 +83,17 @@ final class _NavigationNodeState extends State<NavigationNode> {
             }
           }
         },
-        child: _NodeNavigator(
-          key: _navigatorKey,
-          node: this,
-          pages: [MaterialPage<void>(child: widget.child)],
-          onDidRemovePage: (_) {},
+        child: NavigatorPopHandler<Object?>(
+          onPopWithResult: (result) {
+            // ignore: discarded_futures
+            _navigator.maybePop(result);
+          },
+          child: _NodeNavigator(
+            key: _navigatorKey,
+            node: this,
+            pages: [MaterialPage<void>(child: widget.child)],
+            onDidRemovePage: (_) {},
+          ),
         ),
       );
 }

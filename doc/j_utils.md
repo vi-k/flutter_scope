@@ -87,6 +87,10 @@ further. `onPop` intercepts the system back gesture: return `true` to let the
 pop through, `false` to keep the route, or a `Future<bool>` to decide after
 asking something — a confirmation dialog, typically.
 
+System back first asks the node's nested navigator to close its top route. Only
+when that navigator has nothing left to pop do `onPop` and `isRoot` decide what
+happens outside the node.
+
 `PreviousNavigatorExtension.previous` gives the navigator above a given one,
 which is how a node forwards a pop it cannot handle itself.
 

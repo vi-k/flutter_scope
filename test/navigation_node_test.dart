@@ -54,6 +54,68 @@ void main() {
       expect(find.text('pushed: secret'), findsNothing);
     });
 
+    testWidgets('system back pops a pushed route inside the node', (
+      tester,
+    ) async {
+      await tester.pumpWidget(const _Host(useNode: true));
+
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+      expect(find.text('pushed: secret'), findsOneWidget);
+
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+
+      expect(find.text('pushed: secret'), findsNothing);
+      expect(find.text('open'), findsOneWidget);
+    });
+
+    testWidgets('system back closes a dialog inside the node', (tester) async {
+      await tester.pumpWidget(const _Host(useNode: true));
+
+      await tester.tap(find.text('open dialog'));
+      await tester.pumpAndSettle();
+      expect(find.text('dialog'), findsOneWidget);
+
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+
+      expect(find.text('dialog'), findsNothing);
+      expect(find.text('open dialog'), findsOneWidget);
+    });
+
+    testWidgets('system back respects a guarded route inside the node', (
+      tester,
+    ) async {
+      await tester.pumpWidget(const _Host(useNode: true));
+
+      await tester.tap(find.text('open guarded'));
+      await tester.pumpAndSettle();
+      expect(find.text('guarded route'), findsOneWidget);
+
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+
+      expect(find.text('guarded route'), findsOneWidget);
+    });
+
+    testWidgets('system back stays in a root node while it has an inner route',
+        (
+      tester,
+    ) async {
+      await tester.pumpWidget(const _Host(useNode: true, isRoot: true));
+
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+      expect(find.text('pushed: secret'), findsOneWidget);
+
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+
+      expect(find.text('pushed: secret'), findsNothing);
+      expect(find.text('open'), findsOneWidget);
+    });
+
     testWidgets('the navigatorKey hands the nested navigator to its owner', (
       tester,
     ) async {
@@ -107,8 +169,13 @@ final class _Config {
 final class _Host extends StatelessWidget {
   final bool useNode;
   final GlobalKey<NodeNavigatorState>? navigatorKey;
+  final bool isRoot;
 
-  const _Host({required this.useNode, this.navigatorKey});
+  const _Host({
+    required this.useNode,
+    this.navigatorKey,
+    this.isRoot = false,
+  });
 
   @override
   Widget build(BuildContext context) => MaterialApp(
@@ -118,6 +185,7 @@ final class _Host extends StatelessWidget {
           builder: (context) => useNode
               ? NavigationNode(
                   navigatorKey: navigatorKey,
+                  isRoot: isRoot,
                   child: const _NodeContent(),
                 )
               : const _NodeContent(),
@@ -131,15 +199,44 @@ final class _NodeContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Scaffold(
         body: Center(
-          child: TextButton(
-            // The future a push returns completes when the route is popped,
-            // and nothing here waits for that.
-            onPressed: () => unawaited(
-              Navigator.of(context).push(
-                MaterialPageRoute<void>(builder: (context) => const _Pushed()),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextButton(
+                // The future a push returns completes when the route is popped,
+                // and nothing here waits for that.
+                onPressed: () => unawaited(
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (context) => const _Pushed(),
+                    ),
+                  ),
+                ),
+                child: const Text('open'),
               ),
-            ),
-            child: const Text('open'),
+              TextButton(
+                onPressed: () => unawaited(
+                  showDialog<void>(
+                    context: context,
+                    useRootNavigator: false,
+                    builder: (context) => const AlertDialog(
+                      content: Text('dialog'),
+                    ),
+                  ),
+                ),
+                child: const Text('open dialog'),
+              ),
+              TextButton(
+                onPressed: () => unawaited(
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (context) => const _GuardedPushed(),
+                    ),
+                  ),
+                ),
+                child: const Text('open guarded'),
+              ),
+            ],
           ),
         ),
       );
@@ -167,4 +264,16 @@ final class _Pushed extends StatelessWidget {
       ),
     );
   }
+}
+
+final class _GuardedPushed extends StatelessWidget {
+  const _GuardedPushed();
+
+  @override
+  Widget build(BuildContext context) => const PopScope(
+        canPop: false,
+        child: Scaffold(
+          body: Center(child: Text('guarded route')),
+        ),
+      );
 }
