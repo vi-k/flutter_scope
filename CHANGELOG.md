@@ -20,7 +20,11 @@
   The hook runs once, before the first build, so such a subscription could
   never be honoured; look the scope up with `listen: false` instead.
 * Fix `NavigationNode` system back handling: a pushed route or dialog in its
-  nested navigator now closes before the enclosing route can pop.
+  nested navigator now closes before the enclosing route can pop. Once the node
+  has nothing of its own left to close, `onPop` is asked exactly once and its
+  refusal keeps the route; a back inside nested nodes reaches the innermost one
+  and leaves every route above it alone. `Navigator.canPop` inside a node no
+  longer counts the node's own forwarding bookkeeping as a route it can close.
 * [breaking changes] Raise the Flutter floor to 3.29.0. The declared `>=3.27.0`
   never resolved: `logger_builder` requires `meta ^1.16.0` while the
   `flutter_test` of 3.27 pins `meta` to 1.15.0, so `pub get` failed for anyone

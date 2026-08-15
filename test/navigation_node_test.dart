@@ -116,6 +116,142 @@ void main() {
       expect(find.text('open'), findsOneWidget);
     });
 
+    testWidgets(
+        'system back asks onPop once when the node has nothing to '
+        'close', (tester) async {
+      var calls = 0;
+
+      await tester.pumpWidget(
+        _OnPopHost(
+          onPop: (context, result) {
+            calls++;
+            // A circuit breaker, not part of the contract: a node that keeps
+            // asking would otherwise hang the test instead of failing it.
+            return calls > 3;
+          },
+        ),
+      );
+      await tester.tap(find.text('go'));
+      await tester.pumpAndSettle();
+      expect(find.text('node content'), findsOneWidget);
+
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+
+      expect(
+        calls,
+        1,
+        reason: 'one system back is one question to onPop',
+      );
+    });
+
+    testWidgets('an onPop that refuses keeps the outer route', (tester) async {
+      var calls = 0;
+
+      await tester.pumpWidget(
+        _OnPopHost(
+          onPop: (context, result) {
+            calls++;
+            return calls > 3;
+          },
+        ),
+      );
+      await tester.tap(find.text('go'));
+      await tester.pumpAndSettle();
+
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('node content'),
+        findsOneWidget,
+        reason: 'onPop returned false, so the route it guards must stay',
+      );
+    });
+
+    testWidgets('an onPop that allows the pop lets the outer route go', (
+      tester,
+    ) async {
+      var calls = 0;
+
+      await tester.pumpWidget(
+        _OnPopHost(
+          onPop: (context, result) {
+            calls++;
+            return true;
+          },
+        ),
+      );
+      await tester.tap(find.text('go'));
+      await tester.pumpAndSettle();
+
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+
+      expect(calls, 1);
+      expect(
+        find.text('go'),
+        findsOneWidget,
+        reason: 'the screen that pushed the node is back on top',
+      );
+    });
+
+    testWidgets(
+        'system back still reaches onPop after an inner route came '
+        'and went', (tester) async {
+      var calls = 0;
+
+      await tester.pumpWidget(
+        _OnPopHost(
+          onPop: (context, result) {
+            calls++;
+            return calls > 3;
+          },
+        ),
+      );
+      await tester.tap(find.text('go'));
+      await tester.pumpAndSettle();
+
+      // Moving the inner stack makes the nested navigator report itself anew,
+      // and the forwarding marker must not colour that report.
+      await tester.tap(find.text('open inside'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('close inside'));
+      await tester.pumpAndSettle();
+      expect(find.text('node content'), findsOneWidget);
+
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+
+      expect(
+        calls,
+        1,
+        reason: 'the node has nothing of its own left to close, so the back '
+            'belongs to onPop',
+      );
+      expect(find.text('node content'), findsOneWidget);
+    });
+
+    testWidgets('system back inside nested nodes keeps the enclosing route', (
+      tester,
+    ) async {
+      await tester.pumpWidget(const _NestedHost());
+
+      await tester.tap(find.text('open inner'));
+      await tester.pumpAndSettle();
+      expect(find.text('inner pushed'), findsOneWidget);
+
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+
+      expect(find.text('inner pushed'), findsNothing);
+      expect(
+        find.text('open inner'),
+        findsOneWidget,
+        reason: 'the innermost node handled the back; nothing above it moved',
+      );
+    });
+
     testWidgets('the navigatorKey hands the nested navigator to its owner', (
       tester,
     ) async {
@@ -237,6 +373,103 @@ final class _NodeContent extends StatelessWidget {
                 child: const Text('open guarded'),
               ),
             ],
+          ),
+        ),
+      );
+}
+
+/// Puts a node with an [NavigationNode.onPop] on a route of its own, so a pop
+/// that leaves the node has somewhere to land.
+final class _OnPopHost extends StatelessWidget {
+  final FutureOr<bool> Function(BuildContext context, Object? result) onPop;
+
+  const _OnPopHost({required this.onPop});
+
+  @override
+  Widget build(BuildContext context) => MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: Builder(
+              builder: (context) => TextButton(
+                onPressed: () => unawaited(
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (context) => NavigationNode(
+                        onPop: onPop,
+                        child: const _OnPopNodeContent(),
+                      ),
+                    ),
+                  ),
+                ),
+                child: const Text('go'),
+              ),
+            ),
+          ),
+        ),
+      );
+}
+
+final class _OnPopNodeContent extends StatelessWidget {
+  const _OnPopNodeContent();
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('node content'),
+              TextButton(
+                onPressed: () => unawaited(
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (context) => Scaffold(
+                        body: Center(
+                          child: TextButton(
+                            onPressed: Navigator.of(context).pop,
+                            child: const Text('close inside'),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                child: const Text('open inside'),
+              ),
+            ],
+          ),
+        ),
+      );
+}
+
+/// A node inside another node: the inner one is the only one with a route of
+/// its own to close.
+final class _NestedHost extends StatelessWidget {
+  const _NestedHost();
+
+  @override
+  Widget build(BuildContext context) => MaterialApp(
+        home: NavigationNode(
+          isRoot: true,
+          child: NavigationNode(
+            child: Builder(
+              builder: (context) => Scaffold(
+                body: Center(
+                  child: TextButton(
+                    onPressed: () => unawaited(
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (context) => const Scaffold(
+                            body: Center(child: Text('inner pushed')),
+                          ),
+                        ),
+                      ),
+                    ),
+                    child: const Text('open inner'),
+                  ),
+                ),
+              ),
+            ),
           ),
         ),
       );

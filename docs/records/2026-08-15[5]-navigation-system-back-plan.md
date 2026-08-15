@@ -3,13 +3,15 @@
 > **Состояние на 2026-08-15:** выполнен в `45aa808`. Первый independent review
 > нашёл обход inner `PopScope` прямым `pop`; отдельный TDD-цикл заменил его на
 > `maybePop`. Позднее ревью показало, что весь план шёл по ветке
-> `onPop == null`, и на ветке `onPop` волна дала две регрессии — см.
-> `2026-08-15[9]-navigation-system-back-audit-report.md`.
+> `onPop == null`, и на ветке `onPop` волна дала две регрессии; они закрыты
+> следующей волной, которая заменила `NavigatorPopHandler` собственным
+> диспетчером.
 > **Что это:** пошаговый TDD-план исправления P1 №2 полного review.
 > **Связанные записи:** `2026-08-15[4]-navigation-system-back-design.md`,
 > `2026-08-14[10]-project-review.md`,
 > `2026-08-15[6]-navigation-system-back-report.md`,
-> `2026-08-15[9]-navigation-system-back-audit-report.md`.
+> `2026-08-15[9]-navigation-system-back-audit-report.md`,
+> `2026-08-15[10]-navigation-onpop-regressions-report.md`.
 
 > **Для агента-исполнителя:** обязателен skill
 > `superpowers:test-driven-development`; выполнять пункты по checkbox и не

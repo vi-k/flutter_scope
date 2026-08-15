@@ -49,51 +49,99 @@ final class _NavigationNodeState extends State<NavigationNode> {
 
   NodeNavigatorState get _navigator => _navigatorKey.currentState!;
 
+  /// Decides what a system back does once the node itself cannot answer it.
+  void _decideOutside(BuildContext context, Object? result) {
+    void restoreMarker() {
+      _observer._addHook();
+    }
+
+    if (_navigator.previous case final previous?) {
+      // ignore: discarded_futures
+      switch (widget.onPop?.call(context, result)) {
+        case final Future<bool> future:
+          // ignore: discarded_futures
+          future.then((canPop) {
+            if (canPop) {
+              previous.pop(result);
+            } else {
+              restoreMarker();
+            }
+          });
+        case final bool? canPop:
+          if (canPop ?? true) {
+            previous.pop(result);
+          } else {
+            restoreMarker();
+          }
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => _NodeBackDispatcher(
+        node: this,
+        child: _NodeNavigator(
+          key: _navigatorKey,
+          node: this,
+          pages: [MaterialPage<void>(child: widget.child)],
+          onDidRemovePage: (_) {},
+        ),
+      );
+}
+
+/// Sends a system back to the navigator below before anything outside sees it.
+///
+/// This lives in a widget of its own so that the flag it keeps never rebuilds
+/// the nested navigator: a rebuild would hand that navigator a fresh page list,
+/// which makes it report its stack again, which sets the flag again.
+final class _NodeBackDispatcher extends StatefulWidget {
+  final _NavigationNodeState node;
+  final Widget child;
+
+  const _NodeBackDispatcher({required this.node, required this.child});
+
+  @override
+  State<_NodeBackDispatcher> createState() => _NodeBackDispatcherState();
+}
+
+final class _NodeBackDispatcherState extends State<_NodeBackDispatcher> {
+  /// Whether the subtree below holds a route it can close on its own.
+  ///
+  /// Kept from [NavigationNotification], which every nested navigator sends
+  /// after its stack changes — including navigators deeper than this node's
+  /// own, so a node nested in another node is heard here too.
+  bool _innerCanPop = false;
+
+  bool _watchInnerStack(NavigationNotification notification) {
+    if (notification.canHandlePop != _innerCanPop) {
+      // Navigators dispatch this outside of build, so a rebuild is safe here.
+      setState(() => _innerCanPop = notification.canHandlePop);
+    }
+
+    return false;
+  }
+
   @override
   Widget build(BuildContext context) => PopScope(
-        canPop: widget.onPop == null,
+        canPop: widget.node.widget.onPop == null && !_innerCanPop,
         onPopInvokedWithResult: (didPop, result) {
-          if (didPop || _navigator.canPop()) return;
+          if (didPop) return;
 
-          // A NavigatorPopHandler that blocks this route also makes every
-          // PopScope on it receive didPop: false. It handles the inner pop.
-
-          void restoreMarker() {
-            _observer._addHook();
-          }
-
-          if (_navigator.previous case final previous?) {
+          if (_innerCanPop) {
+            // The pop belongs to the navigator below, and only that navigator
+            // knows whether its top route accepts it. Nothing outside the node
+            // moves, so onPop and isRoot stay out of this.
             // ignore: discarded_futures
-            switch (widget.onPop?.call(context, result)) {
-              case final Future<bool> future:
-                // ignore: discarded_futures
-                future.then((canPop) {
-                  if (canPop) {
-                    previous.pop(result);
-                  } else {
-                    restoreMarker();
-                  }
-                });
-              case final bool? canPop:
-                if (canPop ?? true) {
-                  previous.pop(result);
-                } else {
-                  restoreMarker();
-                }
-            }
+            widget.node._navigator.maybePop(result);
+
+            return;
           }
+
+          widget.node._decideOutside(context, result);
         },
-        child: NavigatorPopHandler<Object?>(
-          onPopWithResult: (result) {
-            // ignore: discarded_futures
-            _navigator.maybePop(result);
-          },
-          child: _NodeNavigator(
-            key: _navigatorKey,
-            node: this,
-            pages: [MaterialPage<void>(child: widget.child)],
-            onDidRemovePage: (_) {},
-          ),
+        child: NotificationListener<NavigationNotification>(
+          onNotification: _watchInnerStack,
+          child: widget.child,
         ),
       );
 }
@@ -115,6 +163,24 @@ final class _NodeNavigator extends Navigator {
 /// @nodoc
 final class NodeNavigatorState extends NavigatorState {
   Object? _interceptedResult;
+
+  _NodeNavigatorObserver get _observer =>
+      (widget as _NodeNavigator).node._observer;
+
+  @override
+  bool canPop() {
+    // A node that forwards keeps a local history marker on its first route,
+    // and while that route is the only one on screen the marker alone would
+    // make the base implementation answer `true`. The marker is how a pop
+    // leaves the node, not a route the node can close, so it must not pass for
+    // one: everything above reads this answer to decide whether the back
+    // gesture belongs inside.
+    if (_observer._hookInstalled && (_observer._topRoute?.isCurrent ?? false)) {
+      return false;
+    }
+
+    return super.canPop();
+  }
 
   @override
   void pop<T extends Object?>([T? result]) {
@@ -146,20 +212,27 @@ final class _NodeNavigatorObserver extends NavigatorObserver {
   final _NavigationNodeState node;
   Route<void>? _topRoute;
 
+  /// Whether the forwarding marker currently sits on [_topRoute].
+  bool _hookInstalled = false;
+
   _NodeNavigatorObserver(this.node);
 
   void _addHook() {
     final topRoute = _topRoute;
-    if (!node.widget.isRoot && topRoute is ModalRoute<void>) {
-      topRoute.addLocalHistoryEntry(
-        _HookEntry(
-          onRemove: () {
-            // ignore: discarded_futures
-            navigator?.previous?.maybePop(node._navigator._interceptedResult);
-          },
-        ),
-      );
+    if (_hookInstalled || node.widget.isRoot || topRoute is! ModalRoute<void>) {
+      return;
     }
+
+    _hookInstalled = true;
+    topRoute.addLocalHistoryEntry(
+      _HookEntry(
+        onRemove: () {
+          _hookInstalled = false;
+          // ignore: discarded_futures
+          navigator?.previous?.maybePop(node._navigator._interceptedResult);
+        },
+      ),
+    );
   }
 
   @override
