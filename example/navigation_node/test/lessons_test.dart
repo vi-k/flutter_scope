@@ -46,15 +46,63 @@ void main() {
 
     await tester.tap(find.text('Push a page').last);
     await tester.pumpAndSettle();
-    expect(find.text('This stays inside the box'), findsOneWidget);
+    expect(find.text('Pushed inside the node'), findsOneWidget);
 
     await pressSystemBackButton(tester);
 
-    expect(find.text('This stays inside the box'), findsNothing);
+    expect(find.text('Pushed inside the node'), findsNothing);
     expect(
       find.text(lessons[0].title),
       findsWidgets,
       reason: 'the lesson itself must still be on screen',
+    );
+  });
+
+  testWidgets('lesson 1: only the page inside the node reaches the scope',
+      (tester) async {
+    await openLesson(tester, lessons[0].title);
+
+    await tester.tap(find.text('Push a page').first);
+    await tester.pumpAndSettle();
+    expect(
+      find.textContaining('out of reach'),
+      findsOneWidget,
+      reason: 'pushed above the screen, so the screen scope is not an ancestor',
+    );
+
+    await pressSystemBackButton(tester);
+    await tester.tap(find.text('Push a page').last);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.textContaining('ticket A-42'),
+      findsWidgets,
+      reason: 'pushed inside the node, so the screen scope is still above it',
+    );
+  });
+
+  testWidgets('lesson 5: a root node has no back arrow, an ordinary one does',
+      (tester) async {
+    await openLesson(tester, lessons[4].title);
+
+    Finder arrowIn(String barTitle) => find.descendant(
+          of: find.ancestor(
+            of: find.text(barTitle),
+            matching: find.byType(AppBar),
+          ),
+          matching: find.byType(BackButton),
+        );
+
+    expect(
+      arrowIn('ordinary node — arrow'),
+      findsOneWidget,
+      reason: 'a forwarding node marks its first page as having a way out, '
+          'and that is what the arrow reads',
+    );
+    expect(
+      arrowIn('root node — no arrow'),
+      findsNothing,
+      reason: 'a root node has nowhere to forward to',
     );
   });
 
@@ -119,7 +167,8 @@ void main() {
     expect(find.text('onPop asked 0 times'), findsOneWidget);
   });
 
-  testWidgets('lesson 5: a root node keeps the pop, an ordinary one forwards it',
+  testWidgets(
+      'lesson 5: a root node keeps the pop, an ordinary one forwards it',
       (tester) async {
     await openLesson(tester, lessons[4].title);
 

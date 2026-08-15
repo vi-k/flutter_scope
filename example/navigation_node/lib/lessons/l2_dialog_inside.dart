@@ -3,6 +3,7 @@ import 'package:scopo/scopo.dart';
 
 import '../journal.dart';
 import '../lesson.dart';
+import '../screen_scope.dart';
 import '../system_back.dart';
 
 /// Lesson 2: a dialog is a route too, and the node closes it first.
@@ -11,14 +12,16 @@ final dialogInsideLesson = Lesson(
   summary: 'showDialog with useRootNavigator: false belongs to the node',
   explanation: const [
     'showDialog pushes a route like any other, and by default it pushes it on '
-        'the application\'s Navigator — above the node, out of its reach.',
+        'the application\'s Navigator — above the node, out of its reach and '
+        'out of reach of everything the screen provides.',
     'Pass useRootNavigator: false and the dialog goes to the nearest Navigator '
-        'instead, which is the node\'s. The system back then closes the dialog '
-        'and stops there, leaving the screen underneath alone.',
+        'instead, which is the node\'s. It is then built under the screen, so '
+        'the screen\'s scope is still there to read; and the system back closes '
+        'it and stops there, leaving the screen underneath alone.',
   ],
-  instruction: 'open both dialogs in turn and close each one with System back. '
-      'Watch the line above the journal: it says whether anything inside can '
-      'still take a back.',
+  instruction: 'open both dialogs in turn: each says whether it can still see '
+      'the screen\'s ticket. Close them with System back and watch the line '
+      'above the journal.',
   stage: (context) => const _Stage(),
 );
 
@@ -26,25 +29,31 @@ class _Stage extends StatelessWidget {
   const _Stage();
 
   @override
-  Widget build(BuildContext context) => Stage(
-        label: 'NavigationNode',
-        isNode: true,
-        child: NavigationNode(
-          child: Builder(
-            builder: (context) => Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  FilledButton.tonal(
-                    onPressed: () => _open(context, useRootNavigator: false),
-                    child: const Text('Dialog in the node'),
-                  ),
-                  const SizedBox(height: 12),
-                  OutlinedButton(
-                    onPressed: () => _open(context, useRootNavigator: true),
-                    child: const Text('Dialog on the application'),
-                  ),
-                ],
+  Widget build(BuildContext context) => ScreenScope(
+        number: 'A-42',
+        child: Stage(
+          label: 'NavigationNode',
+          isNode: true,
+          child: NavigationNode(
+            child: NodeHome(
+              title: 'first page of the node',
+              child: Builder(
+                builder: (context) => Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const ScopeReadout(),
+                    const SizedBox(height: 12),
+                    FilledButton.tonal(
+                      onPressed: () => _open(context, useRootNavigator: false),
+                      child: const Text('Dialog in the node'),
+                    ),
+                    const SizedBox(height: 12),
+                    OutlinedButton(
+                      onPressed: () => _open(context, useRootNavigator: true),
+                      child: const Text('Dialog on the application'),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -61,12 +70,20 @@ class _Stage extends StatelessWidget {
       useRootNavigator: useRootNavigator,
       builder: (context) => AlertDialog(
         title: Text('Dialog $where'),
-        content: Text(
-          useRootNavigator
-              ? 'This one sits above the node. The node cannot close it, so '
-                  'the back travels past it.'
-              : 'This one is a route of the node. The node closes it before '
-                  'anything outside hears the back.',
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              useRootNavigator
+                  ? 'This one sits above the node. The node cannot close it, '
+                      'so the back travels past it.'
+                  : 'This one is a route of the node. The node closes it '
+                      'before anything outside hears the back.',
+            ),
+            const SizedBox(height: 16),
+            const ScopeReadout(),
+          ],
         ),
         actions: const [SystemBackButton(compact: true)],
       ),

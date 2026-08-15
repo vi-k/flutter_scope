@@ -136,8 +136,9 @@ class _JournalLine extends StatelessWidget {
         style: theme.textTheme.bodySmall?.copyWith(
           color: color,
           fontFamily: 'monospace',
-          fontWeight:
-              entry.kind == JournalKind.back ? FontWeight.bold : FontWeight.normal,
+          fontWeight: entry.kind == JournalKind.back
+              ? FontWeight.bold
+              : FontWeight.normal,
         ),
       ),
     );

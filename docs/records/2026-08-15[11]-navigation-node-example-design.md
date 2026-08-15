@@ -1,10 +1,14 @@
 # Пример `navigation_node` — устройство
 
-> **Состояние на 2026-08-15:** сделано и смержено; полный гейт пройден.
+> **Состояние на 2026-08-15:** сделано и смержено. Позже по записям владельца
+> пример дополнен: скоуп-сторона, которую этот дизайн сознательно оставлял
+> `scopo_demo`, всё же показана в уроках 1 и 2, а страницы получили `AppBar` —
+> см. `2026-08-15[13]-navigation-node-example-scope-and-appbar-report.md`.
 > **Что это:** третий пример пакета — `NavigationNode` в шести уроках с
 > нажимаемым системным back.
 > **Связанные записи:** `2026-08-15[10]-navigation-onpop-regressions-report.md`,
-> `2026-08-15[9]-navigation-system-back-audit-report.md`.
+> `2026-08-15[9]-navigation-system-back-audit-report.md`,
+> `2026-08-15[13]-navigation-node-example-scope-and-appbar-report.md`.
 
 ## Зачем
 

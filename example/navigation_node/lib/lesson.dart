@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'journal.dart';
+import 'screen_scope.dart';
 import 'system_back.dart';
 
 /// One thing about `NavigationNode`, shown on a screen of its own.
@@ -194,7 +195,41 @@ class PushButton extends StatelessWidget {
       );
 }
 
+/// The first page of a node, with an `AppBar` so its back arrow is visible.
+///
+/// The arrow is worth watching. Flutter draws it when the route thinks a pop
+/// would lead somewhere, and on a node's first page that is decided by the node
+/// itself: a forwarding node marks the page as having a way out, so the arrow
+/// appears even though nothing sits below it. A node marked `isRoot` has no way
+/// out and no arrow. Pressing the arrow does what the node says it does —
+/// forwards, or nothing at all.
+class NodeHome extends StatelessWidget {
+  /// What the page is called.
+  final String title;
+
+  /// The content of the page.
+  final Widget child;
+
+  /// Creates the page.
+  const NodeHome({required this.title, required this.child, super.key});
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(
+          title: Text(title, style: Theme.of(context).textTheme.titleSmall),
+          primary: false,
+          toolbarHeight: 44,
+        ),
+        body: Center(child: child),
+      );
+}
+
 /// A plain page to push, so the lessons do not each invent one.
+///
+/// It wears an `AppBar` on purpose. Flutter draws a back arrow there whenever
+/// the route believes a pop would lead somewhere — including the first page of
+/// a forwarding node, which has no route below it but does have a way out. The
+/// arrow is therefore a readout of the node's own state, free of charge.
 class SamplePage extends StatelessWidget {
   /// The page's title.
   final String title;
@@ -209,13 +244,14 @@ class SamplePage extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return ColoredBox(
-      color: theme.colorScheme.surfaceContainerHighest,
-      child: Center(
+    return Scaffold(
+      appBar: AppBar(title: Text(title), primary: false),
+      backgroundColor: theme.colorScheme.surfaceContainerHighest,
+      body: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(title, style: theme.textTheme.titleMedium),
+            const ScopeReadout(),
             if (extra case final extra?) ...[
               const SizedBox(height: 12),
               extra,

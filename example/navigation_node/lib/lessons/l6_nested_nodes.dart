@@ -27,8 +27,9 @@ class _Stage extends StatelessWidget {
         label: 'outer NavigationNode',
         isNode: true,
         child: NavigationNode(
-          child: Builder(
-            builder: (context) => Column(
+          child: NodeHome(
+            title: 'first page of the outer node',
+            child: Column(
               children: [
                 Padding(
                   padding: const EdgeInsets.all(8),
@@ -56,14 +57,13 @@ class _Inner extends StatelessWidget {
         label: 'inner NavigationNode',
         isNode: true,
         child: NavigationNode(
-          child: Builder(
-            builder: (context) => Center(
-              child: PushButton(
-                label: 'Push in the INNER node',
-                pageName: 'inner page',
-                builder: (context) => const SamplePage(
-                  title: 'Pushed in the inner node',
-                ),
+          child: NodeHome(
+            title: 'first page of the inner node',
+            child: PushButton(
+              label: 'Push in the INNER node',
+              pageName: 'inner page',
+              builder: (context) => const SamplePage(
+                title: 'Pushed in the inner node',
               ),
             ),
           ),

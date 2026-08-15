@@ -75,9 +75,10 @@ class _StageState extends State<_Stage> {
       isNode: true,
       child: NavigationNode(
         onPop: _onPop,
-        child: Builder(
-          builder: (context) => Center(
-            child: Column(
+        child: NodeHome(
+          title: 'first page of the node',
+          child: Builder(
+            builder: (context) => Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
