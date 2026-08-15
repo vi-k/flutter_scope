@@ -68,7 +68,9 @@ base mixin _ScopeModelElementMixin<W extends _ScopeModelBaseMixin<M>,
   @override
   void dispose() {
     super.dispose();
-    assert(widget.dispose == null || _model != null);
+    // A `create` that threw leaves no model behind, and the disposal runs for
+    // that scope too -- so a missing model here is a legitimate answer, not a
+    // broken invariant.
     if ((widget.dispose, _model) case (final dispose?, final model?)) {
       dispose(model);
     }

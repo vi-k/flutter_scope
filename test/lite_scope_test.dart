@@ -705,6 +705,37 @@ void main() {
         },
       );
     }
+
+    // `close()` reaches `_performAsyncDispose()` directly, without going
+    // through the `unmount()` guard, so it is the one caller that meets a
+    // scope whose synchronous `init()` failed and whose asynchronous phase
+    // therefore never started. Nothing will ever complete `_initCompleter`
+    // for such a scope, and the disposal waits for it.
+    testWidgets('completes for a scope whose synchronous init failed', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _app(const _CloseScope(init: _neverEmits, failSyncInit: true)),
+      );
+      expect(tester.takeException(), isA<StateError>());
+
+      final element = _scopeOf(tester);
+      var closed = false;
+      unawaited(element.close().then((_) => closed = true));
+
+      // Not `_settle`: the failure is terminal, so every rebuild the disposal
+      // asks for reports it again, and a second pending exception is a test
+      // failure of its own. This is about `close()` coming back at all.
+      for (var i = 0; i < 20 && !closed; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 10)),
+        );
+        await tester.pump(const Duration(milliseconds: 10));
+        tester.takeException();
+      }
+
+      expect(closed, isTrue);
+    });
   });
 
   // `_performAsyncInit` hands the cancellation over to `_subscription`, and
@@ -1017,6 +1048,10 @@ final class _CloseScope
   /// refuses to be released does.
   final bool failStateDispose;
 
+  /// Makes the synchronous [ScopeInheritedElement.init] fail, so the scope
+  /// never reaches its asynchronous phase at all.
+  final bool failSyncInit;
+
   /// Becomes [AsyncScopeElementBase.scopeKey], so `close()` can be exercised
   /// on a scope that actually holds a key.
   final Object? testKey;
@@ -1027,6 +1062,7 @@ final class _CloseScope
     this.failStateInit = false,
     this.failStateInitAsync = false,
     this.failStateDispose = false,
+    this.failSyncInit = false,
     this.testKey,
   });
 
@@ -1048,6 +1084,14 @@ final class _CloseScopeElement extends LiteScopeElementBase<_CloseScope,
 
   @override
   Object? get scopeKey => widget.testKey;
+
+  @override
+  void init() {
+    if (widget.failSyncInit) {
+      throw StateError('controlled sync init failure');
+    }
+    super.init();
+  }
 
   @override
   Stream<AsyncScopeInitState> initAsync() => widget.init();

@@ -28,6 +28,13 @@ final class _NullWidget extends Widget {
   Element createElement() => throw UnimplementedError();
 }
 
+/// The element whose initialization hook is running right now.
+///
+/// Written only from inside `assert`s, so it costs nothing in release builds.
+/// It is what lets the lookup below tell a subscription taken from the hook --
+/// which can never be honoured -- from an ordinary one.
+Element? _debugInitializingElement;
+
 /// {@category base}
 abstract interface class ScopeContext<W extends ScopeInheritedWidget> {
   /// The widget of this scope.
@@ -72,6 +79,15 @@ abstract interface class ScopeContext<W extends ScopeInheritedWidget> {
     required bool listen,
     V Function(C)? selector,
   }) {
+    assert(
+      !listen || !identical(context, _debugInitializingElement),
+      'A scope cannot be subscribed to from the initialization hook. The hook '
+      'runs once, before the first build, and is never called again, so a '
+      'subscription taken there rebuilds the subtree while the value the hook '
+      'read stays behind. Look the scope up with `listen: false` here, and '
+      'subscribe from `buildChild()` or from the widgets below instead.',
+    );
+
     final element = context.getElementForInheritedWidgetOfExactType<W>();
     if (element == null) {
       return null;
@@ -107,21 +123,25 @@ abstract interface class ScopeInheritedElement<W extends ScopeInheritedWidget>
   @override
   W get widget;
 
-  /// Called after the element is mounted and before its first [buildChild].
+  /// Called once, after the element is mounted and before its first
+  /// [buildChild].
   ///
-  /// If it throws, the next build retries it. After its first successful
-  /// return, it is not called again.
-  ///
-  /// The element is already connected to its ancestors, so implementations may
-  /// look a scope up from this context with `listen: false`.
+  /// If it throws, the failure is terminal: the hook is not attempted again,
+  /// the scope shows an error instead of its subtree, and every later build
+  /// reports the same failure. Subscribing to another scope from here is not
+  /// supported and is caught by an assertion; looking one up with
+  /// `listen: false` is, since the element is already connected to its
+  /// ancestors.
   ///
   /// Everything the scope owns is acquired here and released in [dispose].
   @mustCallSuper
   void init();
 
-  /// Called when an element that initialized successfully is unmounted.
+  /// Called when the element is unmounted, unless [init] never ran at all.
   ///
-  /// A failed [init] attempt does not call this normal cleanup hook.
+  /// An [init] that threw halfway is cleaned up here too, so whatever it took
+  /// before it failed is given back. Implementations therefore have to expect
+  /// a partially initialized scope.
   @mustCallSuper
   void dispose();
 

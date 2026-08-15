@@ -18,8 +18,9 @@ void main() {
         // necessary because `WidgetTester.pumpWidget`/`pump` always run a
         // full `handleDrawFrame()`, which unconditionally drains *every*
         // currently-queued post-frame callback right after the build
-        // phase -- including the one `mount()` schedules synchronously via
-        // `SchedulerBinding.addPostFrameCallback` in `_performAsyncInit`.
+        // phase -- including the one the first `performRebuild()` schedules
+        // synchronously, via `SchedulerBinding.addPostFrameCallback` in
+        // `_performAsyncInit`.
         // That makes it impossible to get the element removed *before*
         // that specific callback runs using only `pumpWidget` calls: the
         // callback always fires within the very same frame it was
@@ -78,8 +79,9 @@ void main() {
         // `AsyncScopeReady` branch of `_performAsyncInit`) is only
         // scheduled once `initAsync()` completes, which -- unlike the
         // `_registerWithParent` callback -- does not happen synchronously
-        // during `mount()`. `pumpWidget`/`pump` would drain it within the
-        // very same call that schedules it, so we drive things by hand.
+        // during the first `performRebuild()`. `pumpWidget`/`pump` would
+        // drain it within the very same call that schedules it, so we drive
+        // things by hand.
         binding.attachRootWidget(
           binding.wrapWithDefaultView(
             const Directionality(
@@ -173,23 +175,23 @@ void main() {
   // to `disposeAsync()` at all.
   group('AsyncScope failed initialization', () {
     testWidgets(
-      'defers asynchronous initialization until the first successful sync init',
+      'never starts the asynchronous phase when the synchronous init failed',
       (tester) async {
         final scopeKey = GlobalKey();
-        var failSyncInit = true;
 
-        Widget buildTree() => Directionality(
+        Widget buildTree(String label) => Directionality(
               textDirection: TextDirection.ltr,
-              child: _SyncRetryAsyncScope(
+              child: _SyncInitAsyncScope(
                 key: scopeKey,
-                failSyncInit: failSyncInit,
+                failSyncInit: true,
+                label: label,
               ),
             );
 
-        await tester.pumpWidget(buildTree());
+        await tester.pumpWidget(buildTree('first'));
 
-        final element = tester.element(find.byType(_SyncRetryAsyncScope))
-            as _SyncRetryAsyncScopeElement;
+        final element = tester.element(find.byType(_SyncInitAsyncScope))
+            as _SyncInitAsyncScopeElement;
 
         expect(element.syncInitAttempts, 1);
         expect(element.asyncInitStarts, 0);
@@ -202,16 +204,64 @@ void main() {
           ),
         );
 
-        failSyncInit = false;
-        await tester.pumpWidget(buildTree());
+        // The failure is terminal: a parent rebuild reports it again instead
+        // of running the hook a second time.
+        await tester.pumpWidget(buildTree('second'));
+        await tester.pump();
+
+        expect(tester.takeException(), isA<StateError>());
+        expect(element.syncInitAttempts, 1);
+        expect(element.asyncInitStarts, 0);
+
+        await tester.pumpWidget(
+          const Directionality(
+            textDirection: TextDirection.ltr,
+            child: SizedBox.shrink(),
+          ),
+        );
+        await _settle(tester, until: () => false);
+
+        expect(
+          element.disposeCount,
+          0,
+          reason: 'nothing was initialized asynchronously, so nothing is '
+              'disposed of asynchronously',
+        );
+      },
+    );
+
+    testWidgets(
+      'starts the asynchronous phase once, after the successful sync init',
+      (tester) async {
+        final scopeKey = GlobalKey();
+
+        Widget buildTree(String label) => Directionality(
+              textDirection: TextDirection.ltr,
+              child: _SyncInitAsyncScope(
+                key: scopeKey,
+                failSyncInit: false,
+                label: label,
+              ),
+            );
+
+        await tester.pumpWidget(buildTree('first'));
         await tester.pumpAndSettle();
 
+        final element = tester.element(find.byType(_SyncInitAsyncScope))
+            as _SyncInitAsyncScopeElement;
+
         expect(tester.takeException(), isNull);
-        expect(element.syncInitAttempts, 2);
+        expect(element.syncInitAttempts, 1);
+        expect(element.asyncInitStarts, 1);
+
+        await tester.pumpWidget(buildTree('second'));
+        await tester.pumpAndSettle();
+
+        expect(element.syncInitAttempts, 1);
         expect(
           element.asyncInitStarts,
           1,
-          reason: 'a successful retry starts the async phase exactly once',
+          reason: 'a rebuild does not start the async phase again',
         );
 
         await tester.pumpWidget(
@@ -223,6 +273,79 @@ void main() {
         await _settle(tester, until: () => element.disposeCount == 1);
 
         expect(element.disposeCount, 1);
+      },
+    );
+
+    testWidgets(
+      'a scope whose synchronous init failed is not left registered with its '
+      'parent',
+      (tester) async {
+        final movedKey = GlobalKey();
+
+        Widget buildTree({required bool left}) => Directionality(
+              textDirection: TextDirection.ltr,
+              child: _WaitingParentScope(
+                child: SizedBox(
+                  width: 100,
+                  height: 100,
+                  child: left
+                      ? Align(
+                          alignment: Alignment.topLeft,
+                          child: SizedBox(
+                            key: movedKey,
+                            child: const _SyncInitAsyncScope(
+                              failSyncInit: true,
+                              label: 'child',
+                            ),
+                          ),
+                        )
+                      : Center(
+                          child: SizedBox(
+                            key: movedKey,
+                            child: const _SyncInitAsyncScope(
+                              failSyncInit: true,
+                              label: 'child',
+                            ),
+                          ),
+                        ),
+                ),
+              ),
+            );
+
+        await tester.pumpWidget(buildTree(left: true));
+        expect(tester.takeException(), isA<StateError>());
+
+        final parent = tester.element(find.byType(_WaitingParentScope))
+            as _WaitingParentScopeElement;
+
+        // The move re-activates the whole subtree, which is where a scope
+        // registers itself with its parent again. A scope that never
+        // initialized has nothing to register: nothing would ever take the
+        // entry back, and the parent would wait out its whole timeout on it.
+        await tester.pumpWidget(buildTree(left: false));
+        tester.takeException();
+
+        expect(parent.childrenCount, 0);
+
+        await tester.pumpWidget(
+          const Directionality(
+            textDirection: TextDirection.ltr,
+            child: SizedBox.shrink(),
+          ),
+        );
+        await _settle(tester, until: () => parent.disposed);
+
+        expect(
+          parent.disposed,
+          isTrue,
+          reason: 'the parent got to its own disposal instead of waiting for a '
+              'child that will never report back',
+        );
+        expect(
+          parent.timedOut,
+          isFalse,
+          reason: 'and it was not an expiry that released it',
+        );
       },
     );
 
@@ -956,26 +1079,33 @@ final class _WaitingParentScopeElement extends AsyncScopeElementBase<
   Widget buildOnState(AsyncScopeState state) => widget.child;
 }
 
-/// A scope whose synchronous setup can fail before its normal base setup, then
-/// recover on the next rebuild.
-final class _SyncRetryAsyncScope
-    extends AsyncScopeCore<_SyncRetryAsyncScope, _SyncRetryAsyncScopeElement> {
+/// A scope whose synchronous setup can fail before its normal base setup.
+///
+/// The [label] is what makes a rebuild carry a different widget, so a test can
+/// tell a repeated build apart from a repeated hook.
+final class _SyncInitAsyncScope
+    extends AsyncScopeCore<_SyncInitAsyncScope, _SyncInitAsyncScopeElement> {
   final bool failSyncInit;
+  final String label;
 
-  const _SyncRetryAsyncScope({super.key, required this.failSyncInit});
+  const _SyncInitAsyncScope({
+    super.key,
+    required this.failSyncInit,
+    required this.label,
+  });
 
   @override
-  _SyncRetryAsyncScopeElement createScopeElement() =>
-      _SyncRetryAsyncScopeElement(this);
+  _SyncInitAsyncScopeElement createScopeElement() =>
+      _SyncInitAsyncScopeElement(this);
 }
 
-final class _SyncRetryAsyncScopeElement extends AsyncScopeElementBase<
-    _SyncRetryAsyncScope, _SyncRetryAsyncScopeElement> {
+final class _SyncInitAsyncScopeElement extends AsyncScopeElementBase<
+    _SyncInitAsyncScope, _SyncInitAsyncScopeElement> {
   int syncInitAttempts = 0;
   int asyncInitStarts = 0;
   int disposeCount = 0;
 
-  _SyncRetryAsyncScopeElement(super.widget);
+  _SyncInitAsyncScopeElement(super.widget);
 
   @override
   void init() {

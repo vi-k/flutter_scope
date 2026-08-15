@@ -9,6 +9,37 @@ void main() {
   });
 
   group('ScopeNotifier', () {
+    testWidgets('a failed create leaves nothing to unsubscribe from', (
+      tester,
+    ) async {
+      // The disposal runs for a scope whose initialization failed too, and
+      // this family's disposer reaches for the model to take its listener
+      // back — a model a `create` that threw never produced.
+      await tester.pumpWidget(
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: ScopeNotifier<_Counter>(
+            create: (context) => throw StateError('controlled create failure'),
+            dispose: (counter) => counter.dispose(),
+            builder: (context) => const SizedBox.shrink(),
+          ),
+        ),
+      );
+
+      expect(
+        tester.takeException(),
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          'controlled create failure',
+        ),
+      );
+
+      await tester.pumpWidget(const SizedBox.shrink());
+
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('rebuilds only the dependents whose selected value changed', (
       tester,
     ) async {

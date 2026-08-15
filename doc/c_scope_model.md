@@ -35,15 +35,16 @@ build; the element already owns the exact model it created, so it hands that
 instance to the callback directly instead of asking teardown code to look it
 up through the tree.
 
-`create` runs after the element is mounted, before its first subtree build. If
-it throws, the next build retries it; after the first successful return it does
-not run again. `dispose` runs once when that successfully-created model's
-element is unmounted; a failed `create` attempt has no model to hand to
-`dispose`. The `context` handed to `create` is the scope's own element, so an
-ancestor scope can be read from it —
+`create` runs once, after the element is mounted and before its first subtree
+build. If it throws, that is the end of the scope: `create` is not attempted
+again and the scope shows an error instead of its subtree. `dispose` runs when
+the element is unmounted, and only for a model that was actually created — a
+failed `create` has nothing to hand over. The `context` handed to `create` is
+the scope's own element, so an ancestor scope can be read from it —
 `ScopeModel.of<Session>(context, listen: false)` — but with `listen: false`
-only: `create` runs outside a build, and a subscription taken there would have
-nothing to rebuild.
+only: `create` is called once and never again, so a subscription taken there
+would rebuild the subtree around a value that stays as it was. An assertion
+catches it.
 
 `ScopeModel.value` takes a model somebody else owns:
 
@@ -125,12 +126,12 @@ change only when the tree above them changes.
 
 `create` is called from `init()` once the element is mounted and before its
 first subtree build, so a successfully-created model is ready for anything
-below it. A thrown `create` is retried on the next build; after success it is
-not called again.
+below it. A thrown `create` is terminal: it is not called again.
 
 `dispose` is called from `dispose()` of the element, after the base class has
-run its own teardown. It is called only for a model the scope created — a
-`.value` model is left alone.
+run its own teardown. The element disposer runs after a failed initialization
+too, but `dispose` itself is called only for a model the scope actually
+created — a `.value` model, and a `create` that threw, are both left alone.
 
 The lifetime is the element's, not the widget's. A scope rebuilt with new
 parameters keeps its model; a scope removed from the tree loses it. Moving a

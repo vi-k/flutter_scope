@@ -9,10 +9,9 @@ void main() {
   });
 
   group('ScopeModel', () {
-    testWidgets('retries a synchronous create failure on the next build', (
-      tester,
-    ) async {
+    testWidgets('does not run create again after it failed', (tester) async {
       final scopeKey = GlobalKey();
+      final disposed = <_Model>[];
       var createAttempts = 0;
 
       Widget buildTree() => Directionality(
@@ -21,13 +20,10 @@ void main() {
               key: scopeKey,
               create: (context) {
                 createAttempts++;
-                if (createAttempts == 1) {
-                  throw StateError('controlled create failure');
-                }
 
-                return _Model('recovered');
+                throw StateError('controlled create failure');
               },
-              dispose: (model) {},
+              dispose: disposed.add,
               builder: (context) {
                 final model = ScopeModel.of<_Model>(context, listen: false);
 
@@ -52,11 +48,27 @@ void main() {
 
       expect(
         tester.takeException(),
-        isNull,
-        reason: 'the keyed scope remains a real child and can be rebuilt',
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          'controlled create failure',
+        ),
+        reason: 'the recorded failure is reported again',
       );
-      expect(createAttempts, 2);
-      expect(find.text('name: recovered'), findsOneWidget);
+      expect(
+        createAttempts,
+        1,
+        reason: 'a failed create is not attempted a second time',
+      );
+
+      await tester.pumpWidget(const SizedBox.shrink());
+
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: 'removing a failed scope is quiet',
+      );
+      expect(disposed, isEmpty, reason: 'there is no model to hand over');
     });
 
     testWidgets(
