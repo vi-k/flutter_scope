@@ -12,6 +12,13 @@
             "program": "lib/main.dart"
         },
         {
+            "name": "scopo navigation_node example",
+            "cwd": "example/navigation_node",
+            "request": "launch",
+            "type": "dart",
+            "program": "lib/main.dart"
+        },
+        {
             "name": "scopo demo",
             "cwd": "example/scopo_demo",
             "request": "launch",
