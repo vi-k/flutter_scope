@@ -19,6 +19,13 @@
   inside `init()` or `ScopeModel.create()` — is now caught by an assertion.
   The hook runs once, before the first build, so such a subscription could
   never be honoured; look the scope up with `listen: false` instead.
+* Fix a dependency keeping what it had already taken. A dependency whose
+  initializer acquired a resource and registered its disposer, and only then
+  failed or was cancelled, was skipped by the disposal entirely: the criterion
+  was the state it ended in rather than what it was holding. Whatever was taken
+  is now released either way, once. A dependency in that position therefore
+  reports `disposed` rather than `cancelled` when it carried no errors of its
+  own.
 * Fix `NavigationNode` system back handling: a pushed route or dialog in its
   nested navigator now closes before the enclosing route can pop. Once the node
   has nothing of its own left to close, `onPop` is asked exactly once and its

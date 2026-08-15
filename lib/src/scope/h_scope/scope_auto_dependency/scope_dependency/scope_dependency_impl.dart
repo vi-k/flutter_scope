@@ -14,9 +14,15 @@ final class _ScopeDependencyImpl with ScopeDependencyMixin {
   _ScopeDependencyImpl(this.name, this._init)
       : assert(name.isNotEmpty, 'The dependency name cannot be empty');
 
+  /// Whether this dependency is holding something that has to be given back.
+  ///
+  /// The question is what the initializer took, not how it ended. An
+  /// initializer that acquired a resource and registered its disposer keeps
+  /// that resource whether it then succeeded, failed or was cancelled — and the
+  /// promise is to release everything that was created. Asking the state
+  /// instead let a failure keep whatever it had already taken.
   @override
-  bool get disposalRequired =>
-      state is ScopeDependencyInitialized && _helper?.dispose != null;
+  bool get disposalRequired => !_isDisposalDone && _helper?.dispose != null;
 
   @override
   Stream<String> init() async* {
@@ -35,12 +41,13 @@ final class _ScopeDependencyImpl with ScopeDependencyMixin {
 
   @override
   Stream<String> dispose() async* {
-    if (_state is! ScopeDependencyInitialized) {
+    final disposer = _helper?.dispose;
+    if (disposer == null) {
       return;
     }
 
     try {
-      final result = _helper?.dispose?.call();
+      final result = disposer();
       if (result is Future<void>) {
         await result;
       }
