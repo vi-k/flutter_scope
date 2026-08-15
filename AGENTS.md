@@ -103,13 +103,14 @@ fvm flutter test                     # все зелёные; число — в 
 fvm flutter analyze                  # корень
 (cd example/minimal && fvm flutter analyze)
 (cd example/scopo_demo && fvm flutter analyze)
+(cd example/navigation_node && fvm flutter analyze)
 fvm dart format --set-exit-if-changed lib test
 fvm dart doc --dry-run               # 0 warnings, 0 errors
 fvm dart pub publish --dry-run       # 0 warnings
 sh docs/ru/check.sh                  # переводы отвечают оригиналам
 ```
 
-Перед мержем в `main` проходят все семь. Утверждать «работает» без вывода
+Перед мержем в `main` проходят все восемь. Утверждать «работает» без вывода
 команды нельзя: сначала прогон, потом заявление.
 
 **Прогнал что-то другим SDK** — глобальным `flutter` с `PATH` (там 3.44.9) или
@@ -131,7 +132,8 @@ fvm flutter clean && fvm flutter pub get
 файл в корень репозитория — прогони `dart pub publish --dry-run` и посмотри
 список: всё лишнее сразу в `.pubignore`.
 
-Особенности: у `example/minimal` и `example/scopo_demo` свои `pubspec`, при
+Особенности: у `example/minimal`, `example/scopo_demo` и
+`example/navigation_node` свои `pubspec`, при
 обновлении зависимостей их обновляют отдельно; корневой `pubspec.lock` в
 `.gitignore`, локи примеров закоммичены и пересозданы закреплённым тулчейном.
 `dart format` на 6 файлах `example/scopo_demo` расходится с форматтером — это
