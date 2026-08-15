@@ -4,22 +4,18 @@
 > работы — это снимок «здесь и сейчас», а не история (история — в
 > `docs/records/`) и не список пожеланий (он в `docs/backlog.md`).
 
-> Текущая операция: третья ограниченная TDD fix-волна P1 №1 завершена в
-> единственном amended commit `fix: initialize scope elements after mount`.
-> Независимый финальный review не нашёл Critical, Important или Minor findings.
-> Async-фаза `AsyncScope` теперь запускается из `performRebuild()` лишь
-> после первого успешного sync `init()` и защищена once-флагом. Реальный
-> widget-тест дал RED на исходном `mount()` (`initAsync()` стартовал после
-> controlled sync failure), GREEN на новом коде и RED на двух мутациях:
-> удаление `_didInit` снова стартует async-фазу после ошибки, удаление once-флага
-> повторно входит в `_performAsyncInit()` на следующем rebuild. Полный гейт на
-> Flutter 3.29.0 зелёный: 151/151, три чистых analyze, форматтер 76/0, dartdoc
-> 0/0 и 13 актуальных зеркал. Live publish закономерно дал только dirty-tree
-> warning; чистый temporary clone точного publishable будущего дерева — 0
-> warnings. Dartdoc, две тематические страницы, русские зеркала и CHANGELOG
-> описывают retry до первого успешного возврата и normal disposer только после
-> успеха. `docs/backlog.md` остаётся единственной чужой правкой и в индекс не
-> попадёт.
+> Текущая операция: P1 №1 завершён в `0152f78 fix: initialize scope elements
+> after mount` и отправлен в `origin/main`. Начата диагностическая и дизайн-фаза
+> P1 №2 из полного review: системный back должен сначала обрабатывать вложенный
+> `Navigator` в `NavigationNode`. Причина подтверждена: текущий `PopScope`
+> регистрируется на внешнем `ModalRoute`, поэтому системный pop от корневого
+> `Navigator` не вызывает `_NodeNavigator.maybePop()`. В объём этой волны входят
+> постоянные widget-тесты для вложенного route, dialog и root node; P2 №14
+> (повторный/поздний async pop) и №17 (смена `navigatorKey`) не расширяют её.
+> Дизайн утверждён и записан в
+> `docs/records/2026-08-15[4]-navigation-system-back-design.md`; далее нужен
+> детальный TDD-план. `docs/backlog.md` остаётся единственной чужой правкой и в
+> индекс не попадёт.
 
 ## С чего начать после рестарта
 
