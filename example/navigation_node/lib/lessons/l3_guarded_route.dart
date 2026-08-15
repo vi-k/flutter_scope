@@ -29,10 +29,12 @@ class _Stage extends StatelessWidget {
         child: NavigationNode(
           child: const NodeHome(
             title: 'first page of the node',
-            child: PushButton(
-              label: 'Push the guarded page',
-              pageName: 'guarded page',
-              builder: _buildPage,
+            child: ScrollIfTight(
+              child: PushButton(
+                label: 'Push the guarded page',
+                pageName: 'guarded page',
+                builder: _buildPage,
+              ),
             ),
           ),
         ),

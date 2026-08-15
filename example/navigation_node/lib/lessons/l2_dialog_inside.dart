@@ -38,21 +38,24 @@ class _Stage extends StatelessWidget {
             child: NodeHome(
               title: 'first page of the node',
               child: Builder(
-                builder: (context) => Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const ScopeReadout(),
-                    const SizedBox(height: 12),
-                    FilledButton.tonal(
-                      onPressed: () => _open(context, useRootNavigator: false),
-                      child: const Text('Dialog in the node'),
-                    ),
-                    const SizedBox(height: 12),
-                    OutlinedButton(
-                      onPressed: () => _open(context, useRootNavigator: true),
-                      child: const Text('Dialog on the application'),
-                    ),
-                  ],
+                builder: (context) => ScrollIfTight(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const ScopeReadout(),
+                      const SizedBox(height: 12),
+                      FilledButton.tonal(
+                        onPressed: () =>
+                            _open(context, useRootNavigator: false),
+                        child: const Text('Dialog in the node'),
+                      ),
+                      const SizedBox(height: 12),
+                      OutlinedButton(
+                        onPressed: () => _open(context, useRootNavigator: true),
+                        child: const Text('Dialog on the application'),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -68,20 +71,19 @@ class _Stage extends StatelessWidget {
     showDialog<void>(
       context: context,
       useRootNavigator: useRootNavigator,
-      builder: (context) => AlertDialog(
-        title: Text('Dialog $where'),
+      builder: (context) => NodeDialog(
+        title: 'Dialog $where',
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               useRootNavigator
-                  ? 'This one sits above the node. The node cannot close it, '
-                      'so the back travels past it.'
-                  : 'This one is a route of the node. The node closes it '
-                      'before anything outside hears the back.',
+                  ? 'Above the node — the back travels past it.'
+                  : 'A route of the node — closed before anything outside '
+                      'hears the back.',
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
             const ScopeReadout(),
           ],
         ),

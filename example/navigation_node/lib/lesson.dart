@@ -69,45 +69,58 @@ class _LessonPageState extends State<LessonPage> {
 
     return Scaffold(
       appBar: AppBar(title: Text(lesson.title)),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                for (final paragraph in lesson.explanation)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Text(paragraph, style: theme.textTheme.bodyMedium),
-                  ),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.primaryContainer,
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    'Try: ${lesson.instruction}',
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: theme.colorScheme.onPrimaryContainer,
+      body: LayoutBuilder(
+        builder: (context, constraints) => Column(
+          children: [
+            // The words never take more than a third of the window: the stage
+            // is what has to fit, and a node's own box is a slice of whatever
+            // is left over.
+            ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: constraints.maxHeight / 3,
+              ),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    for (final paragraph in lesson.explanation)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Text(
+                          paragraph,
+                          style: theme.textTheme.bodySmall,
+                        ),
+                      ),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.primaryContainer,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        'Try: ${lesson.instruction}',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onPrimaryContainer,
+                        ),
+                      ),
                     ),
-                  ),
+                  ],
                 ),
-              ],
+              ),
             ),
-          ),
-          const Divider(height: 1),
-          Expanded(
-            child: NotificationListener<NavigationNotification>(
-              onNotification: _watchSubtree,
-              child: Builder(builder: lesson.stage),
+            const Divider(height: 1),
+            Expanded(
+              child: NotificationListener<NavigationNotification>(
+                onNotification: _watchSubtree,
+                child: Builder(builder: lesson.stage),
+              ),
             ),
-          ),
-          const Divider(height: 1),
-          SystemBackBar(subtreeCanHandlePop: _subtreeCanHandlePop),
-        ],
+            const Divider(height: 1),
+            SystemBackBar(subtreeCanHandlePop: _subtreeCanHandlePop),
+          ],
+        ),
       ),
     );
   }
@@ -195,6 +208,69 @@ class PushButton extends StatelessWidget {
       );
 }
 
+/// Centres its child, and scrolls instead of overflowing when the box is small.
+///
+/// A node's box is a slice of the window, and the window can be any size. This
+/// is the difference between a lesson that degrades and one that throws.
+class ScrollIfTight extends StatelessWidget {
+  /// What to centre.
+  final Widget child;
+
+  /// Creates the box.
+  const ScrollIfTight({required this.child, super.key});
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+        builder: (context, constraints) => SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              minHeight: (constraints.maxHeight - 16).clamp(0, double.infinity),
+            ),
+            child: Center(child: child),
+          ),
+        ),
+      );
+}
+
+/// A dialog sized for the room a node actually has.
+///
+/// A dialog opened with `useRootNavigator: false` belongs to the node, so it is
+/// drawn inside the node's box — a slice of an already small window, not the
+/// whole screen. Material's default insets and padding assume the latter, and
+/// the difference is enough to push the buttons out of sight.
+class NodeDialog extends StatelessWidget {
+  /// The dialog's title.
+  final String title;
+
+  /// What the dialog says.
+  final Widget content;
+
+  /// The buttons along its bottom.
+  final List<Widget> actions;
+
+  /// Creates the dialog.
+  const NodeDialog({
+    required this.title,
+    required this.content,
+    required this.actions,
+    super.key,
+  });
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+        // Whatever is still too tall scrolls instead of overflowing.
+        scrollable: true,
+        insetPadding: const EdgeInsets.all(8),
+        titlePadding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+        contentPadding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+        actionsPadding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+        title: Text(title, style: Theme.of(context).textTheme.titleSmall),
+        content: content,
+        actions: actions,
+      );
+}
+
 /// The first page of a node, with an `AppBar` so its back arrow is visible.
 ///
 /// The arrow is worth watching. Flutter draws it when the route thinks a pop
@@ -220,7 +296,7 @@ class NodeHome extends StatelessWidget {
           primary: false,
           toolbarHeight: 44,
         ),
-        body: Center(child: child),
+        body: child,
       );
 }
 
@@ -247,7 +323,7 @@ class SamplePage extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(title: Text(title), primary: false),
       backgroundColor: theme.colorScheme.surfaceContainerHighest,
-      body: Center(
+      body: ScrollIfTight(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [

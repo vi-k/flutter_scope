@@ -82,7 +82,7 @@ class JournalScope extends InheritedNotifier<Journal> {
 /// Shows the tail of the journal.
 class JournalView extends StatelessWidget {
   /// How many lines to keep on screen.
-  static const visibleLines = 7;
+  static const visibleLines = 4;
 
   /// Creates the view.
   const JournalView({super.key});

@@ -17,6 +17,42 @@ Future<void> openLesson(WidgetTester tester, String title) async {
 }
 
 void main() {
+  group('on a small window', () {
+    setUp(() {
+      final view =
+          TestWidgetsFlutterBinding.instance.platformDispatcher.views.first;
+
+      // A node's dialog is drawn inside the node's own box, which is a slice of
+      // an already small window. Anything that does not fit throws here.
+      view.physicalSize = const Size(800, 600);
+      view.devicePixelRatio = 1.0;
+    });
+
+    testWidgets('lesson 2: both dialogs fit inside the node', (tester) async {
+      await openLesson(tester, lessons[1].title);
+
+      await tester.tap(find.text('Dialog in the node'));
+      await tester.pumpAndSettle();
+      expect(find.byType(AlertDialog), findsOneWidget);
+
+      await pressSystemBackButton(tester);
+      await tester.tap(find.text('Dialog on the application'));
+      await tester.pumpAndSettle();
+      expect(find.byType(AlertDialog), findsOneWidget);
+    });
+
+    testWidgets('lesson 4: the onPop dialog fits inside the node',
+        (tester) async {
+      await openLesson(tester, lessons[3].title);
+
+      await pressSystemBackButton(tester);
+
+      expect(find.text('Leave this lesson?'), findsOneWidget);
+      await tester.tap(find.text('Stay'));
+      await tester.pumpAndSettle();
+    });
+  });
+
   setUp(() {
     final view =
         TestWidgetsFlutterBinding.instance.platformDispatcher.views.first;

@@ -45,25 +45,27 @@ class _Node extends StatelessWidget {
           child: NodeHome(
             title: isRoot ? 'root node — no arrow' : 'ordinary node — arrow',
             child: Builder(
-              builder: (context) => Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    isRoot ? 'keeps the pop' : 'forwards the pop',
-                    style: Theme.of(context).textTheme.titleSmall,
-                  ),
-                  const SizedBox(height: 12),
-                  FilledButton.tonal(
-                    onPressed: () {
-                      JournalScope.of(context, listen: false).log(
-                        'pop() on the first page of '
-                        '${isRoot ? 'the root node' : 'an ordinary node'}',
-                      );
-                      Navigator.of(context).pop();
-                    },
-                    child: const Text('pop() the first page'),
-                  ),
-                ],
+              builder: (context) => ScrollIfTight(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      isRoot ? 'keeps the pop' : 'forwards the pop',
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                    const SizedBox(height: 12),
+                    FilledButton.tonal(
+                      onPressed: () {
+                        JournalScope.of(context, listen: false).log(
+                          'pop() on the first page of '
+                          '${isRoot ? 'the root node' : 'an ordinary node'}',
+                        );
+                        Navigator.of(context).pop();
+                      },
+                      child: const Text('pop() the first page'),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

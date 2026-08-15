@@ -40,11 +40,10 @@ class _StageState extends State<_Stage> {
     final leave = await showDialog<bool>(
       context: context,
       useRootNavigator: false,
-      builder: (context) => AlertDialog(
-        title: const Text('Leave this lesson?'),
+      builder: (context) => NodeDialog(
+        title: 'Leave this lesson?',
         content: const Text(
-          'This dialog is what onPop returning a Future looks like: the route '
-          'is held until you answer.',
+          'onPop returned a Future: the route waits for your answer.',
         ),
         actions: [
           TextButton(
@@ -78,20 +77,22 @@ class _StageState extends State<_Stage> {
         child: NodeHome(
           title: 'first page of the node',
           child: Builder(
-            builder: (context) => Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'onPop asked $_asked ${_asked == 1 ? 'time' : 'times'}',
-                  style: theme.textTheme.titleMedium,
-                ),
-                const SizedBox(height: 12),
-                const PushButton(
-                  label: 'Push a page inside first',
-                  pageName: 'page inside the node',
-                  builder: _buildPage,
-                ),
-              ],
+            builder: (context) => ScrollIfTight(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'onPop asked $_asked ${_asked == 1 ? 'time' : 'times'}',
+                    style: theme.textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 12),
+                  const PushButton(
+                    label: 'Push a page inside first',
+                    pageName: 'page inside the node',
+                    builder: _buildPage,
+                  ),
+                ],
+              ),
             ),
           ),
         ),

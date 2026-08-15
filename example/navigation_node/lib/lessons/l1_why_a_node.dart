@@ -85,7 +85,7 @@ class _StageBody extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) => Center(
+  Widget build(BuildContext context) => ScrollIfTight(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
