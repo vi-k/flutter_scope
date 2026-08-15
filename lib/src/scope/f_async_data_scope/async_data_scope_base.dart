@@ -150,8 +150,13 @@ final class _AsyncDataScopeElement<W extends AsyncDataScopeBase<W, T>,
 
   @override
   void unmount() {
-    widget.onUnmount(_data);
-    super.unmount();
+    // See `_AsyncScopeElement.unmount`: the hook may fail, the teardown behind
+    // it still runs.
+    try {
+      widget.onUnmount(_data);
+    } finally {
+      super.unmount();
+    }
   }
 
   @override

@@ -162,8 +162,16 @@ final class _AsyncScopeElement<W extends AsyncScopeBase<W>>
 
   @override
   void unmount() {
-    widget.onUnmount();
-    super.unmount();
+    // The hook is user code, the teardown behind it is the promise the scope
+    // made. A failure here used to take the whole of `super.unmount()` with
+    // it: nothing unregistered from the parent, nothing released the
+    // `scopeKey`, and the model was never disposed of. The failure still
+    // surfaces -- once everything has been given back.
+    try {
+      widget.onUnmount();
+    } finally {
+      super.unmount();
+    }
   }
 
   @override

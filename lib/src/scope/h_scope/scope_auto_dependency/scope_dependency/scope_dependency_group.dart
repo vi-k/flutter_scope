@@ -35,6 +35,29 @@ abstract base class ScopeDependencyGroup with ScopeDependencyMixin {
           state is ScopeDependencyFailed ||
           state is ScopeDependencyCancelled);
 
+  /// Unmounts every child, whatever any one of them makes of it.
+  ///
+  /// The hooks are user code, and one that fails is no reason to leave the
+  /// siblings mounted -- each of them has its own subscription to drop. The
+  /// first failure is passed on once the walk is over.
+  @override
+  void unmount() {
+    AsyncError? failure;
+
+    for (final dependency in _dependencies) {
+      try {
+        dependency.unmount();
+        // ignore: avoid_catching_errors
+      } on Object catch (error, stackTrace) {
+        failure ??= AsyncError(error, stackTrace);
+      }
+    }
+
+    if (failure case final failure?) {
+      Error.throwWithStackTrace(failure.error, failure.stackTrace);
+    }
+  }
+
   String _path(String name) => this.name.isEmpty ? name : '${this.name}/$name';
 
   @override
@@ -85,13 +108,6 @@ final class _ScopeDependencySequential extends ScopeDependencyGroup {
   }
 
   @override
-  void unmount() {
-    for (final dependency in _dependencies) {
-      dependency.unmount();
-    }
-  }
-
-  @override
   Stream<String> dispose() async* {
     final dependencies = _dependencies //
         .reversed
@@ -132,13 +148,6 @@ final class _ScopeDependencyConcurrent extends ScopeDependencyGroup {
         .map((dep) => dep.runInit())
         ._mergeStreams()
         .map(_path);
-  }
-
-  @override
-  void unmount() {
-    for (final dependency in _dependencies) {
-      dependency.unmount();
-    }
   }
 
   @override

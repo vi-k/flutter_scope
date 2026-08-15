@@ -636,6 +636,84 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
   Future<void> _performAsyncDispose() async {
     _isDisposing = true;
 
+    // Three stages, each guarded on its own rather than chained: every one of
+    // them reaches user code, and a failure in one is never a reason to skip
+    // the ones after it. Preparing gives up on the waits, `disposeAsync()`
+    // releases what the scope acquired, and the `finally` gives back what the
+    // scope was lent -- its place with the parent, its `scopeKey`, its model.
+    // The first failure is passed on once all three are over, so the caller
+    // still hears about it.
+    AsyncError? failure;
+
+    try {
+      try {
+        await _prepareForDisposal();
+        // ignore: avoid_catching_errors
+      } on Object catch (error, stackTrace) {
+        _log.e(
+          'preparation for disposal failed',
+          error: error,
+          stackTrace: stackTrace,
+        );
+        failure = AsyncError(error, stackTrace);
+      }
+
+      try {
+        if (_initSucceeded) {
+          _log.i('dispose…');
+          final result = disposeAsync();
+          if (result is Future<void>) {
+            await result;
+          }
+        } else {
+          _log.d('do not dispose of');
+        }
+
+        _log.i('disposed');
+        // ignore: avoid_catching_errors
+      } on Object catch (error, stackTrace) {
+        _log.e('disposal failed', error: error, stackTrace: stackTrace);
+        failure ??= AsyncError(error, stackTrace);
+      }
+    } finally {
+      // Cleared, not just unregistered: the element outlives its disposal
+      // when it was closed via `close()` rather than removed from the tree,
+      // and a stale entry left in the field is one `_registerWithParent()`
+      // would try to unregister a second time.
+      if (_asyncScopeParentEntry case final asyncScopeParentEntry?) {
+        asyncScopeParentEntry.unregister();
+        _asyncScopeParentEntry = null;
+      }
+
+      if (_asyncScopeEntry case final asyncScopeEntry?) {
+        // `_acquiredScopeKey`, not `scopeKey`: what is being released is the
+        // key the queue was entered on, whatever the getter says by now.
+        _log.d(() => 'exit from [$_acquiredScopeKey]');
+        asyncScopeEntry.exit();
+        _asyncScopeEntry = null;
+      }
+
+      // Nothing is held any more, so [scopeKey] has nothing left to
+      // contradict. Set here rather than on `_isDisposing`, so a key that
+      // changes while the disposal is still in flight -- with the entry still
+      // in its queue -- is reported as loudly as ever.
+      _scopeKeySettled = true;
+
+      _model.dispose();
+
+      _widget = null;
+    }
+
+    if (failure case final failure?) {
+      Error.throwWithStackTrace(failure.error, failure.stackTrace);
+    }
+  }
+
+  /// Gives up on everything the disposal has to stop waiting for.
+  ///
+  /// Reaches user code through [onWaitForChildrenTimeout], so its failures are
+  /// the caller's to absorb.
+  Future<void> _prepareForDisposal() async {
     _log.d('prepare for disposal');
 
     // Cancel waiting for access if it has not finished yet.
@@ -712,50 +790,6 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
           onWaitForChildrenTimeout();
         },
       );
-    }
-
-    try {
-      if (_initSucceeded) {
-        _log.i('dispose…');
-        final result = disposeAsync();
-        if (result is Future<void>) {
-          await result;
-        }
-      } else {
-        _log.d('do not dispose of');
-      }
-
-      _log.i('disposed');
-    } on Object catch (error, stackTrace) {
-      _log.e('disposal failed', error: error, stackTrace: stackTrace);
-      rethrow;
-    } finally {
-      // Cleared, not just unregistered: the element outlives its disposal
-      // when it was closed via `close()` rather than removed from the tree,
-      // and a stale entry left in the field is one `_registerWithParent()`
-      // would try to unregister a second time.
-      if (_asyncScopeParentEntry case final asyncScopeParentEntry?) {
-        asyncScopeParentEntry.unregister();
-        _asyncScopeParentEntry = null;
-      }
-
-      if (_asyncScopeEntry case final asyncScopeEntry?) {
-        // `_acquiredScopeKey`, not `scopeKey`: what is being released is the
-        // key the queue was entered on, whatever the getter says by now.
-        _log.d(() => 'exit from [$_acquiredScopeKey]');
-        asyncScopeEntry.exit();
-        _asyncScopeEntry = null;
-      }
-
-      // Nothing is held any more, so [scopeKey] has nothing left to
-      // contradict. Set here rather than on `_isDisposing`, so a key that
-      // changes while the disposal is still in flight -- with the entry still
-      // in its queue -- is reported as loudly as ever.
-      _scopeKeySettled = true;
-
-      _model.dispose();
-
-      _widget = null;
     }
   }
 

@@ -172,16 +172,38 @@ abstract base class ScopeElementBase<
 
   @override
   void unmount() {
-    _dependencies?.unmount();
-    super.unmount();
+    // The dependencies' `unmount` hooks are user code; the base teardown
+    // behind them is not. A failure there used to skip it altogether, leaving
+    // the scope registered with its parent and its `scopeKey` taken.
+    try {
+      _dependencies?.unmount();
+    } finally {
+      super.unmount();
+    }
   }
 
   @override
   Future<void> disposeAsync() async {
-    await super.disposeAsync();
+    AsyncError? failure;
+
+    // The state releases what it owns first, the dependencies after it -- and
+    // the second half is not the first half's to cancel. A state that failed
+    // to let go of its own is still a state whose dependencies are holding
+    // theirs, and this is the only place left to give those back.
+    try {
+      await super.disposeAsync();
+      // ignore: avoid_catching_errors
+    } on Object catch (error, stackTrace) {
+      failure = AsyncError(error, stackTrace);
+    }
+
     final result = _dependencies?.dispose();
     if (result is Future<void>) {
       await result;
+    }
+
+    if (failure case final failure?) {
+      Error.throwWithStackTrace(failure.error, failure.stackTrace);
     }
   }
 

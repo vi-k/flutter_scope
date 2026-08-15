@@ -32,6 +32,17 @@
   release is now guarded on its own, the walk finishes, and the first failure is
   passed upwards afterwards; every failure is recorded on the dependency it
   belongs to, as before.
+* Fix a failing cleanup hook taking the mandatory teardown with it. A scope
+  hands control to code you wrote on its way out — `onUnmount`,
+  `onWaitForChildrenTimeout`, the state's `disposeAsync`, a dependency's
+  `unmount` — and a failure there used to abandon everything behind it: the
+  scope stayed registered with its parent, its `scopeKey` was never released,
+  its model was never disposed of, and its dependencies kept whatever they had
+  taken. Every mandatory stage now runs whatever the hooks make of it, and the
+  first failure is reported once the teardown is over. Two consequences worth
+  knowing: an `unmount` that fails on one dependency no longer leaves its
+  siblings mounted, and a scope whose disposal failed before the mandatory
+  block now reports that failure after the block rather than instead of it.
 * Fix `NavigationNode` system back handling: a pushed route or dialog in its
   nested navigator now closes before the enclosing route can pop. Once the node
   has nothing of its own left to close, `onPop` is asked exactly once and its
