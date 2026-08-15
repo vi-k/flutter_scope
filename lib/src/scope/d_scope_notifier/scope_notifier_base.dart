@@ -88,7 +88,12 @@ final class _ScopeNotifierElement<W extends ScopeNotifierBase<W, M>,
 
   @override
   void update(W newWidget) {
-    if (widget.value != newWidget.value) {
+    // Identity, not equality: a listener belongs to the object that holds the
+    // list it is in. Two models that compare equal are still two lists, and
+    // reading `==` as "the same subscription" left the listener on the model
+    // the scope had just let go of, with every notification of the new one
+    // lost.
+    if (!identical(widget.value, newWidget.value)) {
       widget.value?.removeListener(notifyDependents);
       newWidget.value?.addListener(notifyDependents);
     }

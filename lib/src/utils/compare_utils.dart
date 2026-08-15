@@ -16,11 +16,12 @@ abstract final class CompareUtils {
   static bool notEquals(Object? a, Object? b) => a != b;
 
   /// Whether [a] and [b] are the same object.
-  ///
-  /// The comparison to pass as `compare:` for a value that is replaced
-  /// rather than mutated.
   static bool identical(Object? a, Object? b) => core.identical(a, b);
 
   /// Whether [a] and [b] are different objects.
+  ///
+  /// The comparison to pass as `compare:` for a value that is replaced rather
+  /// than mutated: a `compare:` answers "did it change?", so the one that
+  /// belongs there is the one that says yes to a new object.
   static bool notIdentical(Object? a, Object? b) => !core.identical(a, b);
 }

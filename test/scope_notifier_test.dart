@@ -1,3 +1,8 @@
+// `_NamedCounter` carries equality on purpose: equality on a mutable class is
+// what the lint warns about, and the scope must not read it as "the same
+// subscription".
+// ignore_for_file: avoid_equals_and_hash_code_on_mutable_classes
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:scopo/scopo.dart';
@@ -94,6 +99,47 @@ void main() {
       expect(readerBuilds, builds);
     });
 
+    // Owning a subscription is about the object that holds the listener list,
+    // and `==` does not answer that: two equal models are still two lists.
+    // The listener used to stay on the one the scope had left.
+    testWidgets('moves the subscription to an equal but different model',
+        (tester) async {
+      final first = _NamedCounter('same');
+      final second = _NamedCounter('same');
+      addTearDown(first.dispose);
+      addTearDown(second.dispose);
+
+      Widget build(_NamedCounter model) => Directionality(
+            textDirection: TextDirection.ltr,
+            child: ScopeNotifier<_NamedCounter>.value(
+              value: model,
+              builder: (context) => const _NamedCounterView(),
+            ),
+          );
+
+      await tester.pumpWidget(build(first));
+      expect(find.text('named: 0'), findsOneWidget);
+
+      await tester.pumpWidget(build(second));
+      second.bump();
+      await tester.pump();
+
+      expect(
+        find.text('named: 1'),
+        findsOneWidget,
+        reason: 'the subscription moved to the model the scope now holds',
+      );
+
+      first.bump();
+      await tester.pump();
+
+      expect(
+        find.text('named: 1'),
+        findsOneWidget,
+        reason: 'and the one it left behind no longer drives the scope',
+      );
+    });
+
     testWidgets('disposes of the model it created', (tester) async {
       late _Counter created;
 
@@ -180,6 +226,44 @@ void main() {
       expect(find.text('101'), findsOneWidget);
     },
   );
+}
+
+/// A model whose equality is by name, so two of them can be equal and still be
+/// two objects with two listener lists.
+final class _NamedCounter extends ChangeNotifier {
+  final String name;
+
+  int _value = 0;
+
+  int get value => _value;
+
+  _NamedCounter(this.name);
+
+  void bump() {
+    _value++;
+    notifyListeners();
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is _NamedCounter && other.name == name;
+
+  @override
+  int get hashCode => name.hashCode;
+}
+
+final class _NamedCounterView extends StatelessWidget {
+  const _NamedCounterView();
+
+  @override
+  Widget build(BuildContext context) {
+    final value = ScopeNotifier.select<_NamedCounter, int>(
+      context,
+      (model) => model.value,
+    );
+
+    return Text('named: $value');
+  }
 }
 
 class _ValueView extends StatelessWidget {

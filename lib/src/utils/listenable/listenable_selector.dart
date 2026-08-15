@@ -16,7 +16,10 @@ class ListenableSelector<L extends Listenable, T extends Object?>
   /// Extracts the value this widget rebuilds for.
   final T Function(L listenable) selector;
 
-  /// Decides whether the selected value changed; `==` when omitted.
+  /// Decides whether the selected value changed; `!=` when omitted.
+  ///
+  /// `true` means changed, so the comparison for a value that is replaced
+  /// rather than mutated is `CompareUtils.notIdentical`.
   final bool Function(T previous, T current)? compare;
 
   /// Builds the subtree from the selected value.
@@ -65,7 +68,14 @@ class _ListenableSelectorState<L extends Listenable, T extends Object?>
   void didUpdateWidget(ListenableSelector<L, T> oldWidget) {
     super.didUpdateWidget(oldWidget);
 
-    if (widget.listenable != oldWidget.listenable) {
+    // The selector and the compare are as much a part of what this widget
+    // watches as the listenable is: a parent that hands over a new one is
+    // asking for something else to be selected, or for a different answer to
+    // "did it change?". Replacing them only together with the source left the
+    // state calling the closures of a configuration nobody passes any more.
+    if (!identical(widget.listenable, oldWidget.listenable) ||
+        !identical(widget.selector, oldWidget.selector) ||
+        !identical(widget.compare, oldWidget.compare)) {
       _subscription.cancel();
       _subscribe();
     }

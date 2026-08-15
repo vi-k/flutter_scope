@@ -32,6 +32,25 @@
   release is now guarded on its own, the walk finishes, and the first failure is
   passed upwards afterwards; every failure is recorded on the dependency it
   belongs to, as before.
+* Fix `ScopeNotifier.value` keeping its listener on the model it was given
+  before. The swap was decided by `==`, so two models that compare equal were
+  taken for one: the listener stayed on the model the scope had let go of, and
+  every notification of the new one was lost. Ownership of a subscription is
+  now decided by identity.
+* Fix `ListenableSelector` ignoring a new `selector` or `compare`. They were
+  replaced only together with the `listenable`, so a parent that passed a new
+  closure over the same source kept getting the previous one. Any of the three
+  changing now re-subscribes.
+* Fix `Listenable.select` leaving a listener behind when the selector fails on
+  its first read. The first value was read after the listener was registered,
+  so a failure there left the listener in place with no subscription handed
+  back to take it away, and the next notification reached an unassigned `late`
+  field. The first read now happens before the registration.
+* `CompareUtils.identical` no longer recommends itself for `compare:`. A
+  `compare:` answers "did it change?", so the one to pass for a value that is
+  replaced rather than mutated is `notIdentical`; `identical` reports the
+  opposite of what it is asked. The same correction lands in the dartdoc of
+  `Listenable.select` and `ListenableSelector.compare`, and in `doc/j_utils.md`.
 * Fix `AsyncDataScopeContext.data` handing out a `null` the scope never
   produced. For a nullable `T` the getter read the value itself as the answer to
   "is there one yet?", so before the initialization finished it returned `null`

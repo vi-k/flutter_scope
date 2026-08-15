@@ -22,8 +22,9 @@ extension ListenableSelectExtension<L extends Listenable> on L {
   /// );
   /// ```
   ///
-  /// By default, the previous value is compared to the new value using the
-  /// operator [Object.==], but this behavior can be changed using [compare].
+  /// By default a value counts as changed when it is not [Object.==] to the
+  /// previous one. [compare] replaces that test, and answers the same
+  /// question: `true` means the value changed and the listener runs.
   ///
   /// Example:
   ///
@@ -31,7 +32,7 @@ extension ListenableSelectExtension<L extends Listenable> on L {
   /// final subscription = listenable.select(
   ///     (listenable) => listenable.data,
   ///     (listenable, data) => print(data),
-  ///     compare: (previous, current) => identical(previous, current),
+  ///     compare: (previous, current) => !identical(previous, current),
   /// );
   /// ```
   ListenableSelectSubscription<T> select<T extends Object?>(
@@ -50,10 +51,16 @@ extension ListenableSelectExtension<L extends Listenable> on L {
       }
     }
 
+    // The first value is read before the listener is registered, and the
+    // subscription exists before it too. A selector that fails on this first
+    // read used to do so with the listener already in place and no
+    // subscription handed back to take it away, and the next notification then
+    // reached a `late` field nobody had assigned.
+    subscription = ListenableSelectSubscription._(this, handle, selector(this));
+
     addListener(handle);
 
-    return subscription =
-        ListenableSelectSubscription._(this, handle, selector(this));
+    return subscription;
   }
 }
 

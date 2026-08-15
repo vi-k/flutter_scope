@@ -41,11 +41,13 @@ final subscription = model.select(
 );
 ```
 
-The listener runs only when the selected value changes. Change is `==` by
-default, and `compare:` replaces that — `identical` for a value that is
-replaced rather than mutated, a field-by-field comparison for a record, and so
-on. This is the same idea `select` uses on a scope, without a widget tree
-involved.
+The listener runs only when the selected value changes. By default that means
+`!=`, and `compare:` replaces the test with one of your own. It answers the same
+question, so `true` means changed: `notIdentical` for a value that is replaced
+rather than mutated, a field-by-field comparison for a record, and so on.
+Passing `identical` there reports the opposite of what it is asked — the same
+object counts as a change and a replacement goes unnoticed. This is the same
+idea `select` uses on a scope, without a widget tree involved.
 
 `ListenableSelector` is the widget wrapping the same mechanism:
 

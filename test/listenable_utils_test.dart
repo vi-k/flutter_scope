@@ -1,3 +1,8 @@
+// The fixtures below carry equality on purpose: `_Box` to stand for a value
+// that is replaced rather than mutated, and the notifiers to show that a
+// subscription belongs to an object and not to whatever compares equal to it.
+// ignore_for_file: avoid_equals_and_hash_code_on_mutable_classes
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:scopo/scopo.dart';
@@ -127,6 +132,69 @@ void main() {
       notifier.value = 5;
       expect(calls, 1, reason: 'changed, so this compare stays silent');
     });
+
+    // The first value used to be read after the listener was registered. A
+    // selector that failed there left the listener on the notifier with no
+    // subscription to take it back, and the next notification reached a
+    // `late` field nobody had assigned.
+    test('a selector that fails on the first read leaves nothing behind', () {
+      final notifier = _Model();
+      addTearDown(notifier.dispose);
+
+      final reported = <FlutterErrorDetails>[];
+      final previousOnError = FlutterError.onError;
+      FlutterError.onError = reported.add;
+      addTearDown(() => FlutterError.onError = previousOnError);
+
+      expect(
+        () => notifier.select<int>(
+          (model) => throw StateError('the selector failed'),
+          (model, value) {},
+        ),
+        throwsA(isA<StateError>()),
+      );
+
+      expect(
+        notifier.isListened,
+        isFalse,
+        reason: 'the caller never got a subscription, so nothing else could '
+            'ever take the listener back',
+      );
+
+      notifier.value = 1;
+
+      expect(
+        reported,
+        isEmpty,
+        reason: 'and nothing is left to fail on the next notification',
+      );
+    });
+
+    // `compare` answers "did it change?", so the comparison for a value that
+    // is replaced rather than mutated is `notIdentical` -- `identical` reports
+    // the opposite of what it is asked.
+    test('notIdentical is the compare for a value that is replaced', () {
+      final notifier = _Model();
+      addTearDown(notifier.dispose);
+      final seen = <_Box>[];
+
+      notifier.select(
+        (model) => model.box,
+        (model, box) => seen.add(box),
+        compare: CompareUtils.notIdentical,
+      );
+
+      // ignore: cascade_invocations
+      notifier.box = _Box(1);
+      expect(
+        seen,
+        hasLength(1),
+        reason: 'a different object, equal or not, is a replacement',
+      );
+
+      notifier.touch();
+      expect(seen, hasLength(1), reason: 'the same object is not');
+    });
   });
 
   group('ListenableView', () {
@@ -226,6 +294,76 @@ void main() {
       await tester.pump();
       expect(find.text('value: 101'), findsOneWidget);
     });
+
+    // The callbacks used to be replaced only together with the listenable, so
+    // a parent that passed a new selector over the same source kept getting
+    // the previous one.
+    testWidgets('follows a new selector on the same listenable',
+        (tester) async {
+      final model = _Model()..value = 2;
+      addTearDown(model.dispose);
+
+      Widget build(int Function(_Model model) selector) => Directionality(
+            textDirection: TextDirection.ltr,
+            child: ListenableSelector<_Model, int>(
+              listenable: model,
+              selector: selector,
+              builder: (context, listenable, value, child) =>
+                  Text('value: $value'),
+            ),
+          );
+
+      await tester.pumpWidget(build((model) => model.value));
+      expect(find.text('value: 2'), findsOneWidget);
+
+      await tester.pumpWidget(build((model) => model.value * 10));
+      expect(
+        find.text('value: 20'),
+        findsOneWidget,
+        reason: 'the selector the widget carries now is the one that runs',
+      );
+
+      model.value = 3;
+      await tester.pump();
+      expect(find.text('value: 30'), findsOneWidget);
+    });
+
+    testWidgets('follows a new compare on the same listenable', (tester) async {
+      final model = _Model();
+      addTearDown(model.dispose);
+
+      Widget build(bool Function(int previous, int current)? compare) =>
+          Directionality(
+            textDirection: TextDirection.ltr,
+            child: ListenableSelector<_Model, int>(
+              listenable: model,
+              selector: (model) => model.value,
+              compare: compare,
+              builder: (context, listenable, value, child) =>
+                  Text('value: $value'),
+            ),
+          );
+
+      await tester.pumpWidget(build((previous, current) => false));
+      model.value = 1;
+      await tester.pump();
+      expect(
+        find.text('value: 0'),
+        findsOneWidget,
+        reason: 'this compare says nothing ever changes',
+      );
+
+      await tester.pumpWidget(build(null));
+      expect(
+        find.text('value: 1'),
+        findsOneWidget,
+        reason: 'the default compare took over and read the value afresh',
+      );
+
+      model.value = 2;
+      await tester.pump();
+      expect(find.text('value: 2'), findsOneWidget);
+    });
   });
 
   group('StateAsNotifier', () {
@@ -269,8 +407,41 @@ final class _Model extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// A value that is replaced rather than mutated, and compares equal to the
+  /// one it replaces.
+  _Box _box = _Box(1);
+
+  _Box get box => _box;
+
+  set box(_Box box) {
+    _box = box;
+    notifyListeners();
+  }
+
   /// Notifies without changing anything a selector would look at.
   void touch() => notifyListeners();
+
+  /// Whether anything is subscribed; [ChangeNotifier.hasListeners] is
+  /// `@protected`, and a test is not a subclass.
+  bool get isListened => hasListeners;
+}
+
+/// A value type: two boxes holding the same number are equal, and a new one is
+/// still a different object.
+///
+/// The constructor is deliberately not `const`: two
+/// `const _Box(1)` would be canonicalized into one object, and then there is no
+/// replacement left to tell apart from a mutation.
+final class _Box {
+  final int value;
+
+  _Box(this.value);
+
+  @override
+  bool operator ==(Object other) => other is _Box && other.value == value;
+
+  @override
+  int get hashCode => value.hashCode;
 }
 
 final class _NotifyingHost extends StatelessWidget {
