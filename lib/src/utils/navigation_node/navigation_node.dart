@@ -50,11 +50,10 @@ final class _NavigationNodeState extends State<NavigationNode> {
   NodeNavigatorState get _navigator => _navigatorKey.currentState!;
 
   /// Decides what a system back does once the node itself cannot answer it.
+  ///
+  /// Refusing takes no undoing: the node's marker stays where it is, so the
+  /// next press arrives here exactly as this one did.
   void _decideOutside(BuildContext context, Object? result) {
-    void restoreMarker() {
-      _observer._addHook();
-    }
-
     if (_navigator.previous case final previous?) {
       // ignore: discarded_futures
       switch (widget.onPop?.call(context, result)) {
@@ -63,15 +62,11 @@ final class _NavigationNodeState extends State<NavigationNode> {
           future.then((canPop) {
             if (canPop) {
               previous.pop(result);
-            } else {
-              restoreMarker();
             }
           });
         case final bool? canPop:
           if (canPop ?? true) {
             previous.pop(result);
-          } else {
-            restoreMarker();
           }
       }
     }
@@ -162,8 +157,6 @@ final class _NodeNavigator extends Navigator {
 
 /// @nodoc
 final class NodeNavigatorState extends NavigatorState {
-  Object? _interceptedResult;
-
   _NodeNavigatorObserver get _observer =>
       (widget as _NodeNavigator).node._observer;
 
@@ -184,8 +177,21 @@ final class NodeNavigatorState extends NavigatorState {
 
   @override
   void pop<T extends Object?>([T? result]) {
-    _interceptedResult = result;
-    super.pop(result);
+    if (canPop()) {
+      super.pop(result);
+
+      return;
+    }
+
+    // Nothing of the node's own is left to close, and letting the base
+    // implementation take the first page would leave the node with an empty
+    // stack — a hole where the screen used to be. A root node keeps the pop
+    // instead; any other node hands it to the navigator above, every time and
+    // not merely the first.
+    if (!_observer.node.widget.isRoot) {
+      // ignore: discarded_futures
+      previous?.maybePop(result);
+    }
   }
 }
 
@@ -224,15 +230,7 @@ final class _NodeNavigatorObserver extends NavigatorObserver {
     }
 
     _hookInstalled = true;
-    topRoute.addLocalHistoryEntry(
-      _HookEntry(
-        onRemove: () {
-          _hookInstalled = false;
-          // ignore: discarded_futures
-          navigator?.previous?.maybePop(node._navigator._interceptedResult);
-        },
-      ),
-    );
+    topRoute.addLocalHistoryEntry(_HookEntry());
   }
 
   @override
@@ -244,6 +242,16 @@ final class _NodeNavigatorObserver extends NavigatorObserver {
   }
 }
 
-final class _HookEntry extends LocalHistoryEntry {
-  _HookEntry({required super.onRemove});
-}
+/// Keeps the node reachable from a pop: it makes the node's first page
+/// answer `willHandlePopInternally`, so a `maybePop` reaches
+/// [NodeNavigatorState.pop] instead of bubbling past the node, and it draws the
+/// back arrow in an `AppBar` on that page.
+/// Keeps a forwarding node reachable from a pop.
+///
+/// It makes the node's first page answer `willHandlePopInternally`, so a
+/// `maybePop` lands in [NodeNavigatorState.pop] instead of bubbling straight
+/// past the node — and it is what draws the back arrow in an `AppBar` on that
+/// page. The entry is never removed: forwarding is decided in
+/// [NodeNavigatorState.pop] rather than by spending this marker, so it works as
+/// many times as the user presses back.
+final class _HookEntry extends LocalHistoryEntry {}

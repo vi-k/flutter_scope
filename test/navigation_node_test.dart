@@ -252,6 +252,80 @@ void main() {
       );
     });
 
+    testWidgets('pop() on the only page of a root node keeps the page', (
+      tester,
+    ) async {
+      await tester.pumpWidget(const _Host(useNode: true, isRoot: true));
+      expect(find.text('open'), findsOneWidget);
+
+      await tester.tap(find.text('pop the node'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('open'),
+        findsOneWidget,
+        reason: 'a root node keeps a pop to itself instead of emptying itself',
+      );
+    });
+
+    testWidgets(
+        'an ordinary node keeps its page when there is nowhere to '
+        'forward a pop', (tester) async {
+      await tester.pumpWidget(const _Host(useNode: true));
+
+      // The node sits on the first route of the app, so the forwarded pop has
+      // nothing to close. Doing it twice is the point: the way outwards must
+      // not be a one-shot.
+      await tester.tap(find.text('pop the node'));
+      await tester.pumpAndSettle();
+      expect(find.text('open'), findsOneWidget);
+
+      await tester.tap(find.text('pop the node'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('open'),
+        findsOneWidget,
+        reason: 'the node must never be left with an empty stack',
+      );
+    });
+
+    testWidgets('an ordinary node forwards a pop it cannot handle', (
+      tester,
+    ) async {
+      await tester.pumpWidget(const _OnPopHost());
+      await tester.tap(find.text('go'));
+      await tester.pumpAndSettle();
+      expect(find.text('node content'), findsOneWidget);
+
+      await tester.tap(find.text('pop the node'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('go'),
+        findsOneWidget,
+        reason: 'the pop left the node and closed the route around it',
+      );
+    });
+
+    testWidgets('a root node does not forward a pop even when it could', (
+      tester,
+    ) async {
+      await tester.pumpWidget(const _OnPopHost(isRoot: true));
+      await tester.tap(find.text('go'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('pop the node'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('node content'),
+        findsOneWidget,
+        reason: 'there is a navigator above to forward to, and isRoot is '
+            'exactly the instruction not to use it',
+      );
+    });
+
     testWidgets('the navigatorKey hands the nested navigator to its owner', (
       tester,
     ) async {
@@ -339,6 +413,10 @@ final class _NodeContent extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               TextButton(
+                onPressed: Navigator.of(context).pop,
+                child: const Text('pop the node'),
+              ),
+              TextButton(
                 // The future a push returns completes when the route is popped,
                 // and nothing here waits for that.
                 onPressed: () => unawaited(
@@ -381,9 +459,10 @@ final class _NodeContent extends StatelessWidget {
 /// Puts a node with an [NavigationNode.onPop] on a route of its own, so a pop
 /// that leaves the node has somewhere to land.
 final class _OnPopHost extends StatelessWidget {
-  final FutureOr<bool> Function(BuildContext context, Object? result) onPop;
+  final FutureOr<bool> Function(BuildContext context, Object? result)? onPop;
+  final bool isRoot;
 
-  const _OnPopHost({required this.onPop});
+  const _OnPopHost({this.onPop, this.isRoot = false});
 
   @override
   Widget build(BuildContext context) => MaterialApp(
@@ -396,6 +475,7 @@ final class _OnPopHost extends StatelessWidget {
                     MaterialPageRoute<void>(
                       builder: (context) => NavigationNode(
                         onPop: onPop,
+                        isRoot: isRoot,
                         child: const _OnPopNodeContent(),
                       ),
                     ),
@@ -419,6 +499,10 @@ final class _OnPopNodeContent extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               const Text('node content'),
+              TextButton(
+                onPressed: Navigator.of(context).pop,
+                child: const Text('pop the node'),
+              ),
               TextButton(
                 onPressed: () => unawaited(
                   Navigator.of(context).push(

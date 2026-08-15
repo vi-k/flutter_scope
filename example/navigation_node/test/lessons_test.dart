@@ -119,6 +119,32 @@ void main() {
     expect(find.text('onPop asked 0 times'), findsOneWidget);
   });
 
+  testWidgets('lesson 5: a root node keeps the pop, an ordinary one forwards it',
+      (tester) async {
+    await openLesson(tester, lessons[4].title);
+
+    // The right-hand stage is the root node: its box must keep its content.
+    await tester.tap(find.text('pop() the first page').last);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('keeps the pop'),
+      findsOneWidget,
+      reason: 'a root node must not empty its own box',
+    );
+    expect(find.text(lessons[4].title), findsWidgets);
+
+    // The left-hand one forwards, which here closes the lesson.
+    await tester.tap(find.text('pop() the first page').first);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('keeps the pop'),
+      findsNothing,
+      reason: 'the forwarded pop closed the lesson around the node',
+    );
+  });
+
   testWidgets('lesson 6: the back reaches the innermost node', (tester) async {
     await openLesson(tester, lessons[5].title);
 

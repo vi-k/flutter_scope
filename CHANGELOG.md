@@ -25,6 +25,11 @@
   refusal keeps the route; a back inside nested nodes reaches the innermost one
   and leaves every route above it alone. `Navigator.canPop` inside a node no
   longer counts the node's own forwarding bookkeeping as a route it can close.
+* Fix a `NavigationNode` emptying itself. `Navigator.pop()` on the node's first
+  page used to take that page away and leave the node with nothing to show: at
+  once in a node marked `isRoot`, and from the second pop on in any other node,
+  whose way outwards was a one-shot. A root node now keeps such a pop, and an
+  ordinary node forwards it every time it is asked.
 * [breaking changes] Raise the Flutter floor to 3.29.0. The declared `>=3.27.0`
   never resolved: `logger_builder` requires `meta ^1.16.0` while the
   `flutter_test` of 3.27 pins `meta` to 1.15.0, so `pub get` failed for anyone

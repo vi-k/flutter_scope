@@ -91,6 +91,11 @@ System back first asks the node's nested navigator to close its top route. Only
 when that navigator has nothing left to pop do `onPop` and `isRoot` decide what
 happens outside the node.
 
+A node never empties itself. `Navigator.pop()` on its first page — from the back
+arrow of an `AppBar`, say — leaves the node instead of taking that page away: an
+ordinary node hands the pop to the navigator above it, as often as it is asked,
+and a root node keeps it and does nothing.
+
 `PreviousNavigatorExtension.previous` gives the navigator above a given one,
 which is how a node forwards a pop it cannot handle itself.
 
