@@ -4,6 +4,12 @@ import 'package:scopo/scopo.dart';
 
 void main() {
   group('lifecycle', () {
+    setUp(() {
+      _FailingInitScopeElement.initAttempts = 0;
+      _FailingInitScopeElement.acquired = 0;
+      _FailingInitScopeElement.released = 0;
+    });
+
     testWidgets('init sees ancestors and finishes before the first build', (
       tester,
     ) async {
@@ -18,6 +24,83 @@ void main() {
       );
 
       expect(find.text('init: ready; completed: true'), findsOneWidget);
+    });
+
+    testWidgets('a failed init is not retried and is still cleaned up', (
+      tester,
+    ) async {
+      final scopeKey = GlobalKey();
+
+      Widget buildTree(String label) => Directionality(
+            textDirection: TextDirection.ltr,
+            child: _FailingInitScope(key: scopeKey, label: label),
+          );
+
+      await tester.pumpWidget(buildTree('first'));
+
+      expect(_FailingInitScopeElement.initAttempts, 1);
+      expect(_FailingInitScopeElement.acquired, 1);
+      expect(
+        tester.takeException(),
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          'controlled init failure',
+        ),
+      );
+
+      // A parent rebuild must not run the hook a second time: the failure is
+      // terminal, and the resource the first attempt took is still held.
+      await tester.pumpWidget(buildTree('second'));
+
+      expect(
+        tester.takeException(),
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          'controlled init failure',
+        ),
+        reason: 'the recorded failure is reported again',
+      );
+      expect(
+        _FailingInitScopeElement.initAttempts,
+        1,
+        reason: 'a failed init is terminal',
+      );
+      expect(
+        _FailingInitScopeElement.acquired,
+        1,
+        reason: 'nothing is acquired a second time',
+      );
+
+      await tester.pumpWidget(const SizedBox.shrink());
+
+      expect(
+        _FailingInitScopeElement.released,
+        1,
+        reason: 'what the failed init took is released on unmount',
+      );
+    });
+
+    testWidgets('subscribing to a scope from init is rejected', (tester) async {
+      await tester.pumpWidget(
+        const Directionality(
+          textDirection: TextDirection.ltr,
+          child: _AncestorScope(
+            value: 'ready',
+            child: _ListeningInitScope(),
+          ),
+        ),
+      );
+
+      expect(
+        tester.takeException(),
+        isA<AssertionError>().having(
+          (error) => error.message.toString(),
+          'message',
+          contains('listen: false'),
+        ),
+      );
     });
   });
 
@@ -302,4 +385,72 @@ final class _PlainText extends StatelessWidget {
 
     return Text('plain: $param');
   }
+}
+
+/// A scope whose `init()` takes a resource and then fails.
+///
+/// The counters are static because the element is rebuilt from a fresh widget
+/// on every pump, and the test has to watch the hook across those rebuilds.
+final class _FailingInitScope
+    extends ScopeWidgetCore<_FailingInitScope, _FailingInitScopeElement> {
+  final String label;
+
+  const _FailingInitScope({super.key, required this.label});
+
+  @override
+  _FailingInitScopeElement createScopeElement() =>
+      _FailingInitScopeElement(this);
+}
+
+final class _FailingInitScopeElement extends ScopeWidgetElementBase<
+    _FailingInitScope, _FailingInitScopeElement> {
+  static int initAttempts = 0;
+  static int acquired = 0;
+  static int released = 0;
+
+  _FailingInitScopeElement(super.widget);
+
+  @override
+  void init() {
+    initAttempts++;
+    acquired++; // the resource is taken…
+
+    throw StateError('controlled init failure'); // …and then the hook fails
+  }
+
+  @override
+  void dispose() {
+    released++;
+    super.dispose();
+  }
+
+  @override
+  Widget buildChild() => Text('label: ${widget.label}');
+}
+
+/// A scope whose `init()` asks for an ancestor *with* a subscription.
+final class _ListeningInitScope
+    extends ScopeWidgetCore<_ListeningInitScope, _ListeningInitScopeElement> {
+  const _ListeningInitScope();
+
+  @override
+  _ListeningInitScopeElement createScopeElement() =>
+      _ListeningInitScopeElement(this);
+}
+
+final class _ListeningInitScopeElement extends ScopeWidgetElementBase<
+    _ListeningInitScope, _ListeningInitScopeElement> {
+  _ListeningInitScopeElement(super.widget);
+
+  @override
+  void init() {
+    ScopeWidgetCore.of<_AncestorScope, _AncestorScopeElement>(
+      this,
+      listen: true,
+    );
+    super.init();
+  }
+
+  @override
+  Widget buildChild() => const SizedBox.shrink();
 }

@@ -46,6 +46,13 @@ abstract base class ScopeNotifierCore<
 abstract base class ScopeNotifierElementBase<W extends ScopeModelCore<W, E, M>,
         E extends ScopeNotifierElementBase<W, E, M>, M extends Listenable>
     extends ScopeModelElementBase<W, E, M> implements ScopeModelContext<W, M> {
+  /// Whether [init] got as far as subscribing to the model.
+  ///
+  /// The disposal runs for a scope whose initialization failed as well, and a
+  /// failure earlier in the chain -- a `create` that threw, say -- leaves no
+  /// model to unsubscribe from and no subscription to take back.
+  bool _didListen = false;
+
   /// Creates the element of a notifier scope.
   ///
   /// It subscribes to the model in [init] and unsubscribes in [dispose].
@@ -54,12 +61,15 @@ abstract base class ScopeNotifierElementBase<W extends ScopeModelCore<W, E, M>,
   @override
   void init() {
     model.addListener(notifyDependents);
+    _didListen = true;
     super.init();
   }
 
   @override
   void dispose() {
     super.dispose();
-    model.removeListener(notifyDependents);
+    if (_didListen) {
+      model.removeListener(notifyDependents);
+    }
   }
 }

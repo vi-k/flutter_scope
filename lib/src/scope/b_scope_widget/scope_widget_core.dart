@@ -5,6 +5,18 @@ typedef _ScopeDependency<T extends Object, V extends Object?> = (
   V Function(T)
 );
 
+/// The phase of the one-shot initialization hook of a scope element.
+enum _InitPhase {
+  /// The hook has not run yet.
+  pending,
+
+  /// The hook returned successfully.
+  done,
+
+  /// The hook threw. It is not attempted again.
+  failed,
+}
+
 /// {@category ScopeWidget}
 abstract base class ScopeWidgetCore<W extends ScopeWidgetCore<W, E>,
     E extends ScopeWidgetElementBase<W, E>> extends ScopeInheritedWidget {
@@ -80,8 +92,15 @@ abstract base class ScopeWidgetElementBase<W extends ScopeWidgetCore<W, E>,
   /// Whether the element must rebuild anyway, ignoring [_shouldOnlyNotify].
   bool _forceRebuild = true;
 
+  /// How far the one-shot [init] hook got.
+  _InitPhase _initPhase = _InitPhase.pending;
+
+  /// What [init] threw, kept so that every later build reports the same
+  /// failure instead of building a subtree the scope cannot serve.
+  (Object, StackTrace)? _initFailure;
+
   /// Whether [init] has completed successfully.
-  bool _didInit = false;
+  bool get _didInit => _initPhase == _InitPhase.done;
 
   /// Creates the element.
   ScopeWidgetElementBase(W super.widget);
@@ -91,7 +110,10 @@ abstract base class ScopeWidgetElementBase<W extends ScopeWidgetCore<W, E>,
 
   @override
   void unmount() {
-    if (_didInit) {
+    // Symmetry, not success: an attempt that failed halfway may still have
+    // taken something, and this is the only place left to give it back. The
+    // families make their own disposers tolerate that partial state.
+    if (_initPhase != _InitPhase.pending) {
       dispose();
     }
     super.unmount();
@@ -253,12 +275,46 @@ abstract base class ScopeWidgetElementBase<W extends ScopeWidgetCore<W, E>,
   Element? updateChild(Element? child, Widget? newWidget, Object? newSlot) =>
       _shouldOnlyNotify ? child : super.updateChild(child, newWidget, newSlot);
 
+  /// Runs [init] once, inside the build error boundary of
+  /// [ComponentElement.performRebuild], and only then builds the subtree.
+  ///
+  /// This is the first point at which the element is connected to its
+  /// ancestors and the subtree has not been built yet: [Element.mount] has
+  /// assigned the parent and the inherited map, and `buildChild` has not run.
   @nonVirtual
   @override
   Widget build() {
-    if (!_didInit) {
-      init();
-      _didInit = true;
+    if (_initPhase == _InitPhase.pending) {
+      assert(() {
+        _debugInitializingElement = this;
+
+        return true;
+      }());
+      try {
+        init();
+      } on Object catch (error, stackTrace) {
+        // Terminal, not retried: a hook that failed halfway may already hold
+        // something, and running it again would take a second copy of it
+        // while the first stays out of reach. The boundary above turns this
+        // into an `ErrorWidget`, and `unmount` still calls `dispose`.
+        _initPhase = _InitPhase.failed;
+        _initFailure = (error, stackTrace);
+
+        rethrow;
+      } finally {
+        assert(() {
+          _debugInitializingElement = null;
+
+          return true;
+        }());
+      }
+
+      _initPhase = _InitPhase.done;
+    } else if (_initFailure case (final error, final stackTrace)) {
+      // There is no scope to build on. Raising the original failure again --
+      // with its own stack trace -- keeps the boundary showing what actually
+      // went wrong, rather than a second, derived error.
+      Error.throwWithStackTrace(error, stackTrace);
     }
 
     return buildChild();

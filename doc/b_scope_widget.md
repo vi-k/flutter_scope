@@ -108,6 +108,14 @@ outlives everything the layers under it set up.
 first `buildChild`. Resources acquired there, including a notifier listener,
 are therefore ready for the first subtree build.
 
+It runs once. A hook that throws is not attempted again — running it twice
+would take a second copy of whatever the first attempt already held — and the
+scope shows an error instead of its subtree from then on. `dispose()` runs for
+that element too, so the half-finished attempt still gives back what it took:
+a disposer has to check what it actually owns rather than assume the whole
+hook ran, the way `ScopeNotifier` remembers whether it got as far as
+subscribing.
+
 That is the whole contract: a widget that knows how to create its element, and
 an element that knows what to build. `ScopeWidgetBase` is exactly this, with
 `buildChild()` delegating to the `build` of the widget. Everything else the

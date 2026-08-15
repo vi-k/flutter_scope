@@ -66,10 +66,11 @@ void main() {
   });
 
   testWidgets('a scopeKey without a coordinator is an error', (tester) async {
-    // `_performAsyncInit()` is started from `mount()` and its future is
-    // discarded, so the `FlutterError` thrown by `AsyncScopeCoordinator.enter`
-    // never reaches the framework's own error handling: it surfaces as an
-    // uncaught error of the zone the mount ran in. `tester.takeException()`
+    // `_performAsyncInit()` is started from the first `performRebuild()` and
+    // its future is discarded, so the `FlutterError` thrown by
+    // `AsyncScopeCoordinator.enter` never reaches the framework's own error
+    // handling: it surfaces as an uncaught error of the zone the mount ran in
+    // (the first build happens inside `mount`). `tester.takeException()`
     // cannot see it (`flutter_test`'s `handleUncaughtError` ends the test on
     // the spot instead of parking the details), so the mount runs inside a
     // guarded child zone that catches it first.

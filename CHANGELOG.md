@@ -5,11 +5,20 @@
   and notifier subscriptions are still ready before the first subtree build.
   The same mounted-before-build timing now applies to custom
   `ScopeWidgetElementBase.init()` overrides. Synchronous initialization
-  failures stay inside Flutter's build error boundary and initialization is
-  retried on the next build. A failed initialization can also be removed
-  safely before retry: the normal element disposer now runs only after
-  initialization has completed successfully. `AsyncScope` starts its async
-  phase only after that successful synchronous initialization, and only once.
+  failures stay inside Flutter's build error boundary. Such a failure is
+  terminal: the hook is not attempted again, so nothing it already took is
+  taken a second time, and every later build reports the same failure.
+  Cleanup is symmetrical with it — the element disposer runs for a failed
+  initialization too, so whatever it took before it failed is given back, and
+  family disposers now expect a partially initialized scope. `AsyncScope`
+  starts its async phase only after a successful synchronous initialization,
+  and only once; a scope that never got that far registers with no parent
+  scope and its `close()` completes instead of waiting for an initialization
+  that will never begin.
+* Subscribing to another scope from an initialization hook — `listen: true`
+  inside `init()` or `ScopeModel.create()` — is now caught by an assertion.
+  The hook runs once, before the first build, so such a subscription could
+  never be honoured; look the scope up with `listen: false` instead.
 * [breaking changes] Raise the Flutter floor to 3.29.0. The declared `>=3.27.0`
   never resolved: `logger_builder` requires `meta ^1.16.0` while the
   `flutter_test` of 3.27 pins `meta` to 1.15.0, so `pub get` failed for anyone

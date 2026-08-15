@@ -263,6 +263,15 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
       return;
     }
 
+    // A scope whose synchronous [init] failed never reaches its asynchronous
+    // phase, so it has nothing to report to a parent and never will. Handing
+    // one an entry would make it wait out its whole `waitForChildrenTimeout`
+    // on a scope that was never there -- the disposal releases the entry, but
+    // only once the tree comes down, which is not when the parent asks.
+    if (!_didStartAsyncInit) {
+      return;
+    }
+
     // Register again when the widget is moved in the tree with a GlobalKey.
     //
     // Before the ownership check, not after it: a move with a `GlobalKey` is
@@ -287,9 +296,10 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
     super.performRebuild();
 
     // `super.performRebuild()` invokes the common sync [init] inside
-    // Flutter's build error boundary. A thrown init leaves `_didInit` false,
-    // so do not start work that the failed scope would then be unable to
-    // dispose. A later successful rebuild starts the async phase once.
+    // Flutter's build error boundary. A thrown init is terminal and leaves
+    // `_didInit` false for good, so the asynchronous phase of a scope that
+    // never synchronously came to be does not start at all -- and the one
+    // that did starts it exactly once, on the build that ran the hook.
     if (_didInit && !_didStartAsyncInit) {
       _didStartAsyncInit = true;
       _performAsyncInit(); // ignore: discarded_futures
@@ -666,6 +676,14 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
         _log.i('initialization cancelled');
         _initCompleter.complete();
       }
+    }
+
+    // The completer is settled by [_performAsyncInit], and that never ran when
+    // the synchronous [init] failed: there is no initialization to wait for,
+    // and nobody left to say so. `close()` reaches this without going through
+    // the `unmount` guard, so the wait below would never come back.
+    if (!_didStartAsyncInit && !_initCompleter.isCompleted) {
+      _initCompleter.complete();
     }
 
     if (!_initCompleter.isCompleted) {
