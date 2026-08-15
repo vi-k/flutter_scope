@@ -81,11 +81,17 @@ abstract base class AsyncDataScopeElementBase<
   //
 
   @override
-  T get data => switch (_data) {
-        final T data => data,
-        _ => throw StateError('Not initialized'),
-      };
+  T get data => _hasData ? _data as T : throw StateError('Not initialized');
+
   T? _data;
+
+  /// Whether [_data] holds the value the initialization produced.
+  ///
+  /// Kept apart from the value, because for a nullable [T] the value cannot
+  /// answer for itself: `null` is something the initialization may legitimately
+  /// produce, and reading it as "nothing yet" made [data] hand out a value the
+  /// scope had never been given.
+  bool _hasData = false;
 
   @override
   T? get dataOrNull => _data;
@@ -101,6 +107,7 @@ abstract base class AsyncDataScopeElementBase<
               return AsyncScopeProgress(progress);
             case AsyncDataScopeReady(:final data):
               _data = data;
+              _hasData = true;
               return AsyncScopeReady();
           }
         },

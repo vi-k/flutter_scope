@@ -32,6 +32,19 @@
   release is now guarded on its own, the walk finishes, and the first failure is
   passed upwards afterwards; every failure is recorded on the dependency it
   belongs to, as before.
+* Fix `AsyncDataScopeContext.data` handing out a `null` the scope never
+  produced. For a nullable `T` the getter read the value itself as the answer to
+  "is there one yet?", so before the initialization finished it returned `null`
+  instead of throwing `StateError`. Readiness is now tracked apart from the
+  value, and a legitimate `null` result still reads as `null`.
+* Fix a selector staying registered after the widget stopped reading it. What a
+  dependent selected was added to what it had selected in earlier builds, and
+  the pile was only cleared once a change had already been found: a widget that
+  moved from one value to another was still rebuilt by the one it had left.
+  What a dependent selects now belongs to the build it selected in. The build
+  boundary is the frame, so a dependent rebuilt twice within a single frame
+  keeps both sets and pays at most one extra rebuild — the scope's own
+  notification is not that case.
 * Fix a failing cleanup hook taking the mandatory teardown with it. A scope
   hands control to code you wrote on its way out — `onUnmount`,
   `onWaitForChildrenTimeout`, the state's `disposeAsync`, a dependency's

@@ -108,6 +108,8 @@ void main() {
     setUp(() {
       _ValueText.buildCount = 0;
       _OtherText.buildCount = 0;
+      _SwitchingText.buildCount = 0;
+      _BothText.buildCount = 0;
       _PlainText.buildCount = 0;
     });
 
@@ -176,6 +178,78 @@ void main() {
           find.text('param: b'),
           findsOneWidget,
           reason: 'the subtree shows what the new widget carries',
+        );
+      },
+    );
+
+    // A widget may select a different value from one build to the next. What
+    // it selected before is not what it depends on any more, and used to stay
+    // registered anyway: the pairs piled up build after build, and a change to
+    // any of them — including one nobody reads — rebuilt the widget.
+    testWidgets(
+      'a dependent that moved to another value is not rebuilt by the old one',
+      (tester) async {
+        await tester.pumpWidget(const _Host(param: 'a'));
+        await tester.pumpAndSettle();
+
+        // The subtree is rebuilt, and the dependent moves from `value` to
+        // `other`.
+        await tester.pumpWidget(const _Host(param: 'b'));
+        await tester.pumpAndSettle();
+
+        final scope =
+            tester.element(find.byType(_CounterScope)) as _CounterScopeElement;
+        final builds = _SwitchingText.buildCount;
+
+        scope.bump();
+        await tester.pump();
+
+        expect(
+          _SwitchingText.buildCount,
+          builds,
+          reason: 'it stopped reading `value` a build ago',
+        );
+
+        scope.bumpOther();
+        await tester.pump();
+
+        expect(
+          _SwitchingText.buildCount,
+          builds + 1,
+          reason: 'the value it does read still rebuilds it',
+        );
+      },
+    );
+
+    // The other half of the same rule: a build may ask for more than one
+    // value, and all of them belong to it. Keeping only the last would be a
+    // missed rebuild, which is worse than the extra one above.
+    testWidgets(
+      'a dependent of two values is rebuilt by either of them',
+      (tester) async {
+        await tester.pumpWidget(const _Host(param: 'a'));
+        await tester.pumpAndSettle();
+
+        final scope =
+            tester.element(find.byType(_CounterScope)) as _CounterScopeElement;
+        final builds = _BothText.buildCount;
+
+        scope.bump();
+        await tester.pump();
+
+        expect(
+          _BothText.buildCount,
+          builds + 1,
+          reason: 'the first of the two changed',
+        );
+
+        scope.bumpOther();
+        await tester.pump();
+
+        expect(
+          _BothText.buildCount,
+          builds + 2,
+          reason: 'and so did the second',
         );
       },
     );
@@ -292,12 +366,21 @@ final class _CounterScopeElement
   /// The value the dependents select, changed only through [bump].
   int value = 0;
 
+  /// A second changeable value, so that a dependent can move from one to the
+  /// other between builds.
+  int other = 0;
+
   /// A value no test ever changes, so a dependent on it must never be
   /// rebuilt by a notification.
   int get constant => 42;
 
   void bump() {
     value++;
+    notifyDependents();
+  }
+
+  void bumpOther() {
+    other++;
     notifyDependents();
   }
 
@@ -311,6 +394,8 @@ final class _CounterScopeElement
           const _ValueText(),
           const _OtherText(),
           const _ParamText(),
+          _SwitchingText(useValue: widget.param == 'a'),
+          const _BothText(),
           _PlainText(param: widget.param),
         ],
       );
@@ -349,6 +434,55 @@ final class _OtherText extends StatelessWidget {
     );
 
     return Text('constant: $value');
+  }
+}
+
+/// Selects one of two changeable values, whichever the scope's parameter says.
+///
+/// Which one it reads is a property of the build it is in, and nothing else
+/// about the widget changes with it — so a rebuild caused by the value it
+/// stopped reading is visible in [buildCount] alone.
+final class _SwitchingText extends StatelessWidget {
+  static int buildCount = 0;
+
+  final bool useValue;
+
+  const _SwitchingText({required this.useValue});
+
+  @override
+  Widget build(BuildContext context) {
+    buildCount++;
+    final value =
+        ScopeWidgetCore.select<_CounterScope, _CounterScopeElement, int>(
+      context,
+      useValue ? (element) => element.value : (element) => element.other,
+    );
+
+    return Text('switching: $value');
+  }
+}
+
+/// Selects both changeable values in one build.
+final class _BothText extends StatelessWidget {
+  static int buildCount = 0;
+
+  const _BothText();
+
+  @override
+  Widget build(BuildContext context) {
+    buildCount++;
+    final value =
+        ScopeWidgetCore.select<_CounterScope, _CounterScopeElement, int>(
+      context,
+      (element) => element.value,
+    );
+    final other =
+        ScopeWidgetCore.select<_CounterScope, _CounterScopeElement, int>(
+      context,
+      (element) => element.other,
+    );
+
+    return Text('both: $value/$other');
   }
 }
 

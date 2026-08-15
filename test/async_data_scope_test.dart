@@ -117,6 +117,58 @@ void main() {
       },
     );
   });
+
+  // `null` is a value like any other when `T` is nullable, and the getter used
+  // to read the value itself as the answer to "is there one yet?". Before the
+  // initialization finished it therefore handed out `null` — a value the scope
+  // never produced — instead of saying there was nothing to hand out.
+  group('AsyncDataScope with a nullable value', () {
+    testWidgets('data throws before the value arrives', (tester) async {
+      final gate = Completer<void>();
+      Object? seen;
+
+      await tester.pumpWidget(
+        _NullableHost(
+          init: (context) async* {
+            await gate.future;
+
+            yield AsyncDataScopeReady(null);
+          },
+          onInitializing: (data) => seen = data,
+        ),
+      );
+      await tester.pump();
+
+      expect(
+        seen,
+        isA<StateError>(),
+        reason: 'the scope has produced nothing yet, and `null` is not a way '
+            'to say so',
+      );
+
+      gate.complete();
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('data returns the null the initialization produced',
+        (tester) async {
+      Object? seen = 'not read';
+
+      await tester.pumpWidget(
+        _NullableHost(
+          init: (context) => Stream.value(AsyncDataScopeReady(null)),
+          onReady: (data) => seen = data,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        seen,
+        isNull,
+        reason: 'the value is there, and it is `null`',
+      );
+    });
+  });
 }
 
 final class _Database {
@@ -147,6 +199,53 @@ final class _Host extends StatelessWidget {
           ),
         ),
       );
+}
+
+/// A scope over a nullable value, with a reader on each branch.
+///
+/// Both readers ask for `data` through a descendant, which is the only place
+/// the scope can be looked up from — the builders are called with the scope's
+/// own element, and a lookup walks the ancestors.
+final class _NullableHost extends StatelessWidget {
+  final Stream<AsyncDataScopeInitState<Object, String?>> Function(
+    BuildContext context,
+  ) init;
+  final void Function(Object? data)? onInitializing;
+  final void Function(Object? data)? onReady;
+
+  const _NullableHost({required this.init, this.onInitializing, this.onReady});
+
+  @override
+  Widget build(BuildContext context) => Directionality(
+        textDirection: TextDirection.ltr,
+        child: AsyncDataScope<String?>(
+          init: init,
+          dispose: (data) {},
+          initBuilder: (context, progress) => _NullableReader(onInitializing),
+          errorBuilder: (context, error, stackTrace, progress) =>
+              const SizedBox.shrink(),
+          builder: (context, data) => _NullableReader(onReady),
+        ),
+      );
+}
+
+/// Reports what `data` gave it: the value, or whatever it threw.
+final class _NullableReader extends StatelessWidget {
+  final void Function(Object? data)? report;
+
+  const _NullableReader(this.report);
+
+  @override
+  Widget build(BuildContext context) {
+    try {
+      report?.call(AsyncDataScope.of<String?>(context, listen: false).data);
+      // ignore: avoid_catching_errors
+    } on Object catch (error) {
+      report?.call(error);
+    }
+
+    return const SizedBox.shrink();
+  }
 }
 
 final class _Descendant extends StatelessWidget {

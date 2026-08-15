@@ -127,6 +127,14 @@ is not: it only means the element is asked to notify its dependents, and each
 dependent is then filtered by its own selectors. A scope has no way to know
 what its descendants care about, so the decision belongs to them.
 
+The filtering is per build: what a dependent selected during its last build is
+what it depends on, and nothing else. A widget that reads `user.name` in one
+build and `user.email` in the next is not rebuilt by a later change to
+`user.name`, so a selector chosen by a condition is safe. The build boundary is
+taken from the frame, which leaves one case it cannot tell apart — a dependent
+rebuilt twice within a single frame keeps both sets of selectors, and pays at
+most one extra rebuild for it.
+
 ## notifyDependents
 
 `notifyDependents()` tells the subscribed descendants that something changed

@@ -5,6 +5,55 @@ typedef _ScopeDependency<T extends Object, V extends Object?> = (
   V Function(T)
 );
 
+/// The build the registrations arriving right now belong to.
+///
+/// A widget selects what it needs *in a given build*, and a build later it may
+/// select something else entirely. Flutter offers no "this dependent is about
+/// to build" hook — its own [InheritedModel] piles aspects up for want of one —
+/// so the boundary is taken from the frame: a dependent registers only while it
+/// is being built, and two builds of the same dependent are two frames apart.
+///
+/// The one case this cannot tell apart is a dependent rebuilt twice within a
+/// single frame. A scope's own notification is not that case: it clears the
+/// registration outright before the dependent rebuilds.
+Object _buildPass = Object();
+
+/// Whether the end of [_buildPass] has already been asked for.
+bool _buildPassEnding = false;
+
+Object _currentBuildPass() {
+  if (!_buildPassEnding) {
+    _buildPassEnding = true;
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      _buildPass = Object();
+      _buildPassEnding = false;
+    });
+  }
+
+  return _buildPass;
+}
+
+/// What one dependent asked to hear about, and the build it asked in.
+final class _ScopeDependencies<E extends Object> {
+  /// The build [pairs] and [all] were collected in.
+  Object pass;
+
+  /// Whether the dependent asked to hear about every change.
+  bool all = false;
+
+  /// The `(value, selector)` pairs the dependent registered.
+  final pairs = <_ScopeDependency<E, Object?>>[];
+
+  _ScopeDependencies(this.pass);
+
+  /// Starts over for [pass], dropping what an earlier build asked for.
+  void reset(Object pass) {
+    this.pass = pass;
+    all = false;
+    pairs.clear();
+  }
+}
+
 /// The phase of the one-shot initialization hook of a scope element.
 enum _InitPhase {
   /// The hook has not run yet.
@@ -83,7 +132,7 @@ abstract base class ScopeWidgetElementBase<W extends ScopeWidgetCore<W, E>,
   /// [InheritedElement] does not support depending on itself (an assert in
   /// [notifyClients] blocks it), so self-dependencies are kept in a separate
   /// field.
-  List<_ScopeDependency<E, Object?>>? _selfDependencies;
+  _ScopeDependencies<E>? _selfDependencies;
 
   /// Whether the next rebuild ([performRebuild]) should only notify the
   /// dependents instead of rebuilding the subtree.
@@ -131,57 +180,63 @@ abstract base class ScopeWidgetElementBase<W extends ScopeWidgetCore<W, E>,
   @override
   void dispose() {}
 
-  List<_ScopeDependency<E, Object?>> _createDependencies() => [];
-
-  List<_ScopeDependency<E, Object?>>? _updateDependencies(
-    List<_ScopeDependency<E, Object?>>? dependencies,
+  _ScopeDependencies<E> _updateDependencies(
+    _ScopeDependencies<E>? dependencies,
     Object? aspect,
   ) {
-    // Already subscribed to every change.
-    if (dependencies != null && dependencies.isEmpty) {
-      return null;
+    final pass = _currentBuildPass();
+    final newDependencies = dependencies ?? _ScopeDependencies<E>(pass);
+
+    // What an earlier build asked for is not what this one reads. Kept, the
+    // pairs of every build since the last change would pile up, and a change
+    // to any of them -- to a value the dependent stopped reading builds ago --
+    // would rebuild it.
+    if (newDependencies.pass != pass) {
+      newDependencies.reset(pass);
     }
 
     if (aspect == null) {
       // Subscribe to every change.
-      return _createDependencies();
+      newDependencies.all = true;
+
+      return newDependencies;
     }
 
-    if (aspect case _ScopeDependency<E, Object?>()) {
-      return (dependencies ?? _createDependencies())..add(aspect);
+    if (aspect case final _ScopeDependency<E, Object?> dependency) {
+      newDependencies.pairs.add(dependency);
+
+      return newDependencies;
     }
 
     assert(false, '`aspect` must be ${_ScopeDependency<E, Object?>}');
 
-    return null;
+    return newDependencies;
   }
 
   @override
   void updateDependencies(Element dependent, Object? aspect) {
-    final newDependencies = _updateDependencies(
-      getDependencies(dependent) as List<_ScopeDependency<E, Object?>>?,
-      aspect,
+    setDependencies(
+      dependent,
+      _updateDependencies(
+        getDependencies(dependent) as _ScopeDependencies<E>?,
+        aspect,
+      ),
     );
-    if (newDependencies != null) {
-      setDependencies(dependent, newDependencies);
-    }
   }
 
   void _notifyDependent(
     W oldWidget,
     Element dependent,
-    List<_ScopeDependency<E, Object?>>? dependencies,
+    _ScopeDependencies<E>? dependencies,
   ) {
     if (dependencies == null) {
       return;
     }
 
-    var dependenciesChanged = false;
+    var dependenciesChanged = dependencies.all;
 
-    if (dependencies.isEmpty) {
-      dependenciesChanged = true;
-    } else {
-      for (final (value, selector) in dependencies) {
+    if (!dependenciesChanged) {
+      for (final (value, selector) in dependencies.pairs) {
         if (selector(this as E) != value) {
           dependenciesChanged = true;
           break;
@@ -205,7 +260,7 @@ abstract base class ScopeWidgetElementBase<W extends ScopeWidgetCore<W, E>,
     _notifyDependent(
       oldWidget,
       dependent,
-      getDependencies(dependent) as List<_ScopeDependency<E, Object?>>?,
+      getDependencies(dependent) as _ScopeDependencies<E>?,
     );
   }
 
