@@ -12,10 +12,11 @@
 > `Navigator` не вызывает `_NodeNavigator.maybePop()`. В объём этой волны входят
 > постоянные widget-тесты для вложенного route, dialog и root node; P2 №14
 > (повторный/поздний async pop) и №17 (смена `navigatorKey`) не расширяют её.
-> Дизайн утверждён и записан в
-> `docs/records/2026-08-15[4]-navigation-system-back-design.md`; далее нужен
-> детальный TDD-план. `docs/backlog.md` остаётся единственной чужой правкой и в
-> индекс не попадёт.
+> Дизайн утверждён в
+> `docs/records/2026-08-15[4]-navigation-system-back-design.md`, детальный
+> TDD-план — в `docs/records/2026-08-15[5]-navigation-system-back-plan.md`.
+> Реализация ещё не начата. `docs/backlog.md` содержит опубликованные записи
+> владельца и не относится к текущей fix-волне.
 
 ## С чего начать после рестарта
 
