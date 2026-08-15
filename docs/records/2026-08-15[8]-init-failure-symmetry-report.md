@@ -5,8 +5,8 @@
 > Закрывает три дефекта, найденные независимым ревью волны P1 №1, и добавляет
 > диагностику подписки из хука инициализации.
 > **Что это:** отчёт о fix-волне по итогам
-> `2026-08-15[6]-scope-init-after-mount-audit-report.md`.
-> **Связанные записи:** `2026-08-15[6]-scope-init-after-mount-audit-report.md`,
+> `2026-08-15[7]-scope-init-after-mount-audit-report.md`.
+> **Связанные записи:** `2026-08-15[7]-scope-init-after-mount-audit-report.md`,
 > `2026-08-15[1]-scope-init-after-mount-design.md`,
 > `2026-08-15[3]-scope-init-after-mount-report.md`,
 > `2026-08-14[10]-project-review.md`.

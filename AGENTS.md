@@ -99,7 +99,7 @@
 ниже и есть проверка пола.
 
 ```sh
-fvm flutter test                     # 146 тестов, должны быть зелёными
+fvm flutter test                     # все зелёные; число — в docs/handoff.md
 fvm flutter analyze                  # корень
 (cd example/minimal && fvm flutter analyze)
 (cd example/scopo_demo && fvm flutter analyze)

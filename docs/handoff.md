@@ -10,8 +10,8 @@
 > `worktree-review-scope-init-after-mount`, база `772e8f0`): неуспешный
 > синхронный `init()` стал терминальным, `dispose()` — симметричным ему, а
 > подписка из `init()`/`create()` закрыта `assert`-ом. Ревью —
-> `docs/records/2026-08-15[6]-scope-init-after-mount-audit-report.md`, отчёт о
-> волне — `[7]`. Параллельно идёт дизайн-фаза
+> `docs/records/2026-08-15[7]-scope-init-after-mount-audit-report.md`, отчёт о
+> волне — `[8]`. Параллельно идёт дизайн-фаза
 > P1 №2 из полного review: системный back должен сначала обрабатывать вложенный
 > `Navigator` в `NavigationNode`. Причина подтверждена: текущий `PopScope`
 > регистрируется на внешнем `ModalRoute`, поэтому системный pop от корневого
