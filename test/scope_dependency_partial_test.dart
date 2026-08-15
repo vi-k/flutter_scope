@@ -100,4 +100,66 @@ void main() {
       expect(released, ['holder']);
     });
   });
+
+  _sequentialDisposalGroup();
+}
+
+/// A container of three named dependencies, disposed of in reverse order.
+final class _Three extends ScopeAutoDependencies<_Three, void> {
+  final List<String> released;
+  final Set<String> failOnDispose;
+
+  _Three(this.released, {this.failOnDispose = const {}});
+
+  @override
+  bool get autoDisposeOnError => false;
+
+  FutureOr<void> Function(DepHelper dep) _init(String name) => (dep) {
+        dep.dispose = () {
+          released.add(name);
+          if (failOnDispose.contains(name)) {
+            throw Exception('$name failed to release');
+          }
+        };
+      };
+
+  @override
+  ScopeDependency buildDependencies(void context) => sequential('', [
+        dep('a', _init('a')),
+        dep('b', _init('b')),
+        dep('c', _init('c')),
+      ]);
+}
+
+void _sequentialDisposalGroup() {
+  group('a disposer that throws', () {
+    test('does not keep the dependencies below it from being released',
+        () async {
+      final released = <String>[];
+      final deps = _Three(released, failOnDispose: {'b'});
+
+      await deps.init(null).drain<void>();
+      await deps.dispose();
+
+      expect(
+        released,
+        ['c', 'b', 'a'],
+        reason: 'disposal runs in reverse order, and one failure is not a '
+            'reason to abandon whatever is left holding resources',
+      );
+    });
+
+    test('is still reported', () async {
+      final deps = _Three(<String>[], failOnDispose: {'b'});
+
+      await deps.init(null).drain<void>();
+      await deps.dispose();
+
+      expect(
+        deps.flattenDependenciesWithErrors().map((i) => i.dependency.name),
+        contains('b'),
+        reason: 'the failure is recorded on the dependency that failed',
+      );
+    });
+  });
 }

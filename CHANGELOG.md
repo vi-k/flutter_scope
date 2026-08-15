@@ -26,6 +26,12 @@
   is now released either way, once. A dependency in that position therefore
   reports `disposed` rather than `cancelled` when it carried no errors of its
   own.
+* Fix one failing disposer taking the rest of a sequential group with it. The
+  walk stopped at the first dependency that could not let go, leaving everything
+  below it — already initialized, still holding resources — untouched. Each
+  release is now guarded on its own, the walk finishes, and the first failure is
+  passed upwards afterwards; every failure is recorded on the dependency it
+  belongs to, as before.
 * Fix `NavigationNode` system back handling: a pushed route or dialog in its
   nested navigator now closes before the enclosing route can pop. Once the node
   has nothing of its own left to close, `onPop` is asked exactly once and its

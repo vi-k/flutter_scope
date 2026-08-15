@@ -96,8 +96,27 @@ final class _ScopeDependencySequential extends ScopeDependencyGroup {
     final dependencies = _dependencies //
         .reversed
         .where((dep) => dep.disposalRequired);
+    final errors = <AsyncError>[];
+
     for (final dependency in dependencies) {
-      yield* dependency.runDispose().map(_path);
+      try {
+        // Iterated rather than `yield*`-ed: an error inside a delegated stream
+        // goes straight to the listener, where no `catch` of ours can see it.
+        await for (final path in dependency.runDispose()) {
+          yield _path(path);
+        }
+        // ignore: avoid_catching_errors
+      } on Object catch (error, stackTrace) {
+        // One dependency that cannot let go is no reason to walk away from the
+        // ones below it, which are still holding resources of their own. Each
+        // failure is already recorded on the dependency it belongs to; the
+        // first one is passed upwards once the walk is over.
+        errors.add(AsyncError(error, stackTrace));
+      }
+    }
+
+    if (errors.firstOrNull case final first?) {
+      Error.throwWithStackTrace(first.error, first.stackTrace);
     }
   }
 }
