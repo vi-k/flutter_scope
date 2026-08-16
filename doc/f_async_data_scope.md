@@ -50,6 +50,24 @@ The progress side is typed loosely on purpose: `AsyncDataScopeProgress` carries
 an `Object?`, and the builders receive it as `Object?`. The value being built is
 what the type parameter is for; the progress is a caption.
 
+### Why `builder` is handed the value, when `ScopeModel`'s is not
+
+`ScopeModel.builder` takes a context and nothing else, and the widgets below it
+reach the model through `of` or `select`. The difference is not an oversight in
+either family; it follows from what the two objects are.
+
+A model lives as long as the scope and changes while it does, so what matters
+about it is *when* somebody reads it: a widget that reads it through `select`
+is subscribed to the part it read and is rebuilt when that part changes. Handing
+the model to the builder would give it an unsubscribed reference and encourage
+reading the whole object where a selector would do.
+
+A value here is produced once, by `init`, and never replaced. There is nothing
+to subscribe to and nothing to miss, and there is exactly one branch in which
+it exists at all — the ready one, which is what `builder` builds. Passing it is
+what makes that branch free of `data!` and `isInitialized`, and it is the same
+reason `dispose(data)` and `unmount(T? data)` receive it.
+
 ## Reading it from the subtree
 
 ```dart
