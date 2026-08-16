@@ -108,6 +108,19 @@ abstract base class ScopeAutoDependencies<T extends ScopeDependencies,
       },
       onError: (Object error, StackTrace stackTrace) {
         _log.e('dispose error', error: error, stackTrace: stackTrace);
+
+        // And reported, not only logged. This method never re-throws -- the
+        // teardown above it goes on whatever the dependencies say -- so a
+        // report is the one way out a failure has, and the log it used to
+        // have to itself is off by default.
+        FlutterError.reportError(
+          FlutterErrorDetails(
+            exception: error,
+            stack: stackTrace,
+            library: 'scopo',
+            context: ErrorDescription('while disposing of $T'),
+          ),
+        );
       },
       onDone: completer.complete,
       cancelOnError: false,

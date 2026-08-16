@@ -44,6 +44,22 @@
   still reported as before. The state is applied outside the frame, because
   such a failure is raised before the first `await` and therefore inside the
   build that started the initialization.
+* A failure of a dependency reaches `buildOnError` with the stack trace of
+  what actually failed. The wrapper was raised with `StackTrace.empty`, so the
+  trace that travelled up the tree — and into whatever the application does
+  with it — pointed nowhere. The original was inside
+  `ScopeDependencyException.stackTrace` all along, but nothing said so.
+* A failure of the dependency teardown is reported through
+  `FlutterError.reportError`, not only logged. `ScopeAutoDependencies.dispose`
+  never re-throws, by design, so the log was the single way out — and the
+  package logger is off by default, which made a disposer that could not close
+  its resource completely silent.
+* `LiteScopeState.close()` and `ScopeState.close()` use the element the state
+  belongs to instead of looking one up through `context`. The lookup answered
+  the *nearest* scope of that type, which a `wrapState` putting another scope
+  of the same type around the state is enough to shadow, and it answered
+  nothing at all once the state had been unmounted — where closing a scope
+  that is already gone should cost nothing.
 * Fix a teardown passing on its last failure instead of its first. Its four
   stages are guarded apart so that a failure in one never skips the ones after
   it, and the first of them is what the caller was meant to hear — but two of

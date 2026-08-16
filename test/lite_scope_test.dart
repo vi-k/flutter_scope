@@ -810,6 +810,44 @@ void main() {
       // The expiry of the wait is reported on its own, as it always is.
       expect(tester.takeException(), isA<TimeoutException>());
     });
+
+    // `LiteScopeCoreState.close()` used to look its own scope up through
+    // `State.context`, though the element it wants is already in a field of
+    // the state -- the neighbouring `notifyDependents()` uses exactly that.
+    // The lookup costs two things: it goes through a `context` that is gone
+    // once the state has been unmounted, and it finds the *nearest* scope of
+    // that type, which is not necessarily this one.
+    testWidgets('close() on a state whose tree is gone is a no-op',
+        (tester) async {
+      await tester.pumpWidget(_app(const _CloseScope(init: _becomesReady)));
+      await tester.pumpAndSettle();
+
+      final state = _scopeOf(tester).createdState!;
+
+      await tester.pumpWidget(_app(const SizedBox(width: 1, height: 1)));
+      await settle(tester, until: () => false);
+
+      Object? failure;
+      var done = false;
+      unawaited(
+        state.close().then(
+          (_) => done = true,
+          onError: (Object error) {
+            failure = error;
+            done = true;
+          },
+        ),
+      );
+      await settle(tester, until: () => done);
+
+      expect(
+        failure,
+        isNull,
+        reason: 'the scope this state belongs to is a field, not something to '
+            'go looking for through a context that no longer exists',
+      );
+      expect(done, isTrue);
+    });
   });
 
   // `_performAsyncInit` hands the cancellation over to `_subscription`, and

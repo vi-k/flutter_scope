@@ -134,9 +134,15 @@ mixin ScopeDependencyMixin implements ScopeDependency {
       );
     } else {
       // Wrap our own errors so that the name is passed upwards.
+      //
+      // With the trace of the failure, not an empty one: this is the trace
+      // that travels up the tree and reaches `buildOnError`, and a crash
+      // reporter handed `StackTrace.empty` has nothing to work from. The
+      // original is kept inside the exception as well, where a reader who
+      // knows to look can find it -- but nobody is told to look.
       Error.throwWithStackTrace(
         ScopeDependencyException(name, error, stackTrace),
-        StackTrace.empty,
+        stackTrace,
       );
     }
   }

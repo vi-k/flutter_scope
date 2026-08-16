@@ -472,5 +472,13 @@ abstract base class LiteScopeCoreState<
   }
 
   /// Closes the scope gracefully.
-  Future<void> close() => ScopeContext.of<W, E>(context, listen: false).close();
+  ///
+  /// The element is the one this state was made for, taken from the field it
+  /// was handed at creation rather than looked up through [context]. A lookup
+  /// answers the *nearest* scope of this type, which is not necessarily this
+  /// one -- a `wrapState` that puts another scope of the same type around the
+  /// state is enough to shadow it -- and it answers nothing at all once the
+  /// state has been unmounted, where closing a scope that is already gone
+  /// should cost nothing.
+  Future<void> close() => _scopeElement.close();
 }

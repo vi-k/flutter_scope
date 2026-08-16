@@ -2,6 +2,7 @@
 
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:scopo/scopo.dart';
 import 'package:test/test.dart';
 
@@ -103,6 +104,7 @@ void main() {
 
   _sequentialDisposalGroup();
   _concurrentDisposalGroup();
+  _diagnosticsGroup();
 }
 
 /// A container of three named dependencies, disposed of in reverse order.
@@ -237,6 +239,67 @@ void _concurrentDisposalGroup() {
         deps.flattenDependenciesWithErrors().map((i) => i.dependency.name),
         contains('x'),
         reason: 'the failure is recorded on the dependency that failed',
+      );
+    });
+  });
+}
+
+/// A container whose single dependency refuses to let go.
+final class _FailingDispose
+    extends ScopeAutoDependencies<_FailingDispose, void> {
+  _FailingDispose();
+
+  @override
+  bool get autoDisposeOnError => false;
+
+  @override
+  ScopeDependency buildDependencies(void context) => sequential('', [
+        dep('holder', (dep) {
+          dep.dispose = () => throw Exception('holder refuses to let go');
+        }),
+      ]);
+}
+
+void _diagnosticsGroup() {
+  group('a failure of a dependency', () {
+    test('carries the stack trace of what it wraps', () async {
+      final deps = _Deps(<String>[], (dep) => throw Exception('boom'));
+
+      Object? error;
+      StackTrace? stackTrace;
+      try {
+        await deps.init(null).drain<void>();
+      } on Object catch (e, s) {
+        error = e;
+        stackTrace = s;
+      }
+
+      expect(error, isA<ScopeDependencyException>());
+      expect(
+        stackTrace,
+        isNot(StackTrace.empty),
+        reason: 'this is the trace that reaches `buildOnError`, and a crash '
+            'reporter given an empty one has nothing to work from -- the '
+            'original is inside the exception, but nothing says so',
+      );
+    });
+
+    test('is reported when the disposal is the part that failed', () async {
+      final reported = <Object>[];
+      final previous = FlutterError.onError;
+      FlutterError.onError = (details) => reported.add(details.exception);
+      addTearDown(() => FlutterError.onError = previous);
+
+      final deps = _FailingDispose();
+      await deps.init(null).drain<void>();
+      await deps.dispose();
+
+      expect(
+        reported.map((error) => '$error'),
+        contains(contains('refuses to let go')),
+        reason: 'the container never re-throws what its disposal failed with, '
+            'so a report is the only way out; the log it used to go to alone '
+            'is off by default',
       );
     });
   });
