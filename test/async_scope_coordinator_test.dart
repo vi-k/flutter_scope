@@ -5,29 +5,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:scopo/scopo.dart';
 
 void main() {
-  // Captured eagerly, before any test can change them: a lazy top-level
-  // `final` initializes on its first read -- inside the first `tearDown` --
-  // so it would capture whatever the test that ran first left behind.
-  late final Duration? defaultScopeKeysTimeout;
-  late final Duration? defaultWaitForChildrenTimeout;
-  late final Duration? defaultInitCancellationTimeout;
-  late final Duration? defaultDisposeAsyncTimeout;
-
-  setUpAll(() {
-    defaultScopeKeysTimeout = ScopeConfig.defaultScopeKeysTimeout;
-    defaultWaitForChildrenTimeout = ScopeConfig.defaultWaitForChildrenTimeout;
-    defaultInitCancellationTimeout = ScopeConfig.defaultInitCancellationTimeout;
-    defaultDisposeAsyncTimeout = ScopeConfig.defaultDisposeAsyncTimeout;
-  });
-
   setUp(_TestScopeElement.reset);
 
-  tearDown(() {
-    ScopeConfig.defaultScopeKeysTimeout = defaultScopeKeysTimeout;
-    ScopeConfig.defaultWaitForChildrenTimeout = defaultWaitForChildrenTimeout;
-    ScopeConfig.defaultInitCancellationTimeout = defaultInitCancellationTimeout;
-    ScopeConfig.defaultDisposeAsyncTimeout = defaultDisposeAsyncTimeout;
-  });
+  // The switches are global and several tests below move them. `reset()` puts
+  // the lot back, so a test that changes one cannot reach the next.
+  tearDown(ScopeConfig.reset);
 
   testWidgets('two coordinators do not share a key', (tester) async {
     await tester.pumpWidget(

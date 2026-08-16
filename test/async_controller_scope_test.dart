@@ -39,6 +39,79 @@ void main() {
       expect(controller.calls, ['init', 'onUnmount', 'dispose']);
     });
 
+    test('performInit runs once, and never after the teardown', () async {
+      final controller = _TestController();
+
+      await controller.performInit();
+      await controller.performInit();
+
+      expect(controller.calls, ['init'], reason: 'at most once, as promised');
+
+      await controller.performDispose();
+      await controller.performInit();
+
+      expect(
+        controller.calls,
+        ['init', 'onUnmount', 'dispose'],
+        reason: 'a controller that has been let go of is not brought back: '
+            '`init` would run against what `dispose` has already released',
+      );
+      expect(controller.mounted, isFalse);
+    });
+
+    test('a second performDispose waits for the first instead of racing it',
+        () async {
+      final gate = Completer<void>();
+      final controller = _TestController(disposeGate: gate);
+      var firstDone = false;
+      var secondDone = false;
+
+      await controller.performInit();
+      unawaited(controller.performDispose().then((_) => firstDone = true));
+      unawaited(controller.performDispose().then((_) => secondDone = true));
+      await pumpEventQueue();
+
+      expect(controller.calls, ['init', 'onUnmount', 'dispose']);
+      expect(firstDone, isFalse);
+      expect(
+        secondDone,
+        isFalse,
+        reason: 'the teardown it was told was over is still running',
+      );
+
+      gate.complete();
+      await pumpEventQueue();
+
+      expect(firstDone, isTrue);
+      expect(secondDone, isTrue);
+    });
+
+    test('every caller of performDispose sees the same failure', () async {
+      final controller = _TestController(failOnDispose: true);
+
+      await controller.performInit();
+
+      // Both handlers are attached where the futures are made: an error that
+      // reaches a future nobody is listening to yet is an unhandled one.
+      final outcomes = await Future.wait([
+        controller.performDispose().then<Object?>(
+              (_) => null,
+              onError: (Object error) => error,
+            ),
+        controller.performDispose().then<Object?>(
+              (_) => null,
+              onError: (Object error) => error,
+            ),
+      ]);
+
+      expect(outcomes.first, isA<StateError>());
+      expect(
+        outcomes.last,
+        isA<StateError>(),
+        reason: 'a failure the first caller sees is not a success for the next',
+      );
+    });
+
     test('a controller that never initialized has nothing to unmount',
         () async {
       final controller = _TestController();

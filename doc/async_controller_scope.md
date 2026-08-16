@@ -97,6 +97,13 @@ await controller.performInit();
 await controller.performDispose();
 ```
 
+The sequence goes one way. A second `performInit` does nothing, and neither
+does one after `performDispose` — `init()` would otherwise run against whatever
+`dispose()` has already released. There is one teardown run per controller too,
+and every caller of `performDispose` observes it: a second call joins the run
+that is already going instead of returning at once, and a failure the first
+caller sees is a failure the second one sees as well.
+
 ## What the scope guarantees
 
 The point of the family. A controller created by the scope is released by the

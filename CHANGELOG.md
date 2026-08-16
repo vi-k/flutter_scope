@@ -82,6 +82,25 @@
 * `NodeNavigatorState` is documented rather than hidden with `@nodoc`. It is
   the type a `GlobalKey<NodeNavigatorState>()` is made of, so
   `NavigationNode.navigatorKey` could not be written without naming it.
+* `ScopeController.performInit` keeps the promise the family makes about it. It
+  ran `init()` every time it was called and paid no attention to whether the
+  controller had already been let go of, so a second call — or one after
+  `performDispose()` — re-mounted a disposed controller and initialized it
+  against fields its `dispose()` had already released. The three `perform`
+  methods are a one-way sequence now, as the documentation always said.
+* `ScopeController.performDispose` no longer tells a second caller that a
+  teardown still running is over. It marked the controller disposed of before
+  awaiting `dispose()`, so a concurrent second call returned at once and
+  reported success — including when the run it was reporting on went on to
+  fail. Every caller now joins the one run and receives its outcome, the way
+  `LiteScope.close()` already did.
+* `ScopeConfig.reset()` puts the pause switch and the four timeout defaults
+  back where they started. They are global and outlive the code that changed
+  them, and until now every suite saved and restored them by hand — a
+  convention, and one a test that forgot it could break for its neighbours.
+  The logger is left alone. The dartdoc of `pauseAfterInitializationEnabled`
+  described what setting it to `false` does while documenting a field whose
+  value is `true`; it now says what the field is.
 * A notification no longer rebuilds the widgets of the subtree it is not
   rebuilding. "Skips rebuilding the whole subtree" was true of the elements and
   not of the widgets: `ComponentElement.performRebuild` calls `build()`

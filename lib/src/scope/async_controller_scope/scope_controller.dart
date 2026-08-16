@@ -14,7 +14,13 @@ part of '../scope.dart';
 /// {@category AsyncControllerScope}
 abstract base class ScopeController {
   bool _mounted = false;
-  bool _disposed = false;
+  bool _initStarted = false;
+
+  /// The one teardown run, installed by the first [performDispose].
+  ///
+  /// Its presence is also what says the controller has been let go of, so
+  /// there is nothing else to keep in step with it.
+  Completer<void>? _disposeCompleter;
 
   /// Whether the controller is between the start of its initialization and
   /// the moment it was let go of.
@@ -23,9 +29,19 @@ abstract base class ScopeController {
   /// while the initialization was suspended.
   bool get mounted => _mounted;
 
-  /// Runs [init]. Called by the scope.
+  /// Runs [init], once. Called by the scope.
+  ///
+  /// A second call does nothing, and neither does one after [performDispose]:
+  /// the three methods are a one-way sequence, and a controller that has been
+  /// let go of is not brought back — [init] would run against whatever
+  /// [dispose] has already released.
   @nonVirtual
   Future<void> performInit() async {
+    if (_initStarted || _disposeCompleter != null) {
+      return;
+    }
+
+    _initStarted = true;
     _mounted = true;
     await init();
   }
@@ -45,13 +61,28 @@ abstract base class ScopeController {
   ///
   /// Called by the scope. [onUnmount] runs first when it has not run yet, so
   /// the two always arrive in that order.
+  ///
+  /// There is one teardown run per controller, and every caller observes its
+  /// outcome: a second call joins the run that is already going rather than
+  /// returning at once and reporting a teardown that is still running as one
+  /// that is over. A failure the first caller sees is a failure the second one
+  /// sees too.
   @nonVirtual
-  Future<void> performDispose() async {
-    if (_disposed) {
-      return;
+  Future<void> performDispose() {
+    if (_disposeCompleter case final completer?) {
+      return completer.future;
     }
 
-    _disposed = true;
+    // Installed before the run starts, so a caller arriving while the run is
+    // still synchronous joins it instead of starting a second one.
+    final completer = Completer<void>();
+    _disposeCompleter = completer;
+    completer.complete(_runDispose());
+
+    return completer.future;
+  }
+
+  Future<void> _runDispose() async {
     performUnmount();
     await dispose();
   }

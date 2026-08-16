@@ -17,22 +17,27 @@ abstract final class ScopeConfig {
   /// transformers.
   static final logger = ScopeLogger('scopo')..level = ScopeLogLevel.off;
 
-  /// Forces pause to be disabled during testing and debugging.
-  static bool pauseAfterInitializationEnabled = true;
+  /// Whether a `pauseAfterInitialization` is honoured at all.
+  ///
+  /// On by default. Set it to `false` to turn every such pause off at once —
+  /// in a test suite, say, where a scope that holds its ready branch back only
+  /// makes the run longer.
+  static bool pauseAfterInitializationEnabled =
+      _pauseAfterInitializationEnabled;
 
   /// Timeout for waiting for `scopeKeys` to be released.
   ///
   /// If `null`, then there is no timeout and the wait is unbounded.
   ///
   /// If zero, then the timeout expires immediately.
-  static Duration? defaultScopeKeysTimeout = const Duration(seconds: 3);
+  static Duration? defaultScopeKeysTimeout = _timeout;
 
   /// Timeout for waiting for scopes to be disposed of.
   ///
   /// If `null`, then there is no timeout and the wait is unbounded.
   ///
   /// If zero, then the timeout expires immediately.
-  static Duration? defaultWaitForChildrenTimeout = const Duration(seconds: 3);
+  static Duration? defaultWaitForChildrenTimeout = _timeout;
 
   /// Timeout for waiting for the asynchronous teardown of one scope.
   ///
@@ -44,7 +49,7 @@ abstract final class ScopeConfig {
   /// If `null`, then there is no timeout and the wait is unbounded.
   ///
   /// If zero, then the timeout expires immediately.
-  static Duration? defaultDisposeAsyncTimeout = const Duration(seconds: 3);
+  static Duration? defaultDisposeAsyncTimeout = _timeout;
 
   /// Timeout for waiting for an initialization to be cancelled.
   ///
@@ -56,5 +61,29 @@ abstract final class ScopeConfig {
   /// If `null`, then there is no timeout and the wait is unbounded.
   ///
   /// If zero, then the timeout expires immediately.
-  static Duration? defaultInitCancellationTimeout = const Duration(seconds: 3);
+  static Duration? defaultInitCancellationTimeout = _timeout;
+
+  /// The default every timeout above starts at.
+  static const _timeout = Duration(seconds: 3);
+
+  /// The default of [pauseAfterInitializationEnabled].
+  static const _pauseAfterInitializationEnabled = true;
+
+  /// Puts every switch above back to its default.
+  ///
+  /// These are global and outlive the code that changed them, so a test that
+  /// raises a timeout and forgets to put it back hands the next test a
+  /// different package. Call this from a `tearDown`, or from a `setUp` — which
+  /// also covers a test that failed before its own teardown ran.
+  ///
+  /// [logger] is left alone: it is an object with publishers and a transformer
+  /// of its own rather than a switch, and the level it was given is usually
+  /// the whole point of the run it was given for.
+  static void reset() {
+    pauseAfterInitializationEnabled = _pauseAfterInitializationEnabled;
+    defaultScopeKeysTimeout = _timeout;
+    defaultWaitForChildrenTimeout = _timeout;
+    defaultDisposeAsyncTimeout = _timeout;
+    defaultInitCancellationTimeout = _timeout;
+  }
 }

@@ -17,24 +17,7 @@ import 'utils/settle.dart';
 /// The assertions below are about effects, never about timings: what proves the
 /// teardown ran is that the resources it releases came back.
 void main() {
-  late final Duration? defaultScopeKeysTimeout;
-  late final Duration? defaultWaitForChildrenTimeout;
-  late final Duration? defaultInitCancellationTimeout;
-  late final Duration? defaultDisposeAsyncTimeout;
-
-  setUpAll(() {
-    defaultScopeKeysTimeout = ScopeConfig.defaultScopeKeysTimeout;
-    defaultWaitForChildrenTimeout = ScopeConfig.defaultWaitForChildrenTimeout;
-    defaultInitCancellationTimeout = ScopeConfig.defaultInitCancellationTimeout;
-    defaultDisposeAsyncTimeout = ScopeConfig.defaultDisposeAsyncTimeout;
-  });
-
-  tearDown(() {
-    ScopeConfig.defaultScopeKeysTimeout = defaultScopeKeysTimeout;
-    ScopeConfig.defaultWaitForChildrenTimeout = defaultWaitForChildrenTimeout;
-    ScopeConfig.defaultInitCancellationTimeout = defaultInitCancellationTimeout;
-    ScopeConfig.defaultDisposeAsyncTimeout = defaultDisposeAsyncTimeout;
-  });
+  tearDown(ScopeConfig.reset);
 
   group('AsyncScope', () {
     testWidgets('disposes of itself after a failing onUnmount', (tester) async {

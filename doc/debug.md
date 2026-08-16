@@ -190,6 +190,25 @@ indicator visible long enough to be read instead of blinking.
 off globally, without touching the widgets that declare it. Set it in the setup
 of a widget test, or while stepping through an initialization in the debugger.
 
+## reset()
+
+The switches above — the pause and the four timeouts — are global and outlive
+the code that changed them, so a test that raises a timeout and forgets to put
+it back hands the next test a different package. `ScopeConfig.reset()` puts all
+five back to their defaults:
+
+```dart
+void main() {
+  tearDown(ScopeConfig.reset);
+  …
+}
+```
+
+`setUp` works as well, and covers a test that failed before its own teardown
+ran. The logger is left alone: it is an object with publishers and a
+transformer of its own rather than a switch, and the level it was given is
+usually the whole point of the run it was given for.
+
 ## In tests
 
 The whole setup for a test suite is the threshold plus a publisher pointing at

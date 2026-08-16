@@ -7,15 +7,7 @@ import 'package:scopo/scopo.dart';
 import 'utils/settle.dart';
 
 void main() {
-  late final bool pauseEnabled;
-
-  setUpAll(() {
-    pauseEnabled = ScopeConfig.pauseAfterInitializationEnabled;
-  });
-
-  tearDown(() {
-    ScopeConfig.pauseAfterInitializationEnabled = pauseEnabled;
-  });
+  tearDown(ScopeConfig.reset);
 
   group('the waiting branch', () {
     testWidgets('is what a scope queued behind a scopeKey shows', (
