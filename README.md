@@ -360,6 +360,66 @@ class DatabaseGate extends StatelessWidget {
 }
 ```
 
+### AsyncControllerScope
+
+`AsyncDataScope` whose value is a controller with a lifecycle of its own. The
+scope creates it, awaits its `init`, tells it to let go the moment the scope
+leaves the tree, and awaits its `dispose` — on every path, including the two
+where a hand-written version loses it: an `init` that threw, and an `init`
+interrupted before it finished. Reach for it when the scope exists because
+something has to *run* while a part of the tree is on screen, rather than
+because something has to be shown.
+
+```dart
+final class Player extends AsyncControllerScopeBase<Player, PlayerController> {
+  const Player({super.key, required super.child}) : super(scopeKey: Player);
+
+  @override
+  PlayerController createController(BuildContext context) =>
+      PlayerController(api: context.read<Api>());
+
+  @override
+  Widget buildOnInitializing(BuildContext context) => const SizedBox.shrink();
+
+  @override
+  Widget buildOnError(BuildContext context, Object error, StackTrace stack) =>
+      const SizedBox.shrink();
+
+  @override
+  Widget buildOnReady(BuildContext context, PlayerController controller) =>
+      child;
+}
+
+final class PlayerController extends ScopeController {
+  final Api api;
+
+  StreamSubscription<Track>? _subscription;
+
+  PlayerController({required this.api});
+
+  /// Awaited before the ready branch is built. `mounted` says whether the
+  /// scope is still there after an `await`.
+  @override
+  Future<void> init() async {
+    final session = await api.openSession();
+    if (!mounted) return;
+
+    _subscription = session.tracks.listen(_onTrack);
+  }
+
+  /// Synchronous, the moment the scope leaves the tree.
+  @override
+  void onUnmount() => _subscription?.cancel();
+
+  /// Awaited, after `onUnmount`.
+  @override
+  Future<void> dispose() async => api.closeSession();
+}
+```
+
+`AsyncControllerScope<C>` is the same thing with a `create` callback instead of
+a subclass.
+
 ### LiteScope
 
 `Scope` without the dependency container: the state is created without an async

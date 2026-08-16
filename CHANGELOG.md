@@ -43,6 +43,18 @@
   and an empty stack — which is why the node kept the first one and the new key
   simply never resolved. An assertion says so, and points at `Widget.key` and
   at the `GlobalKey()` written inside `build` that usually causes it.
+* A new family, `AsyncControllerScope`, for a scope whose whole content is a
+  controller with a lifecycle of its own — something that has to run while a
+  part of the tree is on screen, rather than something to show. A
+  `ScopeController` writes three hooks — `init`, `onUnmount`, `dispose` — and
+  chains to no `super`: the three methods the scope calls (`performInit`,
+  `performUnmount`, `performDispose`) are sealed, keep `mounted`, keep the
+  order, and run each hook at most once. The scope releases the controller it
+  created on every path, including the two a hand-written version over
+  `AsyncDataScope` loses it on: an `init` that threw, and an `init` interrupted
+  before it handed the controller over. Three layers as everywhere:
+  `AsyncControllerScopeCore`, `AsyncControllerScopeBase`, and
+  `AsyncControllerScope<C>` with a `create` callback.
 * [breaking changes] The type arguments of `AsyncDataScope.select` are in the
   order every other `select` in the package uses — the scope's own type first,
   the selected type last: `select<Profile, String>` rather than

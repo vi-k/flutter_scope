@@ -1,6 +1,6 @@
 # scopo
 
-> Перевод `README.md` (blob `b6c26dd4f0b3d47095594c797d520003abd90d92`).
+> Перевод `README.md` (blob `2c4257e2177e290eafb9779756ca5193788f5239`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 [![pub version](https://img.shields.io/pub/v/scopo)](https://pub.dev/packages/scopo)
@@ -365,6 +365,65 @@ class DatabaseGate extends StatelessWidget {
       );
 }
 ```
+
+### AsyncControllerScope
+
+`AsyncDataScope`, значением которого выступает контроллер со своим жизненным
+циклом. Скоуп создаёт его, дожидается `init`, велит отпустить внешний мир в
+момент ухода с дерева и дожидается `dispose` — на любом пути, включая те два,
+на которых написанный руками вариант контроллер теряет: упавший `init` и
+`init`, прерванный до завершения. Берите его, когда скоуп существует потому,
+что что-то должно **работать**, пока кусок дерева на экране, а не потому, что
+что-то должно показываться.
+
+```dart
+final class Player extends AsyncControllerScopeBase<Player, PlayerController> {
+  const Player({super.key, required super.child}) : super(scopeKey: Player);
+
+  @override
+  PlayerController createController(BuildContext context) =>
+      PlayerController(api: context.read<Api>());
+
+  @override
+  Widget buildOnInitializing(BuildContext context) => const SizedBox.shrink();
+
+  @override
+  Widget buildOnError(BuildContext context, Object error, StackTrace stack) =>
+      const SizedBox.shrink();
+
+  @override
+  Widget buildOnReady(BuildContext context, PlayerController controller) =>
+      child;
+}
+
+final class PlayerController extends ScopeController {
+  final Api api;
+
+  StreamSubscription<Track>? _subscription;
+
+  PlayerController({required this.api});
+
+  /// Дожидается до построения готовой ветки. `mounted` говорит, на месте ли
+  /// ещё скоуп после `await`.
+  @override
+  Future<void> init() async {
+    final session = await api.openSession();
+    if (!mounted) return;
+
+    _subscription = session.tracks.listen(_onTrack);
+  }
+
+  /// Синхронно, в момент ухода скоупа с дерева.
+  @override
+  void onUnmount() => _subscription?.cancel();
+
+  /// С ожиданием, после `onUnmount`.
+  @override
+  Future<void> dispose() async => api.closeSession();
+}
+```
+
+`AsyncControllerScope<C>` — то же самое с колбэком `create` вместо наследования.
 
 ### LiteScope
 

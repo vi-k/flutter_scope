@@ -1,0 +1,189 @@
+part of '../scope.dart';
+
+/// {@category AsyncControllerScope}
+abstract base class AsyncControllerScopeBase<
+        W extends AsyncControllerScopeBase<W, C>, C extends ScopeController>
+    extends AsyncControllerScopeCore<W, _AsyncControllerScopeElement<W, C>, C> {
+  /// Serializes this scope with the others that share the key.
+  ///
+  /// A scope with a key starts only once the previous holder has finished
+  /// disposing of itself. Needs an [AsyncScopeCoordinator] above it.
+  final Object? scopeKey;
+
+  /// How long to wait for [scopeKey]; `null` waits indefinitely.
+  ///
+  /// Defaults to [ScopeConfig.defaultScopeKeysTimeout].
+  final Duration? scopeKeyTimeout;
+
+  /// Called when the wait for [scopeKey] expires.
+  final void Function()? onScopeKeyTimeout;
+
+  /// How long the teardown waits for the initialization of the controller to
+  /// be cancelled; `null` waits indefinitely.
+  ///
+  /// Defaults to [ScopeConfig.defaultInitCancellationTimeout].
+  final Duration? initCancellationTimeout;
+
+  /// Called when the wait for the cancellation expires.
+  final void Function()? onInitCancellationTimeout;
+
+  /// How long to wait for the teardown of the controller; `null` waits
+  /// indefinitely.
+  ///
+  /// Defaults to [ScopeConfig.defaultDisposeAsyncTimeout].
+  final Duration? disposeAsyncTimeout;
+
+  /// Called when the wait for the teardown expires.
+  final void Function()? onDisposeAsyncTimeout;
+
+  /// How long to wait for the child scopes; `null` waits indefinitely.
+  ///
+  /// Defaults to [ScopeConfig.defaultWaitForChildrenTimeout].
+  final Duration? waitForChildrenTimeout;
+
+  /// Called when the wait for the child scopes expires.
+  final void Function()? onWaitForChildrenTimeout;
+
+  /// Holds the ready branch back for this long after the initialization.
+  final Duration? pauseAfterInitialization;
+
+  /// Creates a scope owning a controller.
+  const AsyncControllerScopeBase({
+    super.key,
+    super.tag,
+    this.scopeKey,
+    this.scopeKeyTimeout,
+    this.onScopeKeyTimeout,
+    this.initCancellationTimeout,
+    this.onInitCancellationTimeout,
+    this.disposeAsyncTimeout,
+    this.onDisposeAsyncTimeout,
+    this.waitForChildrenTimeout,
+    this.onWaitForChildrenTimeout,
+    this.pauseAfterInitialization,
+    super.child, // Not used by default. You can use it at your own discretion.
+  });
+
+  //
+  // Overriding block
+  //
+
+  /// Creates the controller this scope owns.
+  ///
+  /// Called once, at the start of the asynchronous phase.
+  C createController(BuildContext context);
+
+  /// Built while waiting for a `scopeKey` and for the controller.
+  ///
+  /// Returning `null` falls back to [buildOnInitializing].
+  Widget? buildOnWaiting(BuildContext context) => null;
+
+  /// Built while the controller is initializing.
+  Widget buildOnInitializing(BuildContext context);
+
+  /// Built when the initialization of the controller failed.
+  Widget buildOnError(
+    BuildContext context,
+    Object error,
+    StackTrace stackTrace,
+  );
+
+  /// Built once the controller is ready, and receives it.
+  Widget buildOnReady(BuildContext context, C controller);
+
+  //
+  // End of overriding block
+  //
+
+  @override
+  // ignore: library_private_types_in_public_api
+  _AsyncControllerScopeElement<W, C> createScopeElement() =>
+      _AsyncControllerScopeElement<W, C>(this as W);
+
+  /// The nearest scope [W] above [context], or `null`.
+  static AsyncDataScopeContext<W, C>? maybeOf<
+          W extends AsyncControllerScopeBase<W, C>, C extends ScopeController>(
+    BuildContext context, {
+    required bool listen,
+  }) =>
+      ScopeContext.maybeOf<W, AsyncDataScopeContext<W, C>>(
+        context,
+        listen: listen,
+      );
+
+  /// The nearest scope [W] above [context].
+  ///
+  /// Throws when there is none.
+  static AsyncDataScopeContext<W, C>
+      of<W extends AsyncControllerScopeBase<W, C>, C extends ScopeController>(
+    BuildContext context, {
+    required bool listen,
+  }) =>
+          ScopeContext.of<W, AsyncDataScopeContext<W, C>>(
+            context,
+            listen: listen,
+          );
+
+  /// Subscribes to one value of the scope and returns it.
+  static V select<W extends AsyncControllerScopeBase<W, C>,
+          C extends ScopeController, V extends Object?>(
+    BuildContext context,
+    V Function(AsyncDataScopeContext<W, C> context) selector,
+  ) =>
+      ScopeContext.select<W, AsyncDataScopeContext<W, C>, V>(
+        context,
+        selector,
+      );
+}
+
+final class _AsyncControllerScopeElement<
+        W extends AsyncControllerScopeBase<W, C>, C extends ScopeController>
+    extends AsyncControllerScopeElementBase<W,
+        _AsyncControllerScopeElement<W, C>, C> {
+  _AsyncControllerScopeElement(super.widget);
+
+  @override
+  Object? get scopeKey => widget.scopeKey;
+
+  @override
+  Duration? get scopeKeyTimeout => widget.scopeKeyTimeout;
+
+  @override
+  void onScopeKeyTimeout() => widget.onScopeKeyTimeout?.call();
+
+  @override
+  Duration? get initCancellationTimeout => widget.initCancellationTimeout;
+
+  @override
+  void onInitCancellationTimeout() => widget.onInitCancellationTimeout?.call();
+
+  @override
+  Duration? get disposeAsyncTimeout => widget.disposeAsyncTimeout;
+
+  @override
+  void onDisposeAsyncTimeout() => widget.onDisposeAsyncTimeout?.call();
+
+  @override
+  Duration? get waitForChildrenTimeout => widget.waitForChildrenTimeout;
+
+  @override
+  void onWaitForChildrenTimeout() => widget.onWaitForChildrenTimeout?.call();
+
+  @override
+  Duration? get pauseAfterInitialization => widget.pauseAfterInitialization;
+
+  @override
+  C createController(BuildContext context) => widget.createController(context);
+
+  @override
+  Widget buildOnState(AsyncScopeState state) => switch (state) {
+        AsyncScopeWaiting() =>
+          widget.buildOnWaiting(this) ?? widget.buildOnInitializing(this),
+        // A controller reports no progress: the stream above yields the ready
+        // state and nothing else.
+        AsyncScopeProgress() => widget.buildOnInitializing(this),
+        AsyncScopeReady() => widget.buildOnReady(this, data),
+        AsyncScopeError(:final error, :final stackTrace) =>
+          widget.buildOnError(this, error, stackTrace),
+      };
+}

@@ -12,6 +12,8 @@ dartdoc:
       markdown: doc/async_scope.md
     AsyncDataScope:
       markdown: doc/async_data_scope.md
+    AsyncControllerScope:
+      markdown: doc/async_controller_scope.md
     LiteScope:
       markdown: doc/lite_scope.md
     Scope:
@@ -28,6 +30,7 @@ dartdoc:
       ScopeNotifier,
       AsyncScope,
       AsyncDataScope,
+      AsyncControllerScope,
       LiteScope,
       Scope,
       debug,
