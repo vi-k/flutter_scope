@@ -263,6 +263,43 @@ abstract base class ScopeWidgetElementBase<W extends ScopeWidgetCore<W, E>,
     );
   }
 
+  /// Whether [selector] now answers something other than [value].
+  ///
+  /// The selector is user code, and this is not the framework running it:
+  /// [notifyClients] walks the dependents from [performRebuild], with no
+  /// boundary of its own around any of them. A throw that got out of here
+  /// took the whole walk with it -- every dependent it had not reached yet
+  /// simply never heard about the change, and which ones those were came down
+  /// to the iteration order of a hash map. The scope's own subscription is
+  /// walked first, so a failure there swallowed the notification whole. The
+  /// frame then died of a second, derived error that says nothing about the
+  /// selector.
+  ///
+  /// A selector that could not answer counts as changed, so its dependent is
+  /// rebuilt and asks it again from inside its own build -- where the
+  /// framework's error boundary turns a second failure into an `ErrorWidget`
+  /// for that one widget, which is where a failure of its own belongs.
+  bool _selectorSaysChanged(Object? Function(E) selector, Object? value) {
+    try {
+      return selector(this as E) != value;
+      // ignore: avoid_catching_errors
+    } on Object catch (error, stackTrace) {
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: error,
+          stack: stackTrace,
+          library: 'scopo',
+          context: ErrorDescription(
+            'while a selector was being asked whether the value it reads from '
+            '${widget.toStringShort()} had changed',
+          ),
+        ),
+      );
+
+      return true;
+    }
+  }
+
   void _notifyDependent(
     W oldWidget,
     Element dependent,
@@ -276,7 +313,7 @@ abstract base class ScopeWidgetElementBase<W extends ScopeWidgetCore<W, E>,
 
     if (!dependenciesChanged) {
       for (final (value, selector) in dependencies.pairs) {
-        if (selector(this as E) != value) {
+        if (_selectorSaysChanged(selector, value)) {
           dependenciesChanged = true;
           break;
         }

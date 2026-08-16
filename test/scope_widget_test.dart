@@ -274,6 +274,44 @@ void main() {
         );
       },
     );
+
+    // A notification runs user code -- every selector of every dependent, and
+    // the scope's own -- and it runs it from `performRebuild`, outside any
+    // boundary of the framework's. A selector that threw used to take the
+    // whole notification with it: every dependent the walk had not reached
+    // yet simply never heard about the change, and which ones those were
+    // depended on the iteration order of a hash map. The scope's own
+    // subscription is first, so a failure there swallowed the notification
+    // whole.
+    testWidgets(
+      'a selector that throws does not swallow the notification',
+      (tester) async {
+        await tester.pumpWidget(const _Host(param: 'a'));
+        await tester.pumpAndSettle();
+
+        final scope =
+            tester.element(find.byType(_CounterScope)) as _CounterScopeElement;
+
+        expect(find.text('0'), findsOneWidget);
+
+        scope
+          ..explodeOnce = true
+          ..bump();
+        await tester.pump();
+
+        expect(
+          tester.takeException(),
+          isA<StateError>(),
+          reason: 'what the selector threw is reported, not swallowed',
+        );
+        expect(
+          find.text('1'),
+          findsOneWidget,
+          reason: 'and the dependents still heard the notification that the '
+              'failing selector was only a part of',
+        );
+      },
+    );
   });
 }
 
@@ -374,6 +412,23 @@ final class _CounterScopeElement
   /// rebuilt by a notification.
   int get constant => 42;
 
+  /// Makes the next call of the scope's own selector fail, once.
+  ///
+  /// One shot on purpose: the throw belongs to the notification, and the
+  /// build that follows has to be able to succeed, so that what the test sees
+  /// afterwards is the state of the scope and not a widget stuck on an error
+  /// of its own.
+  bool explodeOnce = false;
+
+  bool _takeExplode() {
+    if (!explodeOnce) {
+      return false;
+    }
+    explodeOnce = false;
+
+    return true;
+  }
+
   void bump() {
     value++;
     notifyDependents();
@@ -389,16 +444,36 @@ final class _CounterScopeElement
   /// instance would let the framework skip them on identity alone, and the
   /// notify-only path would look like it worked even when it did not.
   @override
-  Widget buildChild() => Column(
-        children: [
-          const _ValueText(),
-          const _OtherText(),
-          const _ParamText(),
-          _SwitchingText(useValue: widget.param == 'a'),
-          const _BothText(),
-          _PlainText(param: widget.param),
-        ],
-      );
+  Widget buildChild() {
+    // A subscription of the scope to itself. `notifyClients` runs it before
+    // any dependent, so whatever it does to a notification it does to all of
+    // them -- which is what makes the test below deterministic, where the
+    // order of the dependents is not.
+    //
+    // It reads `constant`, so it never fires by itself and the other tests in
+    // this file see the notify-only path they were written for.
+    ScopeWidgetCore.select<_CounterScope, _CounterScopeElement, int>(
+      this,
+      (element) {
+        if (element._takeExplode()) {
+          throw StateError('the selector failed');
+        }
+
+        return element.constant;
+      },
+    );
+
+    return Column(
+      children: [
+        const _ValueText(),
+        const _OtherText(),
+        const _ParamText(),
+        _SwitchingText(useValue: widget.param == 'a'),
+        const _BothText(),
+        _PlainText(param: widget.param),
+      ],
+    );
+  }
 }
 
 final class _ValueText extends StatelessWidget {

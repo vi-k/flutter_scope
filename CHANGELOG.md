@@ -44,6 +44,16 @@
   still reported as before. The state is applied outside the frame, because
   such a failure is raised before the first `await` and therefore inside the
   build that started the initialization.
+* Fix a selector that throws taking the whole notification with it. The walk
+  over the dependents runs user code with no boundary of its own around it, so
+  one selector that could not answer stopped the walk: every dependent it had
+  not reached yet never heard about the change, and which ones those were came
+  down to the iteration order of a hash map. A scope's own subscription is
+  walked first, so a failure there swallowed the notification whole. The
+  failure is now reported through `FlutterError.reportError` and its dependent
+  is treated as changed, so it is rebuilt and asks the selector again from
+  inside its own build — where a second failure becomes an `ErrorWidget` for
+  that one widget, instead of a second, derived error for the frame.
 * Fix one failing disposer taking the rest of a *concurrent* group with it —
   the same defect as the sequential one above, in the class beside it. An
   error reaching the merged stream cancelled every arm still running, and an
