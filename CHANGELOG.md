@@ -43,6 +43,14 @@
   and an empty stack — which is why the node kept the first one and the new key
   simply never resolved. An assertion says so, and points at `Widget.key` and
   at the `GlobalKey()` written inside `build` that usually causes it.
+* [breaking changes] `AsyncScope` hands the progress to the branches built
+  before the scope is ready: `initBuilder` is now
+  `(context, progress)` and `errorBuilder` is
+  `(context, error, stackTrace, progress)`, matching `Scope`, `LiteScope` and
+  `AsyncDataScope`. It was the only family that computed the progress, kept it
+  in the model, and then left the builder to fish it back out of
+  `AsyncScope.of`. Subclasses of `AsyncScopeBase` take the same two arguments
+  in `buildOnInitializing` and `buildOnError`.
 * Fix a teardown held forever by a `disposeAsync` that never completes — the
   same hole one step further down, and user code on both sides of it. The
   release that follows it, and with it the `scopeKey` of a scope that had

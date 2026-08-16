@@ -328,8 +328,8 @@ class ConnectionGate extends StatelessWidget {
           yield AsyncScopeReady();
         },
         dispose: () => connection.close(),
-        initBuilder: (context) => const CircularProgressIndicator(),
-        errorBuilder: (context, error, stackTrace) => Text('$error'),
+        initBuilder: (context, progress) => Text('$progress'),
+        errorBuilder: (context, error, stackTrace, progress) => Text('$error'),
         builder: (context) => const HomeScreen(),
       );
 }

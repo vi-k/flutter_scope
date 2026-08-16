@@ -35,8 +35,9 @@ void main() {
                       scopeKey: 'k',
                       init: (context) => Stream.value(AsyncScopeReady()),
                       dispose: () => gate.future,
-                      initBuilder: (context) => const Text('holder: init'),
-                      errorBuilder: (context, error, stackTrace) =>
+                      initBuilder: (context, progress) =>
+                          const Text('holder: init'),
+                      errorBuilder: (context, error, stackTrace, progress) =>
                           Text('holder: $error'),
                       builder: (context) => const Text('holder: ready'),
                     ),
@@ -47,8 +48,9 @@ void main() {
                       init: (context) => Stream.value(AsyncScopeReady()),
                       dispose: () {},
                       waitingBuilder: (context) => const Text('waiting'),
-                      initBuilder: (context) => const Text('initializing'),
-                      errorBuilder: (context, error, stackTrace) =>
+                      initBuilder: (context, progress) =>
+                          const Text('initializing'),
+                      errorBuilder: (context, error, stackTrace, progress) =>
                           Text('error: $error'),
                       builder: (context) => const Text('ready'),
                     ),
@@ -97,8 +99,9 @@ void main() {
                   scopeKey: 'k',
                   init: (context) => Stream.value(AsyncScopeReady()),
                   dispose: () => gate.future,
-                  initBuilder: (context) => const Text('holder: init'),
-                  errorBuilder: (context, error, stackTrace) =>
+                  initBuilder: (context, progress) =>
+                      const Text('holder: init'),
+                  errorBuilder: (context, error, stackTrace, progress) =>
                       Text('holder: $error'),
                   builder: (context) => const Text('holder: ready'),
                 ),
@@ -122,8 +125,9 @@ void main() {
                   dispose: () {},
                   // No waitingBuilder: `buildOnWaiting()` answers null and the
                   // initializing branch is built with a null progress instead.
-                  initBuilder: (context) => const Text('initializing'),
-                  errorBuilder: (context, error, stackTrace) =>
+                  initBuilder: (context, progress) =>
+                      const Text('initializing'),
+                  errorBuilder: (context, error, stackTrace, progress) =>
                       Text('error: $error'),
                   builder: (context) => const Text('ready'),
                 ),

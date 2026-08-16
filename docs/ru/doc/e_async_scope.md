@@ -1,6 +1,6 @@
 # AsyncScope
 
-> Перевод `doc/e_async_scope.md` (blob `c7e2ecfad5c4e96780ef11293fc081e3da402a38`).
+> Перевод `doc/e_async_scope.md` (blob `ae49b1f961e12fcb65d30a88cd3cf4e05e4d9081`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 Скоуп, всё содержимое которого — жизненный цикл: асинхронная инициализация и
@@ -19,8 +19,8 @@ AsyncScope(
   },
   dispose: () => connection.close(),
   waitingBuilder: (context) => const SizedBox.shrink(),
-  initBuilder: (context) => const CircularProgressIndicator(),
-  errorBuilder: (context, error, stackTrace) => Text('$error'),
+  initBuilder: (context, progress) => Text('$progress'),
+  errorBuilder: (context, error, stackTrace, progress) => Text('$error'),
   builder: (context) => const HomeScreen(),
 );
 ```
@@ -41,7 +41,7 @@ AsyncScope(
 | `AsyncScopeWaiting` | `buildOnWaiting`, а если он вернул `null` — `buildOnInitializing` | встал на дерево; ждёт `scopeKey` и первое событие |
 | `AsyncScopeProgress` | `buildOnInitializing` | `init` сообщил о прогрессе; значение в `progress` |
 | `AsyncScopeReady` | `buildOnReady` | `init` выдал `AsyncScopeReady` |
-| `AsyncScopeError` | `buildOnError` | `init` упал раньше, чем стал готов |
+| `AsyncScopeError` | `buildOnError` | `init` упал раньше, чем стал готов; вместе с ошибкой приходит достигнутый прогресс |
 
 Тип `init` — поток `AsyncScopeInitState`, то есть половина иерархии
 `Progress`/`Ready`: поток не может сообщить «жду» или «упал» значением, потому
@@ -70,7 +70,8 @@ if (scope.isInitialized) { … }
 ## Ошибки
 
 Поток, упавший до готовности, переводит скоуп в `AsyncScopeError`, и
-`buildOnError` получает ошибку вместе со стеком вызовов.
+`buildOnError` получает ошибку, стек вызовов и прогресс, которого скоуп успел
+достичь.
 
 Два провала обрабатываются иначе, и о каждом стоит знать.
 

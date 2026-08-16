@@ -16,8 +16,8 @@ AsyncScope(
   },
   dispose: () => connection.close(),
   waitingBuilder: (context) => const SizedBox.shrink(),
-  initBuilder: (context) => const CircularProgressIndicator(),
-  errorBuilder: (context, error, stackTrace) => Text('$error'),
+  initBuilder: (context, progress) => Text('$progress'),
+  errorBuilder: (context, error, stackTrace, progress) => Text('$error'),
   builder: (context) => const HomeScreen(),
 );
 ```
@@ -39,7 +39,7 @@ needs its own element.
 | `AsyncScopeWaiting` | `buildOnWaiting`, or `buildOnInitializing` when it returns `null` | mounted; waiting for a `scopeKey` and for the first event |
 | `AsyncScopeProgress` | `buildOnInitializing` | `init` reported progress; the value is `progress` |
 | `AsyncScopeReady` | `buildOnReady` | `init` yielded `AsyncScopeReady` |
-| `AsyncScopeError` | `buildOnError` | `init` failed before it was ready |
+| `AsyncScopeError` | `buildOnError` | `init` failed before it was ready; the progress it had reached comes with it |
 
 `init` is typed to yield `AsyncScopeInitState`, which is the `Progress`/`Ready`
 half of that hierarchy: a stream cannot report "waiting" or "failed" as values,
@@ -68,7 +68,8 @@ subscribes to that field alone — the `base` topic explains the filtering.
 ## Errors
 
 A stream that fails before the scope is ready puts it into `AsyncScopeError`,
-and `buildOnError` receives the error and its stack trace.
+and `buildOnError` receives the error, its stack trace, and the progress the
+scope had reached when it failed.
 
 Two failures are handled differently, and both deserve to be known.
 

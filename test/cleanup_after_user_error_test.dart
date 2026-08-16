@@ -466,13 +466,15 @@ final class _Async extends AsyncScopeBase<_Async> {
   }
 
   @override
-  Widget buildOnInitializing(BuildContext context) => const SizedBox.shrink();
+  Widget buildOnInitializing(BuildContext context, Object? progress) =>
+      const SizedBox.shrink();
 
   @override
   Widget buildOnError(
     BuildContext context,
     Object error,
     StackTrace stackTrace,
+    Object? progress,
   ) =>
       const SizedBox.shrink();
 

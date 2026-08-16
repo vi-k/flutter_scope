@@ -25,13 +25,19 @@ final class AsyncScope extends AsyncScopeBase<AsyncScope> {
   final Widget Function(BuildContext context)? waitingBuilder;
 
   /// Built while the initialization is running.
-  final Widget Function(BuildContext context) initBuilder;
+  ///
+  /// The second argument is what the last [AsyncScopeProgress] carried, and
+  /// `null` before the first one.
+  final Widget Function(BuildContext context, Object? progress) initBuilder;
 
   /// Built when the initialization failed.
+  ///
+  /// The last argument is the progress the scope had reached when it failed.
   final Widget Function(
     BuildContext context,
     Object error,
     StackTrace stackTrace,
+    Object? progress,
   ) errorBuilder;
 
   /// Built once the scope is ready.
@@ -68,15 +74,17 @@ final class AsyncScope extends AsyncScopeBase<AsyncScope> {
   Widget? buildOnWaiting(BuildContext context) => waitingBuilder?.call(context);
 
   @override
-  Widget buildOnInitializing(BuildContext context) => initBuilder(context);
+  Widget buildOnInitializing(BuildContext context, Object? progress) =>
+      initBuilder(context, progress);
 
   @override
   Widget buildOnError(
     BuildContext context,
     Object error,
     StackTrace stackTrace,
+    Object? progress,
   ) =>
-      errorBuilder(context, error, stackTrace);
+      errorBuilder(context, error, stackTrace, progress);
 
   @override
   Widget buildOnReady(BuildContext context) => builder(context);

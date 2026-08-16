@@ -349,6 +349,53 @@ void main() {
       },
     );
 
+    // Every other family hands the progress to the branches built while the
+    // scope is not ready. This one computed it, kept it in the model, and then
+    // left the builder to fish it back out of `AsyncScope.of`.
+    testWidgets(
+      'hands the progress to the initializing and error branches',
+      (tester) async {
+        final gate = Completer<void>();
+
+        await tester.pumpWidget(
+          Directionality(
+            textDirection: TextDirection.ltr,
+            child: AsyncScope(
+              init: (context) async* {
+                yield AsyncScopeProgress('connecting');
+                await gate.future;
+
+                throw StateError('init failed');
+              },
+              dispose: () {},
+              initBuilder: (context, progress) =>
+                  Text('initializing: $progress'),
+              errorBuilder: (context, error, stackTrace, progress) =>
+                  Text('error at $progress'),
+              builder: (context) => const Text('ready'),
+            ),
+          ),
+        );
+        await tester.pump();
+
+        expect(
+          find.text('initializing: connecting'),
+          findsOneWidget,
+          reason: 'the progress the stream reported is what is shown',
+        );
+
+        gate.complete();
+        await tester.pumpAndSettle();
+
+        expect(
+          find.text('error at connecting'),
+          findsOneWidget,
+          reason: 'the error branch is given the progress the scope reached',
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+
     testWidgets(
       'an error raised inside the init stream reaches the model with the last '
       'progress, and the error branch is built',
@@ -368,8 +415,8 @@ void main() {
                 throw StateError('init failed');
               },
               dispose: () {},
-              initBuilder: (context) => const Text('initializing'),
-              errorBuilder: (context, error, stackTrace) =>
+              initBuilder: (context, progress) => const Text('initializing'),
+              errorBuilder: (context, error, stackTrace, progress) =>
                   Text('error: $error'),
               builder: (context) => const Text('ready'),
             ),

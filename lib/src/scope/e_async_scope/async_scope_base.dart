@@ -102,7 +102,10 @@ abstract base class AsyncScopeBase<W extends AsyncScopeBase<W>>
   Widget? buildOnWaiting(BuildContext context) => null;
 
   /// Built while the initialization is running.
-  Widget buildOnInitializing(BuildContext context);
+  ///
+  /// [progress] is what the last [AsyncScopeProgress] carried, and `null`
+  /// before the first one.
+  Widget buildOnInitializing(BuildContext context, Object? progress);
 
   /// Built once the scope is ready.
   Widget buildOnReady(BuildContext context);
@@ -112,6 +115,7 @@ abstract base class AsyncScopeBase<W extends AsyncScopeBase<W>>
     BuildContext context,
     Object error,
     StackTrace stackTrace,
+    Object? progress,
   );
 
   //
@@ -218,10 +222,11 @@ final class _AsyncScopeElement<W extends AsyncScopeBase<W>>
   @override
   Widget buildOnState(AsyncScopeState state) => switch (state) {
         AsyncScopeWaiting() =>
-          widget.buildOnWaiting(this) ?? widget.buildOnInitializing(this),
-        AsyncScopeProgress() => widget.buildOnInitializing(this),
+          widget.buildOnWaiting(this) ?? widget.buildOnInitializing(this, null),
+        AsyncScopeProgress(:final progress) =>
+          widget.buildOnInitializing(this, progress),
         AsyncScopeReady() => widget.buildOnReady(this),
-        AsyncScopeError(:final error, :final stackTrace) =>
-          widget.buildOnError(this, error, stackTrace),
+        AsyncScopeError(:final error, :final stackTrace, :final progress) =>
+          widget.buildOnError(this, error, stackTrace, progress),
       };
 }

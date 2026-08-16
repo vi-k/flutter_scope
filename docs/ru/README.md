@@ -1,6 +1,6 @@
 # scopo
 
-> Перевод `README.md` (blob `b3827b63672bda24ea08dfd8f0f9537d3448210c`).
+> Перевод `README.md` (blob `b6c26dd4f0b3d47095594c797d520003abd90d92`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 [![pub version](https://img.shields.io/pub/v/scopo)](https://pub.dev/packages/scopo)
@@ -334,8 +334,8 @@ class ConnectionGate extends StatelessWidget {
           yield AsyncScopeReady();
         },
         dispose: () => connection.close(),
-        initBuilder: (context) => const CircularProgressIndicator(),
-        errorBuilder: (context, error, stackTrace) => Text('$error'),
+        initBuilder: (context, progress) => Text('$progress'),
+        errorBuilder: (context, error, stackTrace, progress) => Text('$error'),
         builder: (context) => const HomeScreen(),
       );
 }

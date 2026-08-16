@@ -26,8 +26,8 @@ void main() {
               return Stream.value(AsyncScopeReady());
             },
             dispose: () {},
-            initBuilder: (context) => const SizedBox.shrink(),
-            errorBuilder: (context, error, stackTrace) =>
+            initBuilder: (context, progress) => const SizedBox.shrink(),
+            errorBuilder: (context, error, stackTrace, progress) =>
                 const SizedBox.shrink(),
             builder: (context) => const SizedBox.shrink(),
           ),
@@ -81,8 +81,8 @@ void main() {
               mount: (context) => seen = _Ancestor.of(context),
               init: (context) => Stream.value(AsyncScopeReady()),
               dispose: () {},
-              initBuilder: (context) => const SizedBox.shrink(),
-              errorBuilder: (context, error, stackTrace) =>
+              initBuilder: (context, progress) => const SizedBox.shrink(),
+              errorBuilder: (context, error, stackTrace, progress) =>
                   const SizedBox.shrink(),
               builder: (context) => const SizedBox.shrink(),
             ),
@@ -165,8 +165,8 @@ void main() {
             init: (context) => Stream.value(AsyncScopeReady()),
             unmount: () => _order.add('onUnmount'),
             dispose: () => _order.add('disposeAsync'),
-            initBuilder: (context) => const SizedBox.shrink(),
-            errorBuilder: (context, error, stackTrace) =>
+            initBuilder: (context, progress) => const SizedBox.shrink(),
+            errorBuilder: (context, error, stackTrace, progress) =>
                 const SizedBox.shrink(),
             builder: (context) => const SizedBox.shrink(),
           ),
