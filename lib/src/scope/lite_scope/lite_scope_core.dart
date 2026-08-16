@@ -82,7 +82,7 @@ abstract base class LiteScopeCore<
       ScopeContext.of<W, LiteScopeElementBase<W, E, S>>(
         context,
         listen: false,
-      )._globalStateKey.currentState!;
+      )._stateOrThrow;
 
   /// Selects and returns a specific value from the state [S] of the scope [W]
   /// using the [selector] and becomes **dependent** on it.
@@ -96,7 +96,7 @@ abstract base class LiteScopeCore<
   ) =>
       ScopeContext.select<W, LiteScopeElementBase<W, E, S>, V>(
         context,
-        (element) => selector(element._globalStateKey.currentState!),
+        (element) => selector(element._stateOrThrow),
       );
 }
 
@@ -185,6 +185,24 @@ abstract base class LiteScopeElementBase<
       screenshotCompleter.complete();
     }
   }
+
+  /// The state this scope built, or a failure that says why there is none.
+  ///
+  /// The state lives in the widget `buildOnReady()` mounts, so it exists only
+  /// while the scope is [AsyncScopeReady] -- not while it waits for a
+  /// `scopeKey`, not while it initializes, not after that failed, and not
+  /// once a `close()` has taken the subtree down. A bare `!` answered all of
+  /// those with `Null check operator used on a null value`, which names
+  /// neither the scope nor the phase it was in.
+  S get _stateOrThrow =>
+      _globalStateKey.currentState ??
+      (throw StateError(
+        '${widget.toStringShort()} was found, but it has no state: the state '
+        'is created in the ready branch, and this scope is ${model.state}. '
+        'Read it from below `buildOnReady()`, or check `isInitialized` first. '
+        '`maybeOf` answers `null` here too, the same as when there is no such '
+        'scope at all.',
+      ));
 
   @override
   bool get autoSelfDependence => _autoSelfDependence;

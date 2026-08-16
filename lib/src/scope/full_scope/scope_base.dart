@@ -179,7 +179,7 @@ abstract base class Scope<W extends Scope<W, D, S>, D extends ScopeDependencies,
       ScopeContext.of<W, _ScopeElement<W, D, S>>(
         context,
         listen: false,
-      )._globalStateKey.currentState!;
+      )._stateOrThrow;
 
   /// Selects and returns a specific value from the state [S] of the scope [W]
   /// using the [selector] and becomes **dependent** on it.
@@ -190,7 +190,7 @@ abstract base class Scope<W extends Scope<W, D, S>, D extends ScopeDependencies,
   ) =>
       ScopeContext.select<W, _ScopeElement<W, D, S>, V>(
         context,
-        (element) => selector(element._globalStateKey.currentState!),
+        (element) => selector(element._stateOrThrow),
       );
 }
 

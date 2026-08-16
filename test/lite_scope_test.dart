@@ -848,6 +848,39 @@ void main() {
       );
       expect(done, isTrue);
     });
+
+    // The state lives in the widget the ready branch mounts, so `of` and
+    // `select` have nothing to answer with in any other state. They used to
+    // say so with a bare `Null check operator used on a null value`, which
+    // names neither the scope nor the phase it is in -- and the `base` topic
+    // promises that both ways a lookup can fail carry the type that was asked
+    // for.
+    testWidgets('of() before the ready branch says which scope and which state',
+        (tester) async {
+      await tester.pumpWidget(_app(const _CloseScope(init: _neverEmits)));
+      await tester.pump();
+
+      final element = _scopeOf(tester);
+
+      expect(
+        () =>
+            LiteScopeCore.of<_CloseScope, _CloseScopeElement, _CloseScopeState>(
+                element),
+        throwsA(
+          isA<StateError>()
+              .having(
+                (error) => error.message,
+                'names the scope',
+                contains('_CloseScope'),
+              )
+              .having(
+                (error) => error.message,
+                'names the state it is in',
+                contains('AsyncScopeWaiting'),
+              ),
+        ),
+      );
+    });
   });
 
   // `_performAsyncInit` hands the cancellation over to `_subscription`, and

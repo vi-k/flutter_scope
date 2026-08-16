@@ -79,7 +79,7 @@ abstract base class ScopeCore<
       ScopeContext.of<W, E>(
         context,
         listen: false,
-      )._globalStateKey.currentState!;
+      )._stateOrThrow;
 
   /// Selects and returns a specific value from the state [S] of the scope [W]
   /// using the [selector] and becomes **dependent** on it.
@@ -94,7 +94,7 @@ abstract base class ScopeCore<
   ) =>
       ScopeContext.select<W, E, V>(
         context,
-        (element) => selector(element._globalStateKey.currentState!),
+        (element) => selector(element._stateOrThrow),
       );
 }
 

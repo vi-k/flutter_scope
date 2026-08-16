@@ -163,7 +163,7 @@ abstract base class LiteScope<W extends LiteScope<W, S>,
       ScopeContext.of<W, _LiteScopeElement<W, S>>(
         context,
         listen: false,
-      )._globalStateKey.currentState!;
+      )._stateOrThrow;
 
   /// Selects and returns a specific value from the state [S] of the scope [W]
   /// using the [selector] and becomes **dependent** on it.
@@ -174,7 +174,7 @@ abstract base class LiteScope<W extends LiteScope<W, S>,
   ) =>
       ScopeContext.select<W, _LiteScopeElement<W, S>, V>(
         context,
-        (element) => selector(element._globalStateKey.currentState!),
+        (element) => selector(element._stateOrThrow),
       );
 }
 

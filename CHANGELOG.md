@@ -44,6 +44,13 @@
   still reported as before. The state is applied outside the frame, because
   such a failure is raised before the first `await` and therefore inside the
   build that started the initialization.
+* `of` and `select` on `LiteScope` and `Scope` say which scope they found and
+  what state it is in when there is no state to answer with. The state is
+  created in the ready branch, so any other state — waiting for a `scopeKey`,
+  initializing, failed, or closed in place — used to answer `Null check
+  operator used on a null value`, naming neither. `maybeOf` still answers
+  `null` there, the same as when there is no such scope at all, and the
+  message says so.
 * The methods that carry a family's promise are sealed. `initAsync` on
   `AsyncDataScopeElementBase` catches the value on its way past, and
   `initDataAsync` on `AsyncControllerScopeElementBase` is the whole of what the
