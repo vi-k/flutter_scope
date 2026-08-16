@@ -7,6 +7,7 @@ import '../common/data/fake_services/fake_bloc.dart';
 import '../common/data/fake_services/fake_controller.dart';
 import '../common/presentation/animated_progress_indicator.dart';
 import '../common/presentation/sized_tab_bar.dart';
+import 'demos/async_controller/async_controller_demo.dart';
 import 'demos/async_data_scope/async_data_scope_demo.dart';
 import 'demos/async_scope/async_scope_demo.dart';
 import 'demos/deferred_closing/deferred_closing_demo.dart';
@@ -24,6 +25,7 @@ const _tabs = <(String, Widget)>[
   ('ScopeNotifier', ScopeNotifierDemo()),
   ('AsyncScope', AsyncScopeDemo()),
   ('AsyncDataScope', AsyncDataScopeDemo()),
+  ('AsyncControllerScope', AsyncControllerDemo()),
   ('LiteScope', LiteScopeDemo()),
   ('Scope', ScopeDemo()),
   ('Deferred closing', DeferredClosingDemo()),

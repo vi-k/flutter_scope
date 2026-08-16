@@ -10,7 +10,7 @@ flutter run
 
 ## The layout
 
-Nine tabs, one per family plus two scenarios that need a screen of their own:
+Ten tabs, one per family plus two scenarios that need a screen of their own:
 
 | tab | what it demonstrates |
 | --- | --- |
@@ -19,6 +19,7 @@ Nine tabs, one per family plus two scenarios that need a screen of their own:
 | ScopeNotifier | the same for a `Listenable`, with selectors filtering the rebuilds |
 | AsyncScope | asynchronous initialization and disposal without a container |
 | AsyncDataScope | the same, producing a value the subtree reads |
+| AsyncControllerScope | a controller with a lifecycle of its own, released on every path out of the scope — including a failed initialization and one the scope walked away from |
 | LiteScope | a state class with the full lifecycle |
 | Scope | the full family: a dependency tree, progress per dependency, a state |
 | Deferred closing | `close()`: the closing screen over a frozen subtree |
