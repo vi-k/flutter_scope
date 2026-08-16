@@ -204,7 +204,7 @@ class HomeScreen extends StatelessWidget {
 }
 ```
 
-**In depth:** the topic [Scope](https://pub.dev/documentation/scopo/latest/topics/Scope-topic.html).
+**In depth:** the topic [Scope](https://github.com/vi-k/scopo/blob/main/doc/full_scope.md).
 
 ## Specialized scopes
 
@@ -236,7 +236,7 @@ final class ApiConfig extends ScopeWidgetBase<ApiConfig> {
 }
 ```
 
-**In depth:** the topic [ScopeWidget](https://pub.dev/documentation/scopo/latest/topics/ScopeWidget-topic.html).
+**In depth:** the topic [ScopeWidget](https://github.com/vi-k/scopo/blob/main/doc/scope_widget.md).
 
 ### ScopeModel
 
@@ -276,7 +276,7 @@ class UserView extends StatelessWidget {
 }
 ```
 
-**In depth:** the topic [ScopeModel](https://pub.dev/documentation/scopo/latest/topics/ScopeModel-topic.html).
+**In depth:** the topic [ScopeModel](https://github.com/vi-k/scopo/blob/main/doc/scope_model.md).
 
 ### ScopeNotifier
 
@@ -316,7 +316,7 @@ class CounterText extends StatelessWidget {
 }
 ```
 
-**In depth:** the topic [ScopeNotifier](https://pub.dev/documentation/scopo/latest/topics/ScopeNotifier-topic.html).
+**In depth:** the topic [ScopeNotifier](https://github.com/vi-k/scopo/blob/main/doc/scope_notifier.md).
 
 ### AsyncScope
 
@@ -345,7 +345,7 @@ class ConnectionGate extends StatelessWidget {
 }
 ```
 
-**In depth:** the topic [AsyncScope](https://pub.dev/documentation/scopo/latest/topics/AsyncScope-topic.html).
+**In depth:** the topic [AsyncScope](https://github.com/vi-k/scopo/blob/main/doc/async_scope.md).
 
 ### AsyncDataScope
 
@@ -372,7 +372,7 @@ class DatabaseGate extends StatelessWidget {
 }
 ```
 
-**In depth:** the topic [AsyncDataScope](https://pub.dev/documentation/scopo/latest/topics/AsyncDataScope-topic.html).
+**In depth:** the topic [AsyncDataScope](https://github.com/vi-k/scopo/blob/main/doc/async_data_scope.md).
 
 ### AsyncControllerScope
 
@@ -434,7 +434,7 @@ final class PlayerController extends ScopeController {
 `AsyncControllerScope<C>` is the same thing with a `create` callback instead of
 a subclass.
 
-**In depth:** the topic [AsyncControllerScope](https://pub.dev/documentation/scopo/latest/topics/AsyncControllerScope-topic.html).
+**In depth:** the topic [AsyncControllerScope](https://github.com/vi-k/scopo/blob/main/doc/async_controller_scope.md).
 
 ### LiteScope
 
@@ -477,7 +477,7 @@ Every family above is demonstrated side by side, with a live log of each
 lifecycle call, in the
 [scopo_demo](https://github.com/vi-k/scopo/tree/main/example/scopo_demo) app.
 
-**In depth:** the topic [LiteScope](https://pub.dev/documentation/scopo/latest/topics/LiteScope-topic.html).
+**In depth:** the topic [LiteScope](https://github.com/vi-k/scopo/blob/main/doc/lite_scope.md).
 
 ## scopeKey
 
@@ -569,18 +569,20 @@ void main() {
 - [changelog](https://github.com/vi-k/scopo/blob/main/CHANGELOG.md)
 
 One topic per family, each covering what the API reference cannot: the order
-things happen in, the trade-offs, and the traps.
+things happen in, the trade-offs, and the traps. The links below go to the
+repository, where these pages live as `doc/*.md`; the same pages are rendered
+on pub.dev as Topics, inside the API reference above.
 
 | topic | start here for |
 | --- | --- |
-| [base](https://pub.dev/documentation/scopo/latest/topics/base-topic.html) | `of`, `select`, `listen`, and how a scope is found at all |
-| [ScopeWidget](https://pub.dev/documentation/scopo/latest/topics/ScopeWidget-topic.html) | the widget/element pair every family extends |
-| [ScopeModel](https://pub.dev/documentation/scopo/latest/topics/ScopeModel-topic.html) | owning a plain object |
-| [ScopeNotifier](https://pub.dev/documentation/scopo/latest/topics/ScopeNotifier-topic.html) | owning a `Listenable` |
-| [AsyncScope](https://pub.dev/documentation/scopo/latest/topics/AsyncScope-topic.html) | the asynchronous lifecycle, `scopeKey`, the coordinator |
-| [AsyncDataScope](https://pub.dev/documentation/scopo/latest/topics/AsyncDataScope-topic.html) | the same, producing a value |
-| [AsyncControllerScope](https://pub.dev/documentation/scopo/latest/topics/AsyncControllerScope-topic.html) | the same, where that value is a controller with a lifecycle of its own |
-| [LiteScope](https://pub.dev/documentation/scopo/latest/topics/LiteScope-topic.html) | a state class with that lifecycle, and `close()` |
-| [Scope](https://pub.dev/documentation/scopo/latest/topics/Scope-topic.html) | the full family: dependencies, state, four branches |
-| [debug](https://pub.dev/documentation/scopo/latest/topics/debug-topic.html) | logging, timeouts, and the test setup |
-| [utils](https://pub.dev/documentation/scopo/latest/topics/utils-topic.html) | the helpers that come with the package |
+| [base](https://github.com/vi-k/scopo/blob/main/doc/base.md) | `of`, `select`, `listen`, and how a scope is found at all |
+| [ScopeWidget](https://github.com/vi-k/scopo/blob/main/doc/scope_widget.md) | the widget/element pair every family extends |
+| [ScopeModel](https://github.com/vi-k/scopo/blob/main/doc/scope_model.md) | owning a plain object |
+| [ScopeNotifier](https://github.com/vi-k/scopo/blob/main/doc/scope_notifier.md) | owning a `Listenable` |
+| [AsyncScope](https://github.com/vi-k/scopo/blob/main/doc/async_scope.md) | the asynchronous lifecycle, `scopeKey`, the coordinator |
+| [AsyncDataScope](https://github.com/vi-k/scopo/blob/main/doc/async_data_scope.md) | the same, producing a value |
+| [AsyncControllerScope](https://github.com/vi-k/scopo/blob/main/doc/async_controller_scope.md) | the same, where that value is a controller with a lifecycle of its own |
+| [LiteScope](https://github.com/vi-k/scopo/blob/main/doc/lite_scope.md) | a state class with that lifecycle, and `close()` |
+| [Scope](https://github.com/vi-k/scopo/blob/main/doc/full_scope.md) | the full family: dependencies, state, four branches |
+| [debug](https://github.com/vi-k/scopo/blob/main/doc/debug.md) | logging, timeouts, and the test setup |
+| [utils](https://github.com/vi-k/scopo/blob/main/doc/utils.md) | the helpers that come with the package |
