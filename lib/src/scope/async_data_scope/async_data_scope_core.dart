@@ -99,6 +99,11 @@ abstract base class AsyncDataScopeElementBase<
   /// Creates the element of a scope producing a value.
   AsyncDataScopeElementBase(super.widget);
 
+  /// Sealed: this is where the value is caught on its way past, and the
+  /// family has nothing to offer without it. The hook to write is
+  /// [initDataAsync]; overriding this one instead would leave [data] empty
+  /// for good, and the analyzer would say nothing about it.
+  @nonVirtual
   @override
   Stream<AsyncScopeInitState> initAsync() => initDataAsync().map(
         (state) {

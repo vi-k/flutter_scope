@@ -40,6 +40,11 @@ abstract base class AsyncControllerScopeElementBase<
   // End of overriding block
   //
 
+  /// Sealed: this is the whole of what the family promises -- a controller
+  /// created, initialized and released on every path, including the two a
+  /// hand-written version loses it on. Overriding it would take all of that
+  /// away silently. The hook to write is [createController].
+  @nonVirtual
   @override
   Stream<AsyncDataScopeInitState<Object, C>> initDataAsync() async* {
     final controller = _controller = createController(this);
@@ -117,6 +122,13 @@ abstract base class AsyncControllerScopeElementBase<
     _controller?.performUnmount();
   }
 
+  /// Releases the controller on the ordinary path.
+  ///
+  /// A subclass that adds a teardown of its own has to chain to this one:
+  /// it is the only place the controller is released when the scope reached
+  /// its ready state, and forgetting it leaks exactly what this family
+  /// exists to keep hold of.
+  @mustCallSuper
   @override
   FutureOr<void> disposeAsync() => _controller?.performDispose();
 }

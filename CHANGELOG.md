@@ -44,6 +44,14 @@
   still reported as before. The state is applied outside the frame, because
   such a failure is raised before the first `await` and therefore inside the
   build that started the initialization.
+* The methods that carry a family's promise are sealed. `initAsync` on
+  `AsyncDataScopeElementBase` catches the value on its way past, and
+  `initDataAsync` on `AsyncControllerScopeElementBase` is the whole of what the
+  controller family guarantees; both are `@nonVirtual` now, and the controller
+  layer's `disposeAsync` is `@mustCallSuper`. They sat in the same class as the
+  hooks a subclass is meant to write, so overriding one silently turned the
+  guarantee off — `data` left empty for good, or a controller never released —
+  with nothing from the compiler or the analyzer to say so.
 * Fix a controller whose `dispose()` fails taking the failure of its `init()`
   with it. The release runs from a `finally`, and an exception raised there
   replaces the one the `finally` was entered for — so `buildOnError` was handed
