@@ -72,13 +72,14 @@ final class AppDependencies implements ScopeDependencies {
     yield ScopeReady(AppDependencies(sharedPreferences: sharedPreferences));
   }
 
-  /// Lets go of whatever cannot wait for the asynchronous teardown. Runs
-  /// once and always before `dispose`, whether the scope left the tree or
-  /// was closed with `close()`.
+  /// Отпускает то, что не может ждать асинхронного разбора. Выполняется
+  /// один раз и всегда до `dispose` — и когда скоуп ушёл с дерева, и когда
+  /// его закрыли через `close()`.
   @override
   void onUnmount() {}
 
-  /// Called after the state has been disposed of. May be asynchronous.
+  /// Вызывается после того, как состояние утилизировано. Может быть
+  /// асинхронным.
   @override
   Future<void> dispose() async {}
 }
@@ -150,7 +151,7 @@ final class App extends Scope<App, AppDependencies, AppState> {
   ) =>
       MaterialApp(home: Scaffold(body: Center(child: Text('$error'))));
 
-  /// Widgets placed between [App] and [AppState] in the ready branch.
+  /// Виджеты между [App] и [AppState] в готовой ветке.
   @override
   Widget wrapState(
     BuildContext context,
@@ -159,7 +160,7 @@ final class App extends Scope<App, AppDependencies, AppState> {
   ) =>
       MaterialApp(title: title, home: child);
 
-  /// Access helpers for descendants.
+  /// Вспомогательные методы доступа для потомков.
   static AppState of(BuildContext context) =>
       Scope.of<App, AppDependencies, AppState>(context);
 
@@ -190,17 +191,18 @@ class HomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Subscribes to a single value: rebuilt only when `counter` changes.
+    // Подписка на одно значение: перестраивается, только когда меняется
+    // `counter`.
     final counter = App.select(context, (state) => state.counter);
 
-    // Subscribes to a scope parameter.
+    // Подписка на параметр скоупа.
     final title = App.selectParam(context, (widget) => widget.title);
 
     return Scaffold(
       appBar: AppBar(title: Text(title)),
       body: Center(child: Text('$counter')),
       floatingActionButton: FloatingActionButton(
-        // Reads the state without subscribing to it.
+        // Читает состояние, не подписываясь на него.
         onPressed: () => App.of(context).increment(),
         child: const Icon(Icons.add),
       ),
@@ -268,10 +270,10 @@ class UserView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Without a subscription:
+    // Без подписки:
     final user = ScopeModel.of<UserModel>(context, listen: false);
 
-    // With a subscription to the selected value:
+    // С подпиской на выбранное значение:
     final name = ScopeModel.select<UserModel, String>(
       context,
       (model) => model.name,
@@ -308,7 +310,8 @@ class CounterText extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Rebuilt on `notifyListeners`, and only if the selected value changed.
+    // Перестраивается на `notifyListeners`, и только если выбранное
+    // значение изменилось.
     final value = ScopeNotifier.select<Counter, int>(
       context,
       (counter) => counter.value,
@@ -453,8 +456,8 @@ final class PlayerController extends ScopeController {
 final class ScreenScope extends LiteScope<ScreenScope, ScreenScopeState> {
   const ScreenScope({super.key, super.scopeKey});
 
-  /// Shown on the first frames, and while waiting for [scopeKey]. Returning
-  /// `null` here requires overriding [buildOnInitializing].
+  /// Показывается на первых кадрах и пока ждут [scopeKey]. Если вернуть
+  /// отсюда `null`, придётся переопределить [buildOnInitializing].
   @override
   Widget? buildOnWaiting(BuildContext context) => const SizedBox.shrink();
 
@@ -469,7 +472,7 @@ final class ScreenScopeState
     extends LiteScopeState<ScreenScope, ScreenScopeState> {
   final controller = ScrollController();
 
-  /// Awaited before the scope leaves the tree.
+  /// Его дожидаются до того, как скоуп уйдёт с дерева.
   @override
   Future<void> disposeAsync() async => controller.dispose();
 
@@ -536,8 +539,8 @@ void main() {
     output: debugPrint,
   );
 
-  // How long a scope waits for its `scopeKey` and for its children to be
-  // disposed of (3 seconds each by default; `null` means no timeout).
+  // Сколько скоуп ждёт свой `scopeKey` и утилизации своих детей (по три
+  // секунды по умолчанию; `null` — без ограничения).
   ScopeConfig.defaultScopeKeysTimeout = const Duration(seconds: 5);
   ScopeConfig.defaultWaitForChildrenTimeout = null;
 

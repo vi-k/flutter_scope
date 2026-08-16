@@ -86,14 +86,14 @@ final class MyScopeElement
 
   @override
   void init() {
-    // Acquire whatever the scope owns…
+    // Захватить то, чем владеет скоуп…
     super.init();
   }
 
   @override
   void dispose() {
     super.dispose();
-    // …and release it here.
+    // …и освободить это здесь.
   }
 
   @override

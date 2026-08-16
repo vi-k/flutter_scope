@@ -64,11 +64,12 @@ final class AppDependencies implements ScopeDependencies {
     yield ScopeReady(AppDependencies(sharedPreferences: sharedPreferences));
   }
 
-  /// Lets go of whatever cannot wait for the asynchronous teardown.
+  /// Отпускает то, что не может ждать асинхронного разбора.
   @override
   void onUnmount() {}
 
-  /// Called after the state has been disposed of. May be asynchronous.
+  /// Вызывается после того, как состояние утилизировано. Может быть
+  /// асинхронным.
   @override
   Future<void> dispose() async {}
 }
