@@ -9,9 +9,6 @@ final class AsyncDataScope<T extends Object?>
   /// The initialization, ending with the value.
   final Stream<AsyncDataScopeInitState<Object, T>> Function(
     BuildContext context,
-
-    /// The initialization.
-    ///
   ) init;
 
   /// Called synchronously when the scope leaves the tree.

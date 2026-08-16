@@ -65,7 +65,7 @@ final class PlayerController extends ScopeController {
   }
 
   @override
-  void onUnmount() => _subscription?.cancel();
+  void onUnmount() => unawaited(_subscription?.cancel());
 
   @override
   Future<void> dispose() async => api.closeSession();

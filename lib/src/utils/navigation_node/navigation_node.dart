@@ -87,19 +87,40 @@ final class _NavigationNodeState extends State<NavigationNode> {
         final route = ModalRoute.of(context);
 
         // ignore: discarded_futures
-        future.whenComplete(() => _deciding = false).then((canPop) {
-          // The world does not wait for an answer. The route the node sits on
-          // may have been closed by something else, or buried under a newer
-          // one -- and a pop would then take whatever is on top instead of
-          // what was asked about. A node that is gone answers for itself: its
-          // key resolves to nothing, which is why the walk below is null-safe
-          // and no `mounted` check is needed on top of it.
-          if (!canPop || (route != null && !route.isCurrent)) {
-            return;
-          }
+        future.whenComplete(() => _deciding = false).then(
+          (canPop) {
+            // The world does not wait for an answer. The route the node sits
+            // on may have been closed by something else, or buried under a
+            // newer one -- and a pop would then take whatever is on top
+            // instead of what was asked about. A node that is gone answers for
+            // itself: its key resolves to nothing, which is why the walk below
+            // is null-safe and no `mounted` check is needed on top of it.
+            if (!canPop || (route != null && !route.isCurrent)) {
+              return;
+            }
 
-          _navigatorKey.currentState?.previous?.pop(result);
-        });
+            _navigatorKey.currentState?.previous?.pop(result);
+          },
+          // A question that falls over -- a confirmation dialog raising, most
+          // likely -- fails inside a chain nobody holds, and the failure then
+          // surfaces as an unhandled zone error far from the widget that
+          // caused it. Reported instead, the way the package reports
+          // everything it cannot re-throw. The press itself is simply not
+          // acted on, and `whenComplete` above has already cleared the way for
+          // the next one.
+          onError: (Object error, StackTrace stackTrace) {
+            FlutterError.reportError(
+              FlutterErrorDetails(
+                exception: error,
+                stack: stackTrace,
+                library: 'scopo',
+                context: ErrorDescription(
+                  'while deciding what a system back does in a NavigationNode',
+                ),
+              ),
+            );
+          },
+        );
       case final bool? canPop:
         if (canPop ?? true) {
           _navigator.previous?.pop(result);
@@ -206,7 +227,16 @@ final class _NodeNavigator extends Navigator {
   NavigatorState createState() => NodeNavigatorState();
 }
 
-/// @nodoc
+/// The state of the nested navigator a [NavigationNode] builds.
+///
+/// This is the type a `navigatorKey` is made of —
+/// `GlobalKey<NodeNavigatorState>()` — and what that key resolves to, so a
+/// caller outside the node can push, pop and read the stack of the navigator
+/// inside it. Everything a [NavigatorState] offers is available here; what the
+/// node changes is how a pop that the nested navigator cannot handle is
+/// answered.
+///
+/// {@category utils}
 final class NodeNavigatorState extends NavigatorState {
   _NodeNavigatorObserver get _observer =>
       (widget as _NodeNavigator).node._observer;
@@ -293,10 +323,6 @@ final class _NodeNavigatorObserver extends NavigatorObserver {
   }
 }
 
-/// Keeps the node reachable from a pop: it makes the node's first page
-/// answer `willHandlePopInternally`, so a `maybePop` reaches
-/// [NodeNavigatorState.pop] instead of bubbling past the node, and it draws the
-/// back arrow in an `AppBar` on that page.
 /// Keeps a forwarding node reachable from a pop.
 ///
 /// It makes the node's first page answer `willHandlePopInternally`, so a

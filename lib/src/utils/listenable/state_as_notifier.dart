@@ -7,6 +7,13 @@ mixin StateAsNotifier<T extends StatefulWidget> on State<T>
 
   @override
   void addListener(VoidCallback listener) {
+    // A state that is gone takes no listeners. Without this the notifier
+    // created here would never be disposed of, and the listener would be held
+    // by an object nobody will ever notify.
+    if (!mounted) {
+      return;
+    }
+
     (_notifier ??= ChangeNotifier()).addListener(listener);
   }
 
@@ -27,7 +34,13 @@ mixin StateAsNotifier<T extends StatefulWidget> on State<T>
 
   @override
   void dispose() {
+    // Let go of it, not merely disposed of. A callback that outlives the state
+    // -- a stream event, a timer -- still calls [notifyListeners], and a
+    // disposed [ChangeNotifier] answers that with "A ChangeNotifier was used
+    // after being disposed". Dropping the reference makes those calls the
+    // no-ops they were always meant to be.
     _notifier?.dispose();
+    _notifier = null;
     super.dispose();
   }
 }

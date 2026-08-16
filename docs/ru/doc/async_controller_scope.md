@@ -1,6 +1,6 @@
 # AsyncControllerScope
 
-> Перевод `doc/async_controller_scope.md` (blob `ff40dd6388908264cd2c195cad749322a79fbf76`).
+> Перевод `doc/async_controller_scope.md` (blob `34dad7013a91ac94422d0f5a1083fbdab1ae1465`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 Скоуп, всё содержимое которого — контроллер: объект со своим жизненным циклом,
@@ -68,7 +68,7 @@ final class PlayerController extends ScopeController {
   }
 
   @override
-  void onUnmount() => _subscription?.cancel();
+  void onUnmount() => unawaited(_subscription?.cancel());
 
   @override
   Future<void> dispose() async => api.closeSession();

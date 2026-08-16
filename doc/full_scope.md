@@ -214,9 +214,15 @@ sequential('', [
 ```
 
 the paths are `dep1`, `concurrent1/dep2` and `concurrent1/sequential1/dep3`.
-The same strings appear in four places: in `ScopeAutoDependenciesProgress.path`,
-in `ScopeDependencyInfo.path`, in the `debug` log of the initialization and of
-the disposal, and in `ScopeDependencyException.name`.
+The same strings appear in three places: in `ScopeAutoDependenciesProgress.path`,
+in the `debug` log of the initialization and of the disposal, and in
+`ScopeDependencyException.name`.
+
+`ScopeDependencyInfo.path` is the one that is not the whole path but the prefix
+of it. The walk it comes from visits the groups as well as the leaves, so each
+entry carries the path of the groups *around* it — ending with `/`, and empty at
+the root — while its own name sits beside it in `dependency.name`. The canonical
+path of an entry is therefore `'${info.path}${info.dependency.name}'`.
 
 ## Errors
 

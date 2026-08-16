@@ -5,7 +5,7 @@ final class ScopeAutoDependenciesProgress {
   /// The path of the dependency that has just been initialized: the names of
   /// the enclosing groups and its own name, joined with `/`.
   ///
-  /// The format is the canonical one described in the `h_scope` topic — no
+  /// The format is the canonical one described in the `Scope` topic — no
   /// leading slash, and an anonymous group contributes no segment.
   final String path;
 

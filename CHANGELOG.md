@@ -53,6 +53,35 @@
   on the first rebuild that came from the parent rather than from a change.
   Keep the subscription in `build`, and read with `listen: false` from
   `didChangeDependencies` when the point is to react rather than to show.
+* `Progress.progress` is a fraction between 0 and 1 whatever it was built
+  from, which is what a progress indicator is handed. A task of no steps at all
+  used to give the `NaN` of `0 / 0`, and a release build that stepped past the
+  total gave `4/3`; the first is now 1 and the second is clamped. `Progress`
+  also refuses a negative `number` or `total` by assertion, and the assertion
+  in `ProgressIterator.add` says `total` where it used to say `count`. The
+  dartdoc example of `ProgressIterator` compiles again: it showed a named
+  `count:` argument the constructor never had, and a `ProgressValue` type that
+  does not exist.
+* `StateAsNotifier` lets go of its notifier in `dispose` instead of merely
+  disposing of it, and takes no listener after the state is gone. A callback
+  that outlived the state — a stream event, a timer — used to reach a disposed
+  `ChangeNotifier`, which answers with "A ChangeNotifier was used after being
+  disposed" in debug; a late `addListener` was worse, since in release the
+  listener was then held for good by a notifier nobody would ever notify.
+* `SchedulerBinding.isBuilding` also sees a build that runs with no frame in
+  progress — which is how `runApp` builds the first tree. `markNeedsBuild` from
+  inside one of those is refused just as it is inside a frame, so
+  `runOutsideFrame` now holds the action back there too. The build owner keeps
+  that flag behind an assertion, so in a release build the scheduler phase is
+  still all there is to go by.
+* A `NavigationNode.onPop` that returns a failing `Future` — a confirmation
+  dialog that raised, usually — is reported through `FlutterError.reportError`
+  instead of surfacing as an unhandled zone error far from the widget that
+  caused it. The press is simply not acted on, and the next one is asked as
+  usual.
+* `NodeNavigatorState` is documented rather than hidden with `@nodoc`. It is
+  the type a `GlobalKey<NodeNavigatorState>()` is made of, so
+  `NavigationNode.navigatorKey` could not be written without naming it.
 * A notification no longer rebuilds the widgets of the subtree it is not
   rebuilding. "Skips rebuilding the whole subtree" was true of the elements and
   not of the widgets: `ComponentElement.performRebuild` calls `build()`
@@ -300,7 +329,7 @@
   `compare:` answers "did it change?", so the one to pass for a value that is
   replaced rather than mutated is `notIdentical`; `identical` reports the
   opposite of what it is asked. The same correction lands in the dartdoc of
-  `Listenable.select` and `ListenableSelector.compare`, and in `doc/j_utils.md`.
+  `Listenable.select` and `ListenableSelector.compare`, and in `doc/utils.md`.
 * Fix `AsyncDataScopeContext.data` handing out a `null` the scope never
   produced. For a nullable `T` the getter read the value itself as the answer to
   "is there one yet?", so before the initialization finished it returned `null`

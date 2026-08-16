@@ -461,6 +461,43 @@ void main() {
       );
     });
 
+    // A confirmation dialog is user code, and user code falls over. The chain
+    // the answer travels in belongs to nobody, so a failure left in it
+    // surfaced far from the widget that raised it -- as an unhandled zone
+    // error, in whatever test or frame happened to be running.
+    testWidgets('an asynchronous onPop that fails is reported', (tester) async {
+      var calls = 0;
+
+      await tester.pumpWidget(
+        _OnPopHost(
+          onPop: (context, result) {
+            calls++;
+
+            return Future<bool>.error(StateError('the dialog fell over'));
+          },
+        ),
+      );
+      await tester.tap(find.text('go'));
+      await tester.pumpAndSettle();
+
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isA<StateError>());
+      expect(
+        find.text('go'),
+        findsNothing,
+        reason: 'a question without an answer takes no route',
+      );
+
+      // And the node is not left thinking a question is still open.
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+
+      expect(calls, 2);
+      expect(tester.takeException(), isA<StateError>());
+    });
+
     // The node can go without its route going: an app that swaps it out of the
     // route's subtree while a confirmation is on screen leaves the answer with
     // nothing to act through.

@@ -43,6 +43,19 @@ void main() {
       expect(iterator.add(1).progress, 0.25);
       expect(iterator.add(3).progress, 1.0);
     });
+
+    test('a task of no steps is complete rather than NaN', () {
+      final iterator = ProgressIterator(0);
+
+      expect(iterator.isCompleted, isTrue);
+      expect(iterator.currentStep.progress, 1.0);
+    });
+
+    test('a step backwards past the start is a mistake in the caller', () {
+      final iterator = ProgressIterator(3);
+
+      expect(() => iterator.add(-1), throwsA(isA<AssertionError>()));
+    });
   });
 
   group('Progress', () {
@@ -53,6 +66,14 @@ void main() {
       expect(progress.total, 5);
       expect(progress.progress, 0.4);
       expect('$progress', '2/5');
+    });
+
+    test('the fraction holds its promise where asserts are off', () {
+      // The assert in `ProgressIterator.add` is the debug half of the
+      // promise. A release build steps past the total without a word, and the
+      // fraction still has to be something a progress indicator can take.
+      expect(const Progress(4, 3).progress, 1.0);
+      expect(const Progress(0, 0).progress, 1.0);
     });
   });
 }

@@ -1,6 +1,6 @@
 # scopo
 
-> Перевод `README.md` (blob `d70b5a2337cd0b6eaef8d629225db2195233a0ce`).
+> Перевод `README.md` (blob `bcfac5b0105999633b2d623c1ee96fd4475951fa`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 [![pub version](https://img.shields.io/pub/v/scopo)](https://pub.dev/packages/scopo)
@@ -415,7 +415,7 @@ final class PlayerController extends ScopeController {
 
   /// Синхронно, в момент ухода скоупа с дерева.
   @override
-  void onUnmount() => _subscription?.cancel();
+  void onUnmount() => unawaited(_subscription?.cancel());
 
   /// С ожиданием, после `onUnmount`.
   @override

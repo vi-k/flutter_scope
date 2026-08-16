@@ -409,7 +409,7 @@ final class PlayerController extends ScopeController {
 
   /// Synchronous, the moment the scope leaves the tree.
   @override
-  void onUnmount() => _subscription?.cancel();
+  void onUnmount() => unawaited(_subscription?.cancel());
 
   /// Awaited, after `onUnmount`.
   @override

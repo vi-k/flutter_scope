@@ -1,6 +1,6 @@
 # Scope
 
-> Перевод `doc/full_scope.md` (blob `47d6d10d16777f235dd0eedf043682978aab45c1`).
+> Перевод `doc/full_scope.md` (blob `707ce419b1930ea50779508ad7d1442dc8b875f6`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 `Scope` — основной строительный блок пакета: виджет, который владеет контейнером
@@ -215,9 +215,15 @@ sequential('', [
 ```
 
 пути будут `dep1`, `concurrent1/dep2` и `concurrent1/sequential1/dep3`. Те же
-строки встречаются в четырёх местах: в `ScopeAutoDependenciesProgress.path`, в
-`ScopeDependencyInfo.path`, в журнале уровня `debug` при инициализации и
-утилизации и в `ScopeDependencyException.name`.
+строки встречаются в трёх местах: в `ScopeAutoDependenciesProgress.path`, в
+журнале уровня `debug` при инициализации и утилизации и в
+`ScopeDependencyException.name`.
+
+`ScopeDependencyInfo.path` — единственное место, где лежит не весь путь, а его
+начало. Обход, из которого он берётся, заходит и в группы, и в листья, поэтому
+каждая запись несёт путь *вмещающих* её групп — с завершающим `/`, а у корня
+пустой, — а собственное имя лежит рядом, в `dependency.name`. Канонический путь
+записи, стало быть, — `'${info.path}${info.dependency.name}'`.
 
 ## Ошибки
 

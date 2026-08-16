@@ -431,6 +431,33 @@ void main() {
 
       expect(tester.takeException(), isNull);
     });
+
+    testWidgets('nothing reaches the notifier once the state is gone', (
+      tester,
+    ) async {
+      await tester.pumpWidget(const _NotifyingHost());
+      final state = tester.state<_NotifyingState>(find.byType(_Notifying));
+
+      await tester.pumpWidget(const SizedBox.shrink());
+
+      var calls = 0;
+      void listener() => calls++;
+
+      // A callback that outlived the state -- a stream event, a timer -- lands
+      // here. The disposed notifier used to answer both of these with
+      // "A ChangeNotifier was used after being disposed" in debug, and in
+      // release it remembered the listener for good.
+      state
+        ..addListener(listener)
+        ..bump();
+
+      expect(tester.takeException(), isNull);
+      expect(
+        calls,
+        0,
+        reason: 'a listener taken after the state is gone is never called',
+      );
+    });
   });
 }
 
