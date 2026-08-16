@@ -383,8 +383,12 @@ abstract base class ScopeWidgetElementBase<W extends ScopeWidgetCore<W, E>,
     super.update(newWidget);
   }
 
-  /// Skips rebuilding the whole subtree (skips [build]) when the dependents
-  /// only have to be notified of a change ([notifyDependents]).
+  /// Keeps the subtree as it is when the dependents only have to be notified
+  /// of a change ([notifyDependents]).
+  ///
+  /// Two halves, because [build] cannot be skipped: [ComponentElement]
+  /// calls it either way. It hands back the widget of the last real build,
+  /// and this method leaves the child element alone.
   ///
   /// The subtree is rebuilt anyway when:
   /// 1. [autoSelfDependence] - the element declared an automatic dependency on
@@ -448,8 +452,24 @@ abstract base class ScopeWidgetElementBase<W extends ScopeWidgetCore<W, E>,
       Error.throwWithStackTrace(error, stackTrace);
     }
 
-    return buildChild();
+    // A notify-only rebuild hands back what the last real build made.
+    // [ComponentElement.performRebuild] calls this method whatever else
+    // happens -- only `updateChild` below is ours to skip -- so without the
+    // cache `buildChild()` ran on every notification and everything it
+    // returned was thrown away unlooked at. For a scope notified once a frame
+    // that is the whole widget graph of its subtree, built and dropped, once
+    // a frame.
+    if (_shouldOnlyNotify) {
+      if (_builtChild case final builtChild?) {
+        return builtChild;
+      }
+    }
+
+    return _builtChild = buildChild();
   }
+
+  /// What the last build that was not notify-only produced.
+  Widget? _builtChild;
 
   @override
   String toStringShort({bool showHashCode = false}) =>

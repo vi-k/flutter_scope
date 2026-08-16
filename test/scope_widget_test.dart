@@ -111,6 +111,7 @@ void main() {
       _SwitchingText.buildCount = 0;
       _BothText.buildCount = 0;
       _PlainText.buildCount = 0;
+      _CounterScopeElement.buildChildCount = 0;
     });
 
     testWidgets(
@@ -312,6 +313,42 @@ void main() {
         );
       },
     );
+
+    // "Skips rebuilding the whole subtree" was true of the elements and not
+    // of the widgets: `ComponentElement.performRebuild` calls `build()`
+    // whatever else happens, and only `updateChild` was overridden -- so
+    // `buildChild()` ran on every notification and the widget tree it
+    // returned was thrown away. On a scope notified every frame that is the
+    // whole graph of its subtree, allocated and dropped, once per frame.
+    testWidgets('a notification does not rebuild the subtree widgets',
+        (tester) async {
+      await tester.pumpWidget(const _Host(param: 'a'));
+      await tester.pumpAndSettle();
+
+      final scope =
+          tester.element(find.byType(_CounterScope)) as _CounterScopeElement;
+      final builds = _CounterScopeElement.buildChildCount;
+
+      scope.bump();
+      await tester.pump();
+
+      expect(find.text('1'), findsOneWidget, reason: 'the notification landed');
+      expect(
+        _CounterScopeElement.buildChildCount,
+        builds,
+        reason: 'and nothing was built for it to land on',
+      );
+
+      // A rebuild from above is a different matter: there the subtree really
+      // does have to be built again.
+      await tester.pumpWidget(const _Host(param: 'b'));
+
+      expect(
+        _CounterScopeElement.buildChildCount,
+        builds + 1,
+        reason: 'a scope updated by its parent still builds its subtree',
+      );
+    });
   });
 }
 
@@ -443,8 +480,12 @@ final class _CounterScopeElement
   /// `updateChild` really rebuilds the children. Handing out one stored
   /// instance would let the framework skip them on identity alone, and the
   /// notify-only path would look like it worked even when it did not.
+  /// How many times the scope itself built its subtree.
+  static int buildChildCount = 0;
+
   @override
   Widget buildChild() {
+    buildChildCount++;
     // A subscription of the scope to itself. `notifyClients` runs it before
     // any dependent, so whatever it does to a notification it does to all of
     // them -- which is what makes the test below deterministic, where the

@@ -44,6 +44,14 @@
   still reported as before. The state is applied outside the frame, because
   such a failure is raised before the first `await` and therefore inside the
   build that started the initialization.
+* A notification no longer rebuilds the widgets of the subtree it is not
+  rebuilding. "Skips rebuilding the whole subtree" was true of the elements and
+  not of the widgets: `ComponentElement.performRebuild` calls `build()`
+  whatever else happens, and only `updateChild` was skipped — so `buildChild()`
+  ran on every `notifyDependents`, and everything it returned was thrown away
+  unlooked at. For a scope notified once a frame that is the whole widget graph
+  of its subtree, built and dropped, once a frame. The widget of the last real
+  build is handed back instead.
 * [breaking changes] `ScopeDependenciesExtension.asStream` takes one type
   argument instead of two: the container type is the type of the receiver and
   is inferred, so `AppDependencies().asStream<String>()` replaces
