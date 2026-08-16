@@ -44,6 +44,17 @@
   still reported as before. The state is applied outside the frame, because
   such a failure is raised before the first `await` and therefore inside the
   build that started the initialization.
+* Fix one failing disposer taking the rest of a *concurrent* group with it —
+  the same defect as the sequential one above, in the class beside it. An
+  error reaching the merged stream cancelled every arm still running, and an
+  arm suspended mid-walk resumes only as far as its next `yield`: a nested
+  branch stopped wherever the cancellation found it, everything below that
+  point stayed held, and nothing came back for it, since the walk marks itself
+  done whichever way it ended. Each arm now keeps its failure to itself, the
+  merge finishes, and the first failure is passed upwards afterwards. The
+  initialization of a concurrent group is unchanged: there the first error is
+  meant to cancel the rest, and what the losing arms took is picked up by the
+  disposal that follows.
 * Fix a failing `ScopeState.onUnmount` taking the synchronous teardown of the
   dependencies with it. The state let go of its own first and the dependencies
   after it, unguarded, so a hook that threw meant no dependency ever heard

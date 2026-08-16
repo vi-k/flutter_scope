@@ -152,11 +152,39 @@ final class _ScopeDependencyConcurrent extends ScopeDependencyGroup {
 
   @override
   Stream<String> dispose() async* {
+    final errors = <AsyncError>[];
+
+    // Each arm keeps its own failure to itself, which is the same rule the
+    // sequential group applies and for the same reason -- one dependency that
+    // cannot let go is no reason to walk away from the others, which are
+    // still holding resources of their own.
+    //
+    // Here it has to be done before the merge rather than around the walk.
+    // An error reaching the merged stream is passed on by `yield*` straight
+    // to the listener, where no `catch` of ours can see it, and
+    // `runStreamGuarded` answers the first error by cancelling its source --
+    // which cancels every arm still running. An arm suspended mid-walk is
+    // then resumed only as far as its next `yield`, so a branch stops
+    // wherever the cancellation found it and everything below that point
+    // stays held. Nothing comes back for it either: `runDispose` marks the
+    // walk done whichever way it ended.
+    //
+    // The first failure in time is passed upwards once the merged stream is
+    // over, as the sequential group passes on the first in walk order.
     yield* _dependencies.reversed
         .where((dep) => dep.disposalRequired)
-        .map((dep) => dep.runDispose())
+        .map(
+          (dep) => dep.runDispose().handleError(
+                (Object error, StackTrace stackTrace) =>
+                    errors.add(AsyncError(error, stackTrace)),
+              ),
+        )
         ._mergeStreams()
         .map(_path);
+
+    if (errors.firstOrNull case final first?) {
+      Error.throwWithStackTrace(first.error, first.stackTrace);
+    }
   }
 }
 

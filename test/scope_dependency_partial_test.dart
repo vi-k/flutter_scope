@@ -102,6 +102,7 @@ void main() {
   });
 
   _sequentialDisposalGroup();
+  _concurrentDisposalGroup();
 }
 
 /// A container of three named dependencies, disposed of in reverse order.
@@ -158,6 +159,83 @@ void _sequentialDisposalGroup() {
       expect(
         deps.flattenDependenciesWithErrors().map((i) => i.dependency.name),
         contains('b'),
+        reason: 'the failure is recorded on the dependency that failed',
+      );
+    });
+  });
+}
+
+/// A concurrent group holding a sequential branch beside a plain dependency.
+///
+/// The shape matters: the failure is raised by the dependency standing *next
+/// to* a group, so what a lost cancellation takes with it is not one sibling
+/// but a whole branch, part-way through its own reverse walk.
+final class _Nested extends ScopeAutoDependencies<_Nested, void> {
+  final List<String> released;
+  final Set<String> failOnDispose;
+
+  _Nested(this.released, {this.failOnDispose = const {}});
+
+  @override
+  bool get autoDisposeOnError => false;
+
+  FutureOr<void> Function(DepHelper dep) _init(String name) => (dep) {
+        dep.dispose = () async {
+          // Asynchronous on purpose: a synchronous branch would be over
+          // before the sibling had a chance to fail, and the cancellation
+          // this tests for would have nothing left to reach.
+          await Future<void>.delayed(Duration.zero);
+          released.add(name);
+          if (failOnDispose.contains(name)) {
+            throw Exception('$name failed to release');
+          }
+        };
+      };
+
+  @override
+  ScopeDependency buildDependencies(void context) => concurrent('', [
+        sequential('branch', [
+          dep('a', _init('a')),
+          dep('b', _init('b')),
+        ]),
+        dep('x', _init('x')),
+      ]);
+}
+
+void _concurrentDisposalGroup() {
+  group('a disposer that throws in a concurrent group', () {
+    test('does not take the branch beside it with it', () async {
+      final released = <String>[];
+      final deps = _Nested(released, failOnDispose: {'x'});
+
+      await deps.init(null).drain<void>();
+      await deps.dispose();
+
+      expect(
+        released,
+        containsAll(['x', 'b', 'a']),
+        reason: 'a failure in one arm of a concurrent group is no reason to '
+            'cancel the others, which are still holding resources of their '
+            'own -- and nothing comes back for them: the walk marks itself '
+            'done either way',
+      );
+      expect(
+        released.indexOf('b') < released.indexOf('a'),
+        isTrue,
+        reason: 'the branch finished its own reverse walk rather than '
+            'stopping wherever the cancellation found it',
+      );
+    });
+
+    test('is still reported', () async {
+      final deps = _Nested(<String>[], failOnDispose: {'x'});
+
+      await deps.init(null).drain<void>();
+      await deps.dispose();
+
+      expect(
+        deps.flattenDependenciesWithErrors().map((i) => i.dependency.name),
+        contains('x'),
         reason: 'the failure is recorded on the dependency that failed',
       );
     });
