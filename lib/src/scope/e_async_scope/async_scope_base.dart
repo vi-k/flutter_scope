@@ -20,6 +20,18 @@ abstract base class AsyncScopeBase<W extends AsyncScopeBase<W>>
   /// and the scope proceeds as if the wait had succeeded.
   final void Function()? onScopeKeyTimeout;
 
+  /// How long the teardown waits for the initialization to be cancelled;
+  /// `null` waits indefinitely.
+  ///
+  /// Defaults to [ScopeConfig.defaultInitCancellationTimeout].
+  final Duration? initCancellationTimeout;
+
+  /// Called when the wait for the cancellation expires.
+  ///
+  /// The expiry is reported through [FlutterError.reportError] either way,
+  /// and the teardown goes on without the initialization.
+  final void Function()? onInitCancellationTimeout;
+
   /// How long to wait for the child scopes; `null` waits indefinitely.
   ///
   /// Defaults to [ScopeConfig.defaultWaitForChildrenTimeout].
@@ -42,6 +54,8 @@ abstract base class AsyncScopeBase<W extends AsyncScopeBase<W>>
     this.scopeKey,
     this.scopeKeyTimeout,
     this.onScopeKeyTimeout,
+    this.initCancellationTimeout,
+    this.onInitCancellationTimeout,
     this.waitForChildrenTimeout,
     this.onWaitForChildrenTimeout,
     this.pauseAfterInitialization,
@@ -141,6 +155,12 @@ final class _AsyncScopeElement<W extends AsyncScopeBase<W>>
 
   @override
   void onScopeKeyTimeout() => widget.onScopeKeyTimeout?.call();
+
+  @override
+  Duration? get initCancellationTimeout => widget.initCancellationTimeout;
+
+  @override
+  void onInitCancellationTimeout() => widget.onInitCancellationTimeout?.call();
 
   @override
   Duration? get waitForChildrenTimeout => widget.waitForChildrenTimeout;

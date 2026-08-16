@@ -102,6 +102,13 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
   /// Called when the wait for the `scopeKey` expires.
   void onScopeKeyTimeout() {}
 
+  /// How long to wait for [initAsync] to be cancelled; `null` takes the
+  /// default.
+  Duration? get initCancellationTimeout => null;
+
+  /// Called when the wait for the cancellation of [initAsync] expires.
+  void onInitCancellationTimeout() {}
+
   /// How long to wait for the child scopes; `null` takes the default.
   Duration? get waitForChildrenTimeout => null;
 
@@ -720,6 +727,84 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
     }
   }
 
+  /// Waits for [cancelled], and for no longer than [limit].
+  ///
+  /// The limit is measured on real time, by a timer taken from the root zone,
+  /// and not on the clock of the zone the teardown happens to run in. Two
+  /// reasons, and either one is enough. A cancellation that never finishes
+  /// hangs on real time -- a mocked clock has nothing true to say about it.
+  /// And a scope is usually taken down between frames, with nothing left to
+  /// advance a fake clock afterwards: a timer belonging to such a zone would
+  /// still be pending when the tree is gone, which is what `flutter_test` ends
+  /// a test on. Every widget test with a live scope in it would fail on a
+  /// timer this package armed while tidying up after itself.
+  ///
+  /// Reaches user code through [onInitCancellationTimeout], so its failures
+  /// are the caller's to absorb.
+  Future<void> _waitForCancellation(
+    Future<void> cancelled,
+    Duration limit,
+  ) async {
+    var finished = false;
+    final expired = Completer<void>();
+    final timer = Zone.root.createTimer(limit, () {
+      if (!expired.isCompleted) {
+        expired.complete();
+      }
+    });
+
+    try {
+      // A cancellation that fails still fails here: `Future.any` takes the
+      // error of whichever future settles first, and this one settling at all
+      // is what the race is about.
+      await Future.any([
+        cancelled.whenComplete(() => finished = true),
+        expired.future,
+      ]);
+    } finally {
+      timer.cancel();
+    }
+
+    if (finished) {
+      return;
+    }
+
+    // Abandoned, not forgotten. The cancellation may still fail long after
+    // nobody is waiting for it -- a generator resumed at last, throwing from
+    // its `finally` -- and a failure that reaches no listener is one more
+    // thing lost in silence.
+    unawaited(
+      cancelled.catchError((Object error, StackTrace stackTrace) {
+        _log.e(
+          'abandoned initialization cancellation failed',
+          error: error,
+          stackTrace: stackTrace,
+        );
+        FlutterError.reportError(
+          FlutterErrorDetails(
+            exception: error,
+            stack: stackTrace,
+            library: 'scopo',
+          ),
+        );
+      }),
+    );
+
+    _log.e('initialization cancellation timed out');
+    FlutterError.reportError(
+      FlutterErrorDetails(
+        exception: TimeoutException(
+          '${widget.toStringShort(showHashCode: true)} '
+          "couldn't wait for its initialization to be cancelled",
+          limit,
+        ),
+        stack: StackTrace.current,
+        library: 'scopo',
+      ),
+    );
+    onInitCancellationTimeout();
+  }
+
   /// Gives up on everything the disposal has to stop waiting for.
   ///
   /// Reaches user code through [onWaitForChildrenTimeout], so its failures are
@@ -745,8 +830,26 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
       // would queue behind an entry nobody completes. The failure is
       // reported and the disposal goes on -- the same trade the rest of this
       // file makes for the failures it cannot hand to a caller.
+      //
+      // Waiting forever leads to exactly the same place, and needs no failure
+      // to get there. Cancelling an `async*` means resuming its body and
+      // letting it run out; a body suspended on a future that never completes
+      // is never resumed, so the cancellation never finishes. The wait is
+      // therefore bounded: when the limit expires the expiry is reported, the
+      // initialization is left where it stands, and the disposal goes on to
+      // give back what the scope was holding. What the generator itself holds
+      // stays held -- it is parked on somebody else's future, and no scope can
+      // complete that one for it.
       try {
-        await subscription.cancel();
+        final cancelled = subscription.cancel();
+        final limit = initCancellationTimeout ??
+            ScopeConfig.defaultInitCancellationTimeout;
+
+        if (limit == null) {
+          await cancelled;
+        } else {
+          await _waitForCancellation(cancelled, limit);
+        }
       } on Object catch (error, stackTrace) {
         _log.e(
           'initialization cancellation failed',

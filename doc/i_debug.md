@@ -150,23 +150,32 @@ which is the way to collect the events into a list and assert on them.
 
 ## Timeouts
 
-Two waits in the scope lifecycle are bounded by a timeout, and both defaults
-live in `ScopeConfig`:
+Three waits in the scope lifecycle are bounded by a timeout, and all three
+defaults live in `ScopeConfig`:
 
 - `ScopeConfig.defaultScopeKeysTimeout` — how long a scope waits for its
   `scopeKey` to be released by the previous owner;
+- `ScopeConfig.defaultInitCancellationTimeout` — how long a teardown waits for
+  the initialization to be cancelled;
 - `ScopeConfig.defaultWaitForChildrenTimeout` — how long a scope waits for its
   child scopes to be disposed of before disposing of itself.
 
-Both are three seconds by default. `null` removes the limit and the scope waits
-indefinitely. An expired timeout is not fatal: it is reported through
+All three are three seconds by default. `null` removes the limit and the scope
+waits indefinitely. An expired timeout is not fatal: it is reported through
 `FlutterError.reportError`, and the scope then proceeds as if the wait had
 succeeded — so a dependency that never completes its disposal degrades into a
 delay plus an error report instead of a deadlock.
 
-Every scope can override both defaults for itself with the `scopeKeyTimeout` and
-`waitForChildrenTimeout` parameters, and observe an expiry through the
-`onScopeKeyTimeout` and `onWaitForChildrenTimeout` callbacks.
+The middle one is measured on real time rather than on the clock of the zone
+the teardown runs in, which is what a widget test replaces with a fake one. A
+hang like the one it exists for outlives frames, and a scope is usually taken
+down between them: a timer belonging to that zone would still be pending when
+the tree is gone, and `flutter_test` ends a test on exactly that.
+
+Every scope can override all three defaults for itself with the
+`scopeKeyTimeout`, `initCancellationTimeout` and `waitForChildrenTimeout`
+parameters, and observe an expiry through the `onScopeKeyTimeout`,
+`onInitCancellationTimeout` and `onWaitForChildrenTimeout` callbacks.
 
 ## pauseAfterInitializationEnabled
 

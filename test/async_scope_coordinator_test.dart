@@ -10,10 +10,12 @@ void main() {
   // so it would capture whatever the test that ran first left behind.
   late final Duration? defaultScopeKeysTimeout;
   late final Duration? defaultWaitForChildrenTimeout;
+  late final Duration? defaultInitCancellationTimeout;
 
   setUpAll(() {
     defaultScopeKeysTimeout = ScopeConfig.defaultScopeKeysTimeout;
     defaultWaitForChildrenTimeout = ScopeConfig.defaultWaitForChildrenTimeout;
+    defaultInitCancellationTimeout = ScopeConfig.defaultInitCancellationTimeout;
   });
 
   setUp(_TestScopeElement.reset);
@@ -21,6 +23,7 @@ void main() {
   tearDown(() {
     ScopeConfig.defaultScopeKeysTimeout = defaultScopeKeysTimeout;
     ScopeConfig.defaultWaitForChildrenTimeout = defaultWaitForChildrenTimeout;
+    ScopeConfig.defaultInitCancellationTimeout = defaultInitCancellationTimeout;
   });
 
   testWidgets('two coordinators do not share a key', (tester) async {
@@ -731,6 +734,91 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  // A generator parked on a future that never completes cannot be cancelled:
+  // `StreamSubscription.cancel()` waits for the body to end, and the body is
+  // suspended at an `await` it will never come back from. The disposal waited
+  // for that cancellation with no limit of its own, so it never reached the
+  // release below it: the scope stayed registered with its parent, and its
+  // `scopeKey` was never given back -- every later scope on that key queued
+  // behind an entry nobody would ever complete.
+  //
+  // What proves the release is a later scope on the same key getting in and
+  // initializing, with its own limit set far beyond anything this test can
+  // advance: an expiry cannot be what let it in.
+  testWidgets('a scopeKey is given back by a scope stuck in initAsync',
+      (tester) async {
+    // Short enough to expire inside `_settle`'s budget of real time.
+    ScopeConfig.defaultInitCancellationTimeout =
+        const Duration(milliseconds: 50);
+
+    // Never completed: this is the hang under test.
+    final hang = Completer<void>();
+
+    Widget build({required bool hung, required bool successor}) =>
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: AsyncScopeCoordinator(
+            child: Column(
+              children: [
+                if (hung) _TestScope(testKey: 'shared', initGate: hang),
+                if (successor)
+                  const _TestScope(
+                    testKey: 'shared',
+                    disposeLabel: 'successor',
+                    keyTimeout: Duration(days: 1),
+                  ),
+              ],
+            ),
+          ),
+        );
+
+    await tester.pumpWidget(build(hung: true, successor: false));
+    await tester.pumpAndSettle();
+
+    expect(
+      _TestScopeElement.initialized,
+      1,
+      reason: 'it got the key and is parked inside `initAsync()`',
+    );
+
+    // It leaves the tree while still parked. Nothing observable marks the
+    // moment the disposal gives up -- `disposeAsync()` is skipped on a scope
+    // that never initialized -- so the settle runs its whole budget.
+    await tester.pumpWidget(build(hung: false, successor: false));
+    await _settle(tester, until: () => false);
+
+    expect(
+      tester.takeException(),
+      isA<TimeoutException>().having(
+        (error) => error.message,
+        'message',
+        contains("couldn't wait for its initialization to be cancelled"),
+      ),
+      reason: 'giving up on a cancellation is reported, never silent',
+    );
+
+    await tester.pumpWidget(build(hung: false, successor: true));
+    await _settle(
+      tester,
+      until: () => _TestScopeElement.initialized == 2,
+    );
+    await tester.pumpAndSettle();
+
+    final successor =
+        tester.element<_TestScopeElement>(find.byType(_TestScope));
+
+    expect(
+      successor.state,
+      isA<AsyncScopeReady>(),
+      reason: 'the stuck scope gave the key back on its way out',
+    );
+    expect(
+      successor.keyTimedOut,
+      isFalse,
+      reason: 'it got the key, it was not let in on an expired wait',
+    );
+  });
+
   // A place in a queue is taken once and cannot be moved, so the pair
   // (`scopeKey`, owning coordinator) is fixed for the lifetime of the element.
   // Both ways of breaking that -- a `scopeKey` that starts returning something
@@ -1043,6 +1131,13 @@ final class _TestScope extends AsyncScopeCore<_TestScope, _TestScopeElement> {
   /// outlives the widget tree).
   final Completer<void>? disposeGate;
 
+  /// Parks [_TestScopeElement.initAsync] on this until it is completed.
+  ///
+  /// A gate that is never completed is a generator that cannot be cancelled:
+  /// the body is suspended at an `await`, so it never reaches the point where
+  /// a cancellation could end it.
+  final Completer<void>? initGate;
+
   const _TestScope({
     super.key,
     this.testKey,
@@ -1051,6 +1146,7 @@ final class _TestScope extends AsyncScopeCore<_TestScope, _TestScopeElement> {
     this.keyTimeout,
     this.throwOnKeyTimeout = false,
     this.disposeGate,
+    this.initGate,
     // `child` is inherited from `ProxyWidget`; declaring it again here would
     // shadow it (`overridden_fields`).
     super.child = const SizedBox.shrink(),
@@ -1092,6 +1188,9 @@ final class _TestScopeElement
   @override
   Stream<AsyncScopeInitState> initAsync() async* {
     initialized++;
+    if (widget.initGate case final gate?) {
+      await gate.future;
+    }
     yield AsyncScopeReady();
   }
 

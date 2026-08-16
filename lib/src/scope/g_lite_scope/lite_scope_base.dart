@@ -18,6 +18,13 @@ abstract base class LiteScope<W extends LiteScope<W, S>,
   /// A callback invoked when the [scopeKeyTimeout] expires.
   final void Function()? onScopeKeyTimeout;
 
+  /// The timeout duration for cancelling the initialization during the
+  /// teardown, before it triggers [onInitCancellationTimeout].
+  final Duration? initCancellationTimeout;
+
+  /// A callback invoked when the [initCancellationTimeout] expires.
+  final void Function()? onInitCancellationTimeout;
+
   /// The timeout duration for waiting to dispose child scopes.
   final Duration? waitForChildrenTimeout;
 
@@ -34,6 +41,8 @@ abstract base class LiteScope<W extends LiteScope<W, S>,
     this.scopeKey,
     this.scopeKeyTimeout,
     this.onScopeKeyTimeout,
+    this.initCancellationTimeout,
+    this.onInitCancellationTimeout,
     this.waitForChildrenTimeout,
     this.onWaitForChildrenTimeout,
     this.pauseAfterInitialization,
@@ -174,6 +183,12 @@ final class _LiteScopeElement<W extends LiteScope<W, S>,
 
   @override
   void onScopeKeyTimeout() => widget.onScopeKeyTimeout?.call();
+
+  @override
+  Duration? get initCancellationTimeout => widget.initCancellationTimeout;
+
+  @override
+  void onInitCancellationTimeout() => widget.onInitCancellationTimeout?.call();
 
   @override
   Duration? get waitForChildrenTimeout => widget.waitForChildrenTimeout;

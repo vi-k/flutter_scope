@@ -25,9 +25,9 @@ AsyncScope(
 `AsyncScopeBase` is the subclassable form: the same members as overrides —
 `initAsync`, `disposeAsync`, `onMount`, `onUnmount`, `buildOnWaiting`,
 `buildOnInitializing`, `buildOnReady`, `buildOnError` — plus `scopeKey`,
-`scopeKeyTimeout`, `waitForChildrenTimeout`, their `onTimeout` callbacks and
-`pauseAfterInitialization`. `AsyncScopeCore` sits under both for a scope that
-needs its own element.
+`scopeKeyTimeout`, `initCancellationTimeout`, `waitForChildrenTimeout`, their
+`onTimeout` callbacks and `pauseAfterInitialization`. `AsyncScopeCore` sits
+under both for a scope that needs its own element.
 
 ## The four states
 
@@ -94,10 +94,18 @@ awaited:
    `close()` while it stays on screen.
 2. **The wait for a `scopeKey` is cancelled**, if the scope was still queueing
    for one.
-3. **The initialization is cancelled.** A generator runs its `finally` when its
-   subscription is cancelled, and a failure raised there is reported rather
-   than thrown on: abandoning the disposal at that point would leave the scope
-   registered with its parent and its `scopeKey` unreleased.
+3. **The initialization is cancelled**, and the wait for that is bounded by
+   `initCancellationTimeout` (`ScopeConfig.defaultInitCancellationTimeout` by
+   default). A generator runs its `finally` when its subscription is cancelled,
+   and a failure raised there is reported rather than thrown on: abandoning the
+   disposal at that point would leave the scope registered with its parent and
+   its `scopeKey` unreleased. A cancellation that never finishes at all would
+   leave it there just as surely, and needs no failure to do it — cancelling a
+   generator means resuming its body and letting it run out, which a body
+   parked on a future that never completes never does. When the limit expires
+   the initialization is left where it stands, the expiry is reported, and the
+   teardown goes on. What the generator itself holds stays held: it waits on
+   somebody else's future, and no scope can complete that one for it.
 4. **The initialization is awaited** if it could not be cancelled.
 5. **The child scopes are awaited**, bounded by `waitForChildrenTimeout`
    (`ScopeConfig.defaultWaitForChildrenTimeout` by default). An expiry is

@@ -19,15 +19,18 @@ import 'utils/settle.dart';
 void main() {
   late final Duration? defaultScopeKeysTimeout;
   late final Duration? defaultWaitForChildrenTimeout;
+  late final Duration? defaultInitCancellationTimeout;
 
   setUpAll(() {
     defaultScopeKeysTimeout = ScopeConfig.defaultScopeKeysTimeout;
     defaultWaitForChildrenTimeout = ScopeConfig.defaultWaitForChildrenTimeout;
+    defaultInitCancellationTimeout = ScopeConfig.defaultInitCancellationTimeout;
   });
 
   tearDown(() {
     ScopeConfig.defaultScopeKeysTimeout = defaultScopeKeysTimeout;
     ScopeConfig.defaultWaitForChildrenTimeout = defaultWaitForChildrenTimeout;
+    ScopeConfig.defaultInitCancellationTimeout = defaultInitCancellationTimeout;
   });
 
   group('AsyncScope', () {
@@ -99,6 +102,83 @@ void main() {
         reason: 'the key was released, so the next scope got in at once',
       );
       expect(tester.takeException(), isNull);
+    });
+
+    // An initialization parked on a future that never completes cannot be
+    // cancelled at all, so the teardown gives up on it after
+    // `initCancellationTimeout` -- and the expiry runs user code one step
+    // before the block that gives the key back, exactly like the two other
+    // expiries do.
+    testWidgets(
+        'releases its scopeKey after a failing '
+        'onInitCancellationTimeout', (tester) async {
+      final disposed = <String>[];
+
+      // Never completed: the holder can only leave by the limit expiring.
+      final hang = Completer<void>();
+
+      // Two failures are reported here, one after the other -- the expiry, and
+      // then the hook it calls -- and `takeException` collapses several of
+      // them into one summary string. Captured directly, so both can be seen.
+      final reported = <FlutterErrorDetails>[];
+      final previousOnError = FlutterError.onError;
+      FlutterError.onError = reported.add;
+      addTearDown(() => FlutterError.onError = previousOnError);
+
+      Widget build({required bool holder, required bool successor}) => _wrap(
+            Column(
+              children: [
+                if (holder)
+                  _Async(
+                    label: 'holder',
+                    scopeKey: 'shared',
+                    initGate: hang,
+                    initCancellationTimeout: const Duration(milliseconds: 50),
+                    onInitCancellationTimeout: () =>
+                        throw StateError('onInitCancellationTimeout failed'),
+                    disposed: disposed,
+                  ),
+                if (successor)
+                  _Async(
+                    label: 'successor',
+                    scopeKey: 'shared',
+                    scopeKeyTimeout: const Duration(days: 1),
+                    disposed: disposed,
+                  ),
+              ],
+            ),
+          );
+
+      await tester.pumpWidget(build(holder: true, successor: false));
+      await tester.pumpAndSettle();
+
+      // Nothing marks the moment the teardown gives up -- `disposeAsync` is
+      // skipped on a scope that never initialized -- so the settle runs its
+      // whole budget.
+      await tester.pumpWidget(build(holder: false, successor: false));
+      await settle(tester, until: () => false);
+
+      expect(
+        reported.map((details) => details.exception),
+        [
+          isA<TimeoutException>(),
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            'onInitCancellationTimeout failed',
+          ),
+        ],
+        reason: 'the expiry is reported, and so is what the hook made of it',
+      );
+
+      await tester.pumpWidget(build(holder: false, successor: true));
+      await settle(tester, until: () => _readyCount(tester) == 1);
+
+      expect(
+        _readyCount(tester),
+        1,
+        reason: 'the hook is user code; the teardown behind it is not',
+      );
     });
 
     // The expiry callback runs while the scope still holds everything: its
@@ -264,13 +344,19 @@ final class _Async extends AsyncScopeBase<_Async> {
   /// Holds [disposeAsync] open, so this scope can keep its parent waiting.
   final Completer<void>? disposeGate;
 
+  /// Parks [initAsync] on this, so this scope cannot be cancelled.
+  final Completer<void>? initGate;
+
   const _Async({
     required this.label,
     required this.disposed,
     this.failOnUnmount = false,
     this.disposeGate,
+    this.initGate,
     super.scopeKey,
     super.scopeKeyTimeout,
+    super.initCancellationTimeout,
+    super.onInitCancellationTimeout,
     super.waitForChildrenTimeout,
     super.onWaitForChildrenTimeout,
     Widget? child,
@@ -278,6 +364,9 @@ final class _Async extends AsyncScopeBase<_Async> {
 
   @override
   Stream<AsyncScopeInitState> initAsync(BuildContext context) async* {
+    if (initGate case final gate?) {
+      await gate.future;
+    }
     yield AsyncScopeReady();
   }
 

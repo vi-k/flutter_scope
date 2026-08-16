@@ -33,4 +33,16 @@ abstract final class ScopeConfig {
   ///
   /// If zero, then the timeout expires immediately.
   static Duration? defaultWaitForChildrenTimeout = const Duration(seconds: 3);
+
+  /// Timeout for waiting for an initialization to be cancelled.
+  ///
+  /// A generator suspended on a future that never completes cannot be
+  /// cancelled, and a teardown that waited for it with no limit never reached
+  /// the release that follows. When this expires, the expiry is reported and
+  /// the teardown goes on without the initialization.
+  ///
+  /// If `null`, then there is no timeout and the wait is unbounded.
+  ///
+  /// If zero, then the timeout expires immediately.
+  static Duration? defaultInitCancellationTimeout = const Duration(seconds: 3);
 }

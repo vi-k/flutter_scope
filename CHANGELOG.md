@@ -43,6 +43,20 @@
   and an empty stack — which is why the node kept the first one and the new key
   simply never resolved. An assertion says so, and points at `Widget.key` and
   at the `GlobalKey()` written inside `build` that usually causes it.
+* Fix a teardown held forever by an initialization that cannot be cancelled.
+  Cancelling an `async*` means resuming its body and letting it run out, so a
+  body parked on a future that never completes is never cancelled at all — and
+  the teardown waited for that with no limit, never reaching the release behind
+  it. The scope stayed registered with its parent and never gave its `scopeKey`
+  back, so every later scope on that key queued behind an entry nobody would
+  ever complete. The wait is now bounded by `initCancellationTimeout`, three
+  seconds by default (`ScopeConfig.defaultInitCancellationTimeout`, `null` to
+  wait indefinitely), with an `onInitCancellationTimeout` callback beside the
+  two expiry callbacks the families already had. On expiry the initialization
+  is left where it stands, the expiry is reported through
+  `FlutterError.reportError`, and the teardown goes on to give back what the
+  scope was holding. What the generator itself holds stays held: it waits on
+  somebody else's future, and no scope can complete that one for it.
 * `ScopeNotifier.value` takes a `tag`. It was the one constructor in the family
   without one, so a scope over a listenable somebody else owns had no name in
   the log — and that is exactly where two scopes of the same type stand side by

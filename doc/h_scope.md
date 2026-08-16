@@ -257,7 +257,10 @@ it is awaited:
    down, and not until the tree comes down after a `close()`. It is sealed on
    `ScopeState` for that reason.
 2. An initialization still in flight is cancelled, or awaited if it cannot be
-   cancelled.
+   cancelled. The cancellation is bounded by `initCancellationTimeout`
+   (`ScopeConfig.defaultInitCancellationTimeout` by default), so that an
+   initialization parked on a future that never completes cannot hold the
+   teardown behind it.
 3. The child scopes are awaited, so that a parent never disposes of a
    dependency a child is still using. The wait is bounded by
    `waitForChildrenTimeout` (`ScopeConfig.defaultWaitForChildrenTimeout` by
