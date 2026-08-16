@@ -99,6 +99,14 @@
   without one, so a scope over a listenable somebody else owns had no name in
   the log — and that is exactly where two scopes of the same type stand side by
   side over two different models.
+* `AsyncScope` and `AsyncDataScope` take the nine settings their base classes
+  declare: `scopeKeyTimeout`, `initCancellationTimeout`, `disposeAsyncTimeout`
+  and `waitForChildrenTimeout` with the callback beside each, and
+  `pauseAfterInitialization`. The elements behind both widgets had always read
+  them; only the constructors never passed them on, so the two closure forms
+  were the only ones in the package whose user could not set a limit for one
+  scope — the process-wide `ScopeConfig` default was the whole choice.
+  `AsyncControllerScope` took all nine from the start.
 * [breaking changes] `State.dispose` is sealed on `LiteScopeState` and
   `ScopeState`. It belongs to Flutter and lands on either side of a scope's
   teardown depending on how the scope went, so nothing a scope has to let go of
