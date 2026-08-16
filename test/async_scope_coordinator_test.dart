@@ -485,6 +485,54 @@ void main() {
     );
   });
 
+  // The other half of the same public API, and the half that had no default
+  // at all: `null` reached `ChildRegistry` unchanged, and there `null` means
+  // "no limit", so the most natural call of the method -- without arguments --
+  // was the one that could wait for ever. The static helper on the
+  // coordinator has always substituted the `ScopeConfig` default.
+  testWidgets('the mixin waitForChildren applies the default timeout',
+      (tester) async {
+    final previous = ScopeConfig.defaultWaitForChildrenTimeout;
+    ScopeConfig.defaultWaitForChildrenTimeout =
+        const Duration(milliseconds: 50);
+    addTearDown(() => ScopeConfig.defaultWaitForChildrenTimeout = previous);
+
+    await tester.pumpWidget(
+      const Directionality(
+        textDirection: TextDirection.ltr,
+        child: _TestScope(
+          disposeLabel: 'parent',
+          child: _TestScope(disposeLabel: 'child'),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final parent =
+        tester.element<_TestScopeElement>(find.byType(_TestScope).first);
+    expect(parent.childrenCount, 1);
+
+    var waited = false;
+    unawaited(
+      // No `timeout`, which is the point: the child never unregisters, so
+      // anything but a default of its own leaves this future unsettled.
+      parent.waitForChildren().then((_) => waited = true),
+    );
+    await _settle(tester, until: () => waited);
+
+    expect(
+      waited,
+      isTrue,
+      reason: 'the wait gave up on the configured default, the way the '
+          'coordinator has always done',
+    );
+    expect(
+      tester.takeException(),
+      isA<TimeoutException>(),
+      reason: 'and the expiry is reported',
+    );
+  });
+
   testWidgets('waitForChildren without a coordinator is an error',
       (tester) async {
     late BuildContext context;

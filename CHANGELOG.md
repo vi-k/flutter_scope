@@ -44,6 +44,14 @@
   still reported as before. The state is applied outside the frame, because
   such a failure is raised before the first `await` and therefore inside the
   build that started the initialization.
+* `AsyncScopeParent.waitForChildren` defaults its `timeout` to
+  `ScopeConfig.defaultWaitForChildrenTimeout`, the same default the identically
+  named helper on `AsyncScopeCoordinator` has always applied. It passed `null`
+  straight to the registry, where `null` means no limit at all — so the most
+  natural call of a public method, without arguments, was the one wait in the
+  package that could hang for ever. Waiting with no limit is now what setting
+  that default to `null` means, which is a decision for the application rather
+  than for one call.
 * Fix a selector that throws taking the whole notification with it. The walk
   over the dependents runs user code with no boundary of its own around it, so
   one selector that could not answer stopped the walk: every dependent it had

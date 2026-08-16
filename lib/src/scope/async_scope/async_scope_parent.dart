@@ -26,6 +26,11 @@ mixin AsyncScopeParent on Diagnosticable {
   /// On [timeout] the awaited children that never finished are dropped and
   /// [onTimeout] is called; the future completes normally either way.
   ///
+  /// [timeout] defaults to [ScopeConfig.defaultWaitForChildrenTimeout], the
+  /// same default [AsyncScopeCoordinator.waitForChildren] applies. Waiting
+  /// with no limit at all is what setting that to `null` means, and it is a
+  /// decision for the application rather than for one call.
+  ///
   /// [onTimeout] defaults to reporting the [TimeoutException] through
   /// [FlutterError.reportError], the same default
   /// [AsyncScopeCoordinator.waitForChildren] applies, so a dropped child is
@@ -42,7 +47,12 @@ mixin AsyncScopeParent on Diagnosticable {
     final name = onTimeout == null ? toStringShort() : null;
 
     return _childRegistry.waitForChildren(
-      timeout: timeout,
+      // The default is substituted here rather than left to the registry,
+      // which reads `null` as "no limit at all". Called without arguments --
+      // the natural way -- this would otherwise be the one wait in the
+      // package that can hang for ever, while the same method on
+      // [AsyncScopeCoordinator] gives up on time.
+      timeout: timeout ?? ScopeConfig.defaultWaitForChildrenTimeout,
       onTimeout: onTimeout ??
           (error, stackTrace) => FlutterError.reportError(
                 FlutterErrorDetails(
