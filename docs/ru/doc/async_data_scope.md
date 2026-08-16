@@ -1,6 +1,6 @@
 # AsyncDataScope
 
-> Перевод `doc/f_async_data_scope.md` (blob `f467f936ff370c86d4ac5d10f6ded12cab18f2d4`).
+> Перевод `doc/async_data_scope.md` (blob `f467f936ff370c86d4ac5d10f6ded12cab18f2d4`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 `AsyncScope`, который производит значение. Инициализация заканчивается объектом,

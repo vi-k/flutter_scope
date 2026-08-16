@@ -1,6 +1,6 @@
 # AsyncScope
 
-> Перевод `doc/e_async_scope.md` (blob `ae49b1f961e12fcb65d30a88cd3cf4e05e4d9081`).
+> Перевод `doc/async_scope.md` (blob `ae49b1f961e12fcb65d30a88cd3cf4e05e4d9081`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 Скоуп, всё содержимое которого — жизненный цикл: асинхронная инициализация и

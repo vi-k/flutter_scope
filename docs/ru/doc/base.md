@@ -1,6 +1,6 @@
 # base
 
-> Перевод `doc/a_base.md` (blob `0f067a2052db554c86357fc4387c4ad8ba468f06`).
+> Перевод `doc/base.md` (blob `0f067a2052db554c86357fc4387c4ad8ba468f06`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 Каждое семейство скоупов этого пакета — `ScopeWidgetBase`, `ScopeModel`,

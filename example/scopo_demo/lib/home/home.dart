@@ -7,15 +7,15 @@ import '../common/data/fake_services/fake_bloc.dart';
 import '../common/data/fake_services/fake_controller.dart';
 import '../common/presentation/animated_progress_indicator.dart';
 import '../common/presentation/sized_tab_bar.dart';
-import 'demos/a_scope_widget/scope_widget_demo.dart';
-import 'demos/b_scope_model/scope_model_demo.dart';
-import 'demos/c_scope_notifier/scope_notifier_demo.dart';
-import 'demos/d_async_scope/async_scope_demo.dart';
-import 'demos/e_async_data_scope/async_data_scope_demo.dart';
-import 'demos/f_lite_scope/lite_scope_demo.dart';
-import 'demos/g_scope/scope_demo.dart';
-import 'demos/h_navigation_node/navigation_node_demo.dart';
-import 'demos/i_deferred_closing/deferred_closing_demo.dart';
+import 'demos/async_data_scope/async_data_scope_demo.dart';
+import 'demos/async_scope/async_scope_demo.dart';
+import 'demos/deferred_closing/deferred_closing_demo.dart';
+import 'demos/full_scope/scope_demo.dart';
+import 'demos/lite_scope/lite_scope_demo.dart';
+import 'demos/navigation_node/navigation_node_demo.dart';
+import 'demos/scope_model/scope_model_demo.dart';
+import 'demos/scope_notifier/scope_notifier_demo.dart';
+import 'demos/scope_widget/scope_widget_demo.dart';
 import 'home_dependencies.dart';
 
 const _tabs = <(String, Widget)>[

@@ -1,25 +1,25 @@
 dartdoc:
   categories:
     base:
-      markdown: doc/a_base.md
+      markdown: doc/base.md
     ScopeWidget:
-      markdown: doc/b_scope_widget.md
+      markdown: doc/scope_widget.md
     ScopeModel:
-      markdown: doc/c_scope_model.md
+      markdown: doc/scope_model.md
     ScopeNotifier:
-      markdown: doc/d_scope_notifier.md
+      markdown: doc/scope_notifier.md
     AsyncScope:
-      markdown: doc/e_async_scope.md
+      markdown: doc/async_scope.md
     AsyncDataScope:
-      markdown: doc/f_async_data_scope.md
+      markdown: doc/async_data_scope.md
     LiteScope:
-      markdown: doc/g_lite_scope.md
+      markdown: doc/lite_scope.md
     Scope:
-      markdown: doc/h_scope.md
+      markdown: doc/full_scope.md
     debug:
-      markdown: doc/i_debug.md
+      markdown: doc/debug.md
     utils:
-      markdown: doc/j_utils.md
+      markdown: doc/utils.md
   categoryOrder:
     [
       base,

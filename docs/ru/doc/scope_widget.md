@@ -1,6 +1,6 @@
 # ScopeWidget
 
-> Перевод `doc/b_scope_widget.md` (blob `4c211a93f28d77fb83868d016bf4aa9312716e4d`).
+> Перевод `doc/scope_widget.md` (blob `4c211a93f28d77fb83868d016bf4aa9312716e4d`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 Под этим именем живут две вещи. `ScopeWidgetBase` — простейший скоуп пакета,

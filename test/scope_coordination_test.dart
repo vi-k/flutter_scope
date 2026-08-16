@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:fake_async/fake_async.dart';
-import 'package:scopo/src/scope/e_async_scope/scope_coordination.dart';
+import 'package:scopo/src/scope/async_scope/scope_coordination.dart';
 import 'package:test/test.dart';
 
 /// Lets pending microtasks and zero-duration timers run.
