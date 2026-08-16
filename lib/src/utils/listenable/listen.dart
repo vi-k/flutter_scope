@@ -145,12 +145,21 @@ final class CompositeListenableSubscription {
   }
 
   /// Removes all subscriptions from this composite.
+  ///
+  /// A member that was cancelled on its own is skipped rather than cancelled
+  /// again. Cancelling a subscription twice is a mistake in the caller and
+  /// says so, but a composite holding one is not that caller: raising here
+  /// would leave every member after it in the list still listening, which is
+  /// the leak the composite exists to prevent -- and only in debug, since
+  /// release has no assert to raise.
   void cancel() {
     assert(debugAssertNotDisposed(this, _isDisposed, 'cancel'));
     if (!_isDisposed) {
       _isDisposed = true;
       for (final subscription in _subscriptions) {
-        subscription.cancel();
+        if (!subscription._isDisposed) {
+          subscription.cancel();
+        }
       }
       _subscriptions.clear();
     }

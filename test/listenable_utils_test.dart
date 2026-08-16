@@ -46,6 +46,43 @@ void main() {
   });
 
   group('CompositeListenableSubscription', () {
+    // A member may be given up on its own -- a conditional subscription, an
+    // early return -- while the composite still holds it. Cancelling the
+    // composite then walked into a subscription that raises on a second
+    // cancel, and everything after it in the list stayed attached to its
+    // listenable: a leak, in debug only, where release worked.
+    test('cancels the rest when one of them is already cancelled', () {
+      final first = ChangeNotifier();
+      final second = ChangeNotifier();
+      final third = ChangeNotifier();
+      addTearDown(first.dispose);
+      addTearDown(second.dispose);
+      addTearDown(third.dispose);
+      var firstCalls = 0;
+      var secondCalls = 0;
+      var thirdCalls = 0;
+
+      final composite = CompositeListenableSubscription();
+      first.listen(() => firstCalls++).addTo(composite);
+      final middle = second.listen(() => secondCalls++)..addTo(composite);
+      third.listen(() => thirdCalls++).addTo(composite);
+
+      middle.cancel();
+      composite.cancel();
+
+      for (final notifier in [first, second, third]) {
+        // ignore: invalid_use_of_protected_member, invalid_use_of_visible_for_testing_member
+        notifier.notifyListeners();
+      }
+
+      expect(
+        [firstCalls, secondCalls, thirdCalls],
+        [0, 0, 0],
+        reason: 'one member that was already gone is no reason to leave the '
+            'ones after it listening',
+      );
+    });
+
     test('cancels everything it holds at once', () {
       final first = ChangeNotifier();
       final second = ChangeNotifier();

@@ -489,7 +489,8 @@ final class _ModeHost extends StatelessWidget {
         child: external != null
             ? ScopeModel<_Model>.value(
                 key: scopeKey,
-                value: external,
+                // A final field is not promoted across the check above.
+                value: external!,
                 builder: (context) => const _NameText(),
               )
             : ScopeModel<_Model>(

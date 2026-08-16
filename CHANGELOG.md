@@ -44,6 +44,19 @@
   still reported as before. The state is applied outside the frame, because
   such a failure is raised before the first `await` and therefore inside the
   build that started the initialization.
+* [breaking changes] The `value` of `ScopeModel.value` and
+  `ScopeNotifier.value` is a non-nullable `M`. The field behind it stays
+  nullable — the owning constructor leaves it empty — and `required` therefore
+  said nothing about what a `.value` scope was handed: `null` compiled and
+  then failed on a bare null check, naming neither the scope nor the
+  parameter, and for a notifier from inside `init()`. A nullable expression
+  now needs a `!` at the call, where the decision belongs.
+* `CompositeListenableSubscription.cancel()` skips a member that was already
+  cancelled on its own instead of cancelling it again. Cancelling a
+  subscription twice is a mistake in the caller and still says so, but a
+  composite holding one is not that caller: raising there left every member
+  after it in the list still listening — the very leak the composite exists to
+  prevent, and in debug builds only, since release has no assert to raise.
 * A failure of a dependency reaches `buildOnError` with the stack trace of
   what actually failed. The wrapper was raised with `StackTrace.empty`, so the
   trace that travelled up the tree — and into whatever the application does

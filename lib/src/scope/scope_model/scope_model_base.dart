@@ -27,10 +27,18 @@ abstract base class ScopeModelBase<W extends ScopeModelBase<W, M>,
         value = null;
 
   /// Creates a scope over a model somebody else owns.
+  ///
+  /// [value] is narrowed to a non-nullable [M] here, though the field it
+  /// initializes is not: the field is nullable because the owning constructor
+  /// leaves it empty, and that is no reason to let a scope be built over
+  /// nothing. The getter dereferences it on the first read -- for a notifier,
+  /// the subscription taken in `init()` -- so a `null` used to compile and
+  /// then fail on a bare null check, naming neither the scope nor the
+  /// parameter.
   const ScopeModelBase.value({
     super.key,
     super.tag,
-    required this.value,
+    required M this.value,
   })  : hasValue = true,
         create = null,
         dispose = null;
