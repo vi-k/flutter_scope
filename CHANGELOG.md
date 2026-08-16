@@ -43,6 +43,13 @@
   and an empty stack — which is why the node kept the first one and the new key
   simply never resolved. An assertion says so, and points at `Widget.key` and
   at the `GlobalKey()` written inside `build` that usually causes it.
+* [breaking changes] The type arguments of `AsyncDataScope.select` are in the
+  order every other `select` in the package uses — the scope's own type first,
+  the selected type last: `select<Profile, String>` rather than
+  `select<String, Profile>`. It was the only one the other way round, against
+  `ScopeModel`, `ScopeNotifier`, `Scope`, `LiteScope` and its own
+  `AsyncDataScopeBase.select`. A call written for the old order stops
+  compiling rather than changing meaning.
 * [breaking changes] `AsyncScope` hands the progress to the branches built
   before the scope is ready: `initBuilder` is now
   `(context, progress)` and `errorBuilder` is

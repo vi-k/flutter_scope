@@ -115,7 +115,11 @@ final class AsyncDataScope<T extends Object?>
       );
 
   /// Subscribes to one value of the scope and returns it.
-  static V select<V extends Object?, T extends Object?>(
+  ///
+  /// The data type comes first and the selected type second, as everywhere
+  /// else: `AsyncDataScope.select<Profile, String>(context, …)` selects a
+  /// `String` out of a scope holding a `Profile`.
+  static V select<T extends Object?, V extends Object?>(
     BuildContext context,
     V Function(AsyncDataScopeContext<AsyncDataScope<T>, T> context) selector,
   ) =>

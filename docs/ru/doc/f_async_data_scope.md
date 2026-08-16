@@ -1,6 +1,6 @@
 # AsyncDataScope
 
-> Перевод `doc/f_async_data_scope.md` (blob `f3e99ed1e1745db718973df7bf32be306a06abac`).
+> Перевод `doc/f_async_data_scope.md` (blob `694a280fb6afe8b6f7f894381107d6309b13dde0`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 `AsyncScope`, который производит значение. Инициализация заканчивается объектом,
@@ -75,14 +75,14 @@ final database = AsyncDataScope.of<Database>(context, listen: false).data;
 `select` — дешёвый вход, когда важна лишь часть значения:
 
 ```dart
-final name = AsyncDataScope.select<String, Profile>(
+final name = AsyncDataScope.select<Profile, String>(
   context,
   (scope) => scope.data.name,
 );
 ```
 
-Обратите внимание на порядок параметров типа — сначала выбираемый тип, потом тип
-данных — и на то, что селектор получает контекст, а не данные, так что из него
+Параметры типа читаются так же, как везде в пакете: сначала тип самого скоупа,
+последним — выбираемый. Селектор получает контекст, а не данные, так что из него
 доступны и `dataOrNull`, и `hasError`.
 
 ## Чего значение не делает

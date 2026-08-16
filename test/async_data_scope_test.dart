@@ -44,6 +44,21 @@ void main() {
       },
     );
 
+    // The type arguments read scope-first, value-last, the way they do
+    // everywhere else in the package -- including this family's own base,
+    // `AsyncDataScopeBase.select<W, T, V>`.
+    testWidgets('select reads one part of the value', (tester) async {
+      await tester.pumpWidget(
+        _Host(
+          init: (context) =>
+              Stream.value(AsyncDataScopeReady(_Database('main'))),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('selected: main'), findsOneWidget);
+    });
+
     testWidgets('hands the data it produced to dispose', (tester) async {
       final disposed = <_Database>[];
       final database = _Database('main');
@@ -195,7 +210,11 @@ final class _Host extends StatelessWidget {
           errorBuilder: (context, error, stackTrace, progress) =>
               Text('error: $error ($progress)'),
           builder: (context, data) => Column(
-            children: [Text('ready: ${data.name}'), const _Descendant()],
+            children: [
+              Text('ready: ${data.name}'),
+              const _Descendant(),
+              const _Selector(),
+            ],
           ),
         ),
       );
@@ -245,6 +264,20 @@ final class _NullableReader extends StatelessWidget {
     }
 
     return const SizedBox.shrink();
+  }
+}
+
+final class _Selector extends StatelessWidget {
+  const _Selector();
+
+  @override
+  Widget build(BuildContext context) {
+    final name = AsyncDataScope.select<_Database, String>(
+      context,
+      (scope) => scope.data.name,
+    );
+
+    return Text('selected: $name');
   }
 }
 

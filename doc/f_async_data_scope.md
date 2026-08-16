@@ -72,15 +72,16 @@ one in `initBuilder`, or one reached from elsewhere in the tree — should use
 `select` is the cheap way in when only a part of the value matters:
 
 ```dart
-final name = AsyncDataScope.select<String, Profile>(
+final name = AsyncDataScope.select<Profile, String>(
   context,
   (scope) => scope.data.name,
 );
 ```
 
-Note the order of the type arguments — the selected type first, the data type
-second — and that the selector receives the context rather than the data, so it
-can reach `dataOrNull` or `hasError` as well.
+The type arguments read the way they do everywhere else in the package — the
+scope's own type first, the selected type last. The selector receives the
+context rather than the data, so it can reach `dataOrNull` or `hasError` as
+well.
 
 ## What the value does not do
 
