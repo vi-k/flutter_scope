@@ -20,6 +20,11 @@ final class NavigationNode extends StatefulWidget {
   final Widget child;
 
   /// Gives access to the nested navigator from outside the node.
+  ///
+  /// Fixed for the lifetime of the node: it is the key the nested navigator is
+  /// built with, so another one would mean another navigator and an empty
+  /// stack. Handing over a different one is refused by an assertion — hold the
+  /// key in a `State` field rather than writing `GlobalKey()` inside `build`.
   final GlobalKey<NodeNavigatorState>? navigatorKey;
 
   /// Intercepts the system back gesture.
@@ -27,6 +32,13 @@ final class NavigationNode extends StatefulWidget {
   /// Return `true` to let the pop through, `false` to keep the route, or a
   /// [Future] to decide after asking — a confirmation dialog, usually. The
   /// `result` is what the popped route would have returned.
+  ///
+  /// A [Future] is asked for one press at a time: a back arriving while an
+  /// answer is still pending is dropped rather than starting a second
+  /// question. And an answer is acted on only while it still applies — if the
+  /// route the node sits on has been closed by something else, or buried under
+  /// a newer one, a `true` takes nothing, since a pop would otherwise take
+  /// whatever is on top instead of what was asked about.
   final FutureOr<bool> Function(BuildContext context, Object? result)? onPop;
 
   /// Creates a navigation node around [child].
@@ -43,9 +55,16 @@ final class NavigationNode extends StatefulWidget {
 }
 
 final class _NavigationNodeState extends State<NavigationNode> {
-  late final _navigatorKey =
-      widget.navigatorKey ?? GlobalKey<NodeNavigatorState>();
+  /// The key the node was given, kept apart from the one it uses: `null` is an
+  /// answer like any other, and a node that is later handed a key has to be
+  /// told the same thing as one that is handed a different key.
+  late final GlobalKey<NodeNavigatorState>? _declaredKey = widget.navigatorKey;
+
+  late final _navigatorKey = _declaredKey ?? GlobalKey<NodeNavigatorState>();
   late final _observer = _NodeNavigatorObserver(this);
+
+  /// Whether an [NavigationNode.onPop] is still deciding about a press.
+  bool _deciding = false;
 
   NodeNavigatorState get _navigator => _navigatorKey.currentState!;
 
@@ -54,34 +73,66 @@ final class _NavigationNodeState extends State<NavigationNode> {
   /// Refusing takes no undoing: the node's marker stays where it is, so the
   /// next press arrives here exactly as this one did.
   void _decideOutside(BuildContext context, Object? result) {
-    if (_navigator.previous case final previous?) {
-      // ignore: discarded_futures
-      switch (widget.onPop?.call(context, result)) {
-        case final Future<bool> future:
-          // ignore: discarded_futures
-          future.then((canPop) {
-            if (canPop) {
-              previous.pop(result);
-            }
-          });
-        case final bool? canPop:
-          if (canPop ?? true) {
-            previous.pop(result);
+    // A decision already under way is the answer to this press too. Nothing
+    // queues: a second back while a confirmation is on screen must not ask a
+    // second time, and two answers of `true` must not take two routes.
+    if (_deciding || _navigator.previous == null) {
+      return;
+    }
+
+    // ignore: discarded_futures
+    switch (widget.onPop?.call(context, result)) {
+      case final Future<bool> future:
+        _deciding = true;
+        final route = ModalRoute.of(context);
+
+        // ignore: discarded_futures
+        future.whenComplete(() => _deciding = false).then((canPop) {
+          // The world does not wait for an answer. The route the node sits on
+          // may have been closed by something else, or buried under a newer
+          // one -- and a pop would then take whatever is on top instead of
+          // what was asked about. A node that is gone answers for itself: its
+          // key resolves to nothing, which is why the walk below is null-safe
+          // and no `mounted` check is needed on top of it.
+          if (!canPop || (route != null && !route.isCurrent)) {
+            return;
           }
-      }
+
+          _navigatorKey.currentState?.previous?.pop(result);
+        });
+      case final bool? canPop:
+        if (canPop ?? true) {
+          _navigator.previous?.pop(result);
+        }
     }
   }
 
   @override
-  Widget build(BuildContext context) => _NodeBackDispatcher(
+  Widget build(BuildContext context) {
+    // In `build`, not in `didUpdateWidget`: a failure here is caught by
+    // Flutter's build error boundary, while one raised from `didUpdateWidget`
+    // abandons the update halfway and takes the frame down with it.
+    assert(
+      identical(widget.navigatorKey, _declaredKey),
+      'The `navigatorKey` of a NavigationNode cannot change. It is the key the '
+      'nested navigator is built with, so another one would mean another '
+      'navigator and an empty stack -- which is why the node keeps the first '
+      'one, and the new key simply never resolves. Give the widget a different '
+      '`Widget.key` when a fresh navigator is what you want. If this fired on '
+      'a `GlobalKey()` written inside `build`, hold it in a `State` field '
+      'instead: that expression makes a new key on every rebuild.',
+    );
+
+    return _NodeBackDispatcher(
+      node: this,
+      child: _NodeNavigator(
+        key: _navigatorKey,
         node: this,
-        child: _NodeNavigator(
-          key: _navigatorKey,
-          node: this,
-          pages: [MaterialPage<void>(child: widget.child)],
-          onDidRemovePage: (_) {},
-        ),
-      );
+        pages: [MaterialPage<void>(child: widget.child)],
+        onDidRemovePage: (_) {},
+      ),
+    );
+  }
 }
 
 /// Sends a system back to the navigator below before anything outside sees it.

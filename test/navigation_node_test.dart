@@ -351,6 +351,171 @@ void main() {
       );
     });
 
+    // An `onPop` that asks before answering leaves a window open, and the
+    // system back does not wait politely. A second press used to start a
+    // second question, and two `true` answers took two outer routes.
+    testWidgets('an asynchronous onPop is asked once, however fast the presses',
+        (tester) async {
+      final gate = Completer<bool>();
+      var calls = 0;
+
+      await tester.pumpWidget(
+        _OnPopHost(
+          onPop: (context, result) {
+            calls++;
+
+            return gate.future;
+          },
+        ),
+      );
+      await tester.tap(find.text('go'));
+      await tester.pumpAndSettle();
+
+      await tester.binding.handlePopRoute();
+      await tester.binding.handlePopRoute();
+      await tester.pump();
+
+      expect(calls, 1, reason: 'the second press met a question already asked');
+
+      gate.complete(true);
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('go'),
+        findsOneWidget,
+        reason: 'and the answer took exactly one route',
+      );
+    });
+
+    testWidgets('an asynchronous onPop that answers too late takes nothing',
+        (tester) async {
+      final gate = Completer<bool>();
+
+      await tester.pumpWidget(
+        _OnPopHost(onPop: (context, result) => gate.future),
+      );
+      await tester.tap(find.text('go'));
+      await tester.pumpAndSettle();
+
+      await tester.binding.handlePopRoute();
+      await tester.pump();
+
+      // The route the node sits on is closed by something else while the
+      // question is still open.
+      tester.state<NavigatorState>(find.byType(Navigator).first).pop();
+      await tester.pumpAndSettle();
+
+      expect(find.text('go'), findsOneWidget);
+
+      gate.complete(true);
+      await tester.pumpAndSettle();
+
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: 'an answer about a route that is already gone is not acted on',
+      );
+      expect(
+        find.text('go'),
+        findsOneWidget,
+        reason: 'and it does not take the screen below with it',
+      );
+    });
+
+    // The node is still mounted here -- its route only moved down the stack --
+    // so `mounted` says nothing and the route itself has to be asked.
+    testWidgets(
+        'an asynchronous onPop answering under a newer route takes '
+        'nothing', (tester) async {
+      final gate = Completer<bool>();
+
+      await tester.pumpWidget(
+        _OnPopHost(onPop: (context, result) => gate.future),
+      );
+      await tester.tap(find.text('go'));
+      await tester.pumpAndSettle();
+
+      await tester.binding.handlePopRoute();
+      await tester.pump();
+
+      // Something else pushes over the node while the question is open.
+      final navigator = tester.state<NavigatorState>(
+        find.byType(Navigator).first,
+      );
+      unawaited(
+        navigator.push<void>(
+          MaterialPageRoute<void>(
+            builder: (context) => const Scaffold(body: Text('on top')),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      gate.complete(true);
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('on top'),
+        findsOneWidget,
+        reason: 'the answer was about a route that is no longer the top one',
+      );
+    });
+
+    // The node can go without its route going: an app that swaps it out of the
+    // route's subtree while a confirmation is on screen leaves the answer with
+    // nothing to act through.
+    testWidgets(
+        'an asynchronous onPop answering after the node is gone takes '
+        'nothing', (tester) async {
+      final gate = Completer<bool>();
+
+      await tester.pumpWidget(
+        _RemovableNodeHost(onPop: (context, result) => gate.future),
+      );
+      await tester.tap(find.text('go'));
+      await tester.pumpAndSettle();
+
+      await tester.binding.handlePopRoute();
+      await tester.pump();
+
+      _RemovableNodeState.instance!.removeNode();
+      await tester.pumpAndSettle();
+
+      expect(find.text('without a node'), findsOneWidget);
+
+      gate.complete(true);
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(
+        find.text('without a node'),
+        findsOneWidget,
+        reason: 'the answer had nothing left to pop through',
+      );
+    });
+
+    // The key is what the navigator is built with, so a new one would mean a
+    // new navigator and an empty stack. Refusing is the only honest answer --
+    // and it is what catches a `GlobalKey()` built inline in `build`.
+    testWidgets('a changed navigatorKey is refused', (tester) async {
+      final first = GlobalKey<NodeNavigatorState>();
+      final second = GlobalKey<NodeNavigatorState>();
+
+      await tester.pumpWidget(_Host(useNode: true, navigatorKey: first));
+      await tester.pumpAndSettle();
+
+      await tester.pumpWidget(_Host(useNode: true, navigatorKey: second));
+
+      expect(
+        tester.takeException(),
+        isA<AssertionError>().having(
+          (error) => error.message.toString(),
+          'message',
+          contains('`Widget.key`'),
+        ),
+      );
+    });
+
     testWidgets('a node route is not on the root navigator', (tester) async {
       await tester.pumpWidget(const _Host(useNode: true));
 
@@ -487,6 +652,64 @@ final class _OnPopHost extends StatelessWidget {
           ),
         ),
       );
+}
+
+/// A pushed route whose subtree can drop the node while the route stays.
+final class _RemovableNodeHost extends StatelessWidget {
+  final FutureOr<bool> Function(BuildContext context, Object? result) onPop;
+
+  const _RemovableNodeHost({required this.onPop});
+
+  @override
+  Widget build(BuildContext context) => MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: Builder(
+              builder: (context) => TextButton(
+                onPressed: () => unawaited(
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (context) => _RemovableNode(onPop: onPop),
+                    ),
+                  ),
+                ),
+                child: const Text('go'),
+              ),
+            ),
+          ),
+        ),
+      );
+}
+
+final class _RemovableNode extends StatefulWidget {
+  final FutureOr<bool> Function(BuildContext context, Object? result) onPop;
+
+  const _RemovableNode({required this.onPop});
+
+  @override
+  State<_RemovableNode> createState() => _RemovableNodeState();
+}
+
+final class _RemovableNodeState extends State<_RemovableNode> {
+  static _RemovableNodeState? instance;
+
+  bool _hasNode = true;
+
+  void removeNode() => setState(() => _hasNode = false);
+
+  @override
+  void initState() {
+    super.initState();
+    instance = this;
+  }
+
+  @override
+  Widget build(BuildContext context) => _hasNode
+      ? NavigationNode(
+          onPop: widget.onPop,
+          child: const _OnPopNodeContent(),
+        )
+      : const Scaffold(body: Center(child: Text('without a node')));
 }
 
 final class _OnPopNodeContent extends StatelessWidget {

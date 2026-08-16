@@ -32,6 +32,17 @@
   release is now guarded on its own, the walk finishes, and the first failure is
   passed upwards afterwards; every failure is recorded on the dependency it
   belongs to, as before.
+* Fix an asynchronous `NavigationNode.onPop` being asked twice and answering
+  too late. Two quick back presses started two questions, and two answers of
+  `true` took two outer routes; an answer arriving after the route the node
+  sits on had been closed by something else — or buried under a newer one —
+  popped whatever was on top instead. The hook is now asked one press at a
+  time, and an answer is acted on only while it still applies.
+* A `NavigationNode` refuses a `navigatorKey` that changes. It is the key the
+  nested navigator is built with, so another one would mean another navigator
+  and an empty stack — which is why the node kept the first one and the new key
+  simply never resolved. An assertion says so, and points at `Widget.key` and
+  at the `GlobalKey()` written inside `build` that usually causes it.
 * [breaking changes] `State.dispose` is sealed on `LiteScopeState` and
   `ScopeState`. It belongs to Flutter and lands on either side of a scope's
   teardown depending on how the scope went, so nothing a scope has to let go of

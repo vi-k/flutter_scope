@@ -84,10 +84,22 @@ NavigationNode(child: const ScreenBody())
 ```
 
 `navigatorKey` exposes the inner `NodeNavigatorState` when a caller needs to
-push from outside. `isRoot` marks a node that must not forward a pop any
-further. `onPop` intercepts the system back gesture: return `true` to let the
-pop through, `false` to keep the route, or a `Future<bool>` to decide after
-asking something — a confirmation dialog, typically.
+push from outside. It is fixed for the lifetime of the node — it is the key the
+nested navigator is built with, so another one would mean another navigator and
+an empty stack — and handing over a different one is refused by an assertion.
+Hold it in a `State` field rather than writing `GlobalKey()` inside `build`.
+
+`isRoot` marks a node that must not forward a pop any further. `onPop`
+intercepts the system back gesture: return `true` to let the pop through,
+`false` to keep the route, or a `Future<bool>` to decide after asking something
+— a confirmation dialog, typically.
+
+An asynchronous `onPop` is asked once at a time: a back press arriving while an
+answer is still pending is dropped rather than starting a second question. And
+an answer is only acted on if it still applies — if the route the node sits on
+was closed by something else, or buried under a newer one, a `true` takes
+nothing, since a pop would otherwise take whatever is on top instead of what
+was asked about.
 
 System back first asks the node's nested navigator to close its top route. Only
 when that navigator has nothing left to pop do `onPop` and `isRoot` decide what
