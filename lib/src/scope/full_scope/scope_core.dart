@@ -172,10 +172,28 @@ abstract base class ScopeElementBase<
 
   @override
   void onUnmount() {
+    AsyncError? failure;
+
     // The state lets go of its own first, the dependencies after it, in the
-    // same order as the asynchronous half below.
-    super.onUnmount();
+    // same order as the asynchronous half below -- and, as there, the second
+    // half is not the first half's to cancel. A state that failed to drop
+    // what it holds is still a state whose dependencies are holding theirs,
+    // and this is the only pass that drops those: `unmountScope()` marks
+    // itself done before it calls this, so nothing comes back for a second
+    // attempt, and what a dependency releases only in `unmount` would live
+    // on until the tree died with it.
+    try {
+      super.onUnmount();
+      // ignore: avoid_catching_errors
+    } on Object catch (error, stackTrace) {
+      failure = AsyncError(error, stackTrace);
+    }
+
     _dependencies?.onUnmount();
+
+    if (failure case final failure?) {
+      Error.throwWithStackTrace(failure.error, failure.stackTrace);
+    }
   }
 
   @override

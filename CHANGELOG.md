@@ -32,6 +32,14 @@
   release is now guarded on its own, the walk finishes, and the first failure is
   passed upwards afterwards; every failure is recorded on the dependency it
   belongs to, as before.
+* Fix a failing `ScopeState.onUnmount` taking the synchronous teardown of the
+  dependencies with it. The state let go of its own first and the dependencies
+  after it, unguarded, so a hook that threw meant no dependency ever heard
+  `unmount` at all — and none ever would: the pass runs once and nothing comes
+  back for a second attempt, so whatever a dependency drops only there lived on
+  until the tree died with it. The two halves are now guarded apart, as they
+  already were in `disposeAsync`, and the first failure is passed on once both
+  have run.
 * Fix an asynchronous `NavigationNode.onPop` being asked twice and answering
   too late. Two quick back presses started two questions, and two answers of
   `true` took two outer routes; an answer arriving after the route the node

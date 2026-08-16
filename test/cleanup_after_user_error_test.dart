@@ -366,6 +366,37 @@ void main() {
       );
     });
 
+    // The synchronous half of the teardown, and the same rule as the
+    // asynchronous half below: a state that failed to drop what it holds is
+    // still a state whose dependencies are holding theirs, and `onUnmount` is
+    // the only place they are dropped -- it runs once, and a scope that got
+    // this far never comes back for a second attempt.
+    testWidgets('unmounts its dependencies after a failing state unmount',
+        (tester) async {
+      final log = <String>[];
+
+      await tester.pumpWidget(
+        _wrap(_DepScope(log: log, failOnStateUnmount: true)),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.pumpWidget(_wrap(const SizedBox.shrink()));
+      await settle(tester, until: () => log.contains('dispose a'));
+
+      expect(
+        tester.takeException(),
+        isA<StateError>(),
+        reason: 'the failure is still reported',
+      );
+      expect(
+        log,
+        containsAll(['unmount b', 'unmount a']),
+        reason: 'the state failed to let go of its own synchronously; the '
+            'dependencies still have to let go of theirs, and this is the '
+            'only pass that does it',
+      );
+    });
+
     testWidgets('disposes of its dependencies after a failing state disposal',
         (tester) async {
       final log = <String>[];
@@ -525,11 +556,13 @@ final class _AsyncData extends AsyncDataScopeBase<_AsyncData, String> {
 final class _DepScope extends Scope<_DepScope, _Deps, _DepScopeState> {
   final List<String> log;
   final String? failOnUnmount;
+  final bool failOnStateUnmount;
   final bool failOnStateDispose;
 
   const _DepScope({
     required this.log,
     this.failOnUnmount,
+    this.failOnStateUnmount = false,
     this.failOnStateDispose = false,
   }) : super(child: const SizedBox.shrink());
 
@@ -582,6 +615,14 @@ final class _Deps extends ScopeAutoDependencies<_Deps, BuildContext> {
 
 final class _DepScopeState
     extends ScopeState<_DepScope, _Deps, _DepScopeState> {
+  @override
+  void onUnmount() {
+    super.onUnmount();
+    if (params.failOnStateUnmount) {
+      throw StateError('the state failed to unmount itself');
+    }
+  }
+
   @override
   FutureOr<void> disposeAsync() {
     if (params.failOnStateDispose) {
