@@ -101,8 +101,9 @@ final class HomeDependencies
   ScopeDependency buildDependencies(_) => sequential('', [
         dep('apiClient', (dep) async {
           apiClient = ApiClient();
-          await apiClient.init();
           dep.dispose = apiClient.close;
+
+          await apiClient.init();
         }),
         concurrent('user', [
           dep('settings', (dep) async {
@@ -178,7 +179,96 @@ clean up after itself: when the tree did not reach the initialized state, the
 container's `dispose` runs before the error reaches `buildOnError`. Override it
 with `false` to keep the half-built tree for inspection.
 
-For that inspection the container exposes its tree: `root` is the top
+### Register the teardown the moment you have something to tear down
+
+The disposal releases what a dependency **registered**, not what it finished
+with: an initializer that took a resource and set `dep.dispose` keeps that
+resource whether it then succeeded, failed or was cancelled. Which puts the
+whole weight on where the registration sits.
+
+```dart
+// Wrong: the migration throws, nothing is registered, and the database stays
+// open with nobody left to close it.
+dep('database', (dep) async {
+  final database = await Database.open();
+  await database.migrate();
+  dep.dispose = database.close;
+}),
+```
+
+```dart
+// Right: registered before anything else can fail.
+dep('database', (dep) async {
+  final database = await Database.open();
+  dep.dispose = database.close;
+
+  await database.migrate();
+}),
+```
+
+The rule reads as one line: **acquire, register, then carry on.** Nothing
+between the acquisition and the registration may `await`, throw, or be
+cancelled — and in Dart the first of those implies the other two.
+
+`dep.dispose` may be reassigned as the initializer goes, which is what a
+dependency that builds several things in sequence does: register a closure that
+releases everything taken so far, and widen it after each step. Setting neither
+`dep.dispose` nor `dep.unmount` is fine for a dependency that owns nothing —
+after the teardown it says `no disposal required`, so a tree dump still shows
+that the walk reached it.
+
+### What a failure costs, and what it does not
+
+A failed dependency stops its own group, and the teardown above releases
+everything already built — provided each leaf registered what it took. Where the
+walk stops is worth knowing:
+
+- **A sequential group** stops at the first failure; the children before it are
+  released in reverse order.
+- **A concurrent group** cancels the arms still running when one of them fails.
+  A cancelled arm is resumed only as far as its next suspension point, so it may
+  stop mid-way — and this is the second reason to register early: whatever it
+  had already registered is still released, whatever it had not is not.
+- **The disposal itself does not stop at a failure.** Each release is guarded on
+  its own, the walk finishes, and the first failure is passed on afterwards.
+  Every failure is recorded on the dependency it belongs to and readable through
+  `flattenDependenciesWithErrors()`.
+
+And with `autoDisposeOnError` set to `false`, releasing the half-built tree is
+yours to do.
+
+### A hand-written container cleans up after itself
+
+`ScopeAutoDependencies` is what runs the teardown of a failed initialization.
+A container written by hand has no such thing behind it: the scope stores the
+container when the stream yields `ScopeReady`, and a stream that failed before
+that never handed one over. Nothing the scope holds points at it, and its
+`dispose()` is never called.
+
+So an `init` written by hand takes the same shape as the one in the `AsyncScope`
+topic — what a step took, that step gives back when the next one fails:
+
+```dart
+static Stream<ScopeInitState<String, AppDependencies>> init() async* {
+  final storage = await Storage.open();
+
+  try {
+    yield ScopeProgress('signing in');
+    final session = await Session.restore(storage);
+
+    yield ScopeReady(AppDependencies(storage: storage, session: session));
+    // ignore: avoid_catching_errors
+  } on Object {
+    await storage.close();
+
+    rethrow;
+  }
+}
+```
+
+## Inspecting the tree
+
+Whatever the outcome, the container exposes what it built: `root` is the top
 `ScopeDependency`, `flattenDependencies()` walks it depth-first into
 `ScopeDependencyInfo` records (`level`, `path`, `dependency`), and
 `flattenDependenciesWithErrors()` narrows the walk to the entries that hold a

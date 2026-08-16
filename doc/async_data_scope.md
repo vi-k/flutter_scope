@@ -50,6 +50,61 @@ The progress side is typed loosely on purpose: `AsyncDataScopeProgress` carries
 an `Object?`, and the builders receive it as `Object?`. The value being built is
 what the type parameter is for; the progress is a caption.
 
+### A value that never arrives is a value nobody releases
+
+`AsyncDataScopeReady` is the handover, and until it happens the value belongs to
+the initialization alone. The scope has never seen it, so it cannot release it:
+`dispose` runs only when the initialization succeeded, and `unmount` is handed
+`null`.
+
+That is what makes this family's version of the trap easy to walk into — the
+value exists, in a local variable, and looks as though the scope is looking
+after it:
+
+```dart
+// Wrong: the database is open, and `dispose` will never be called with it.
+init: (context) async* {
+  final database = await Database.open();
+
+  yield AsyncDataScopeProgress('migrating');
+  await database.migrate();             // throws
+
+  yield AsyncDataScopeReady(database);
+},
+dispose: (database) => database.close(),
+```
+
+```dart
+// Right: not handed over yet means still mine to close.
+init: (context) async* {
+  final database = await Database.open();
+
+  try {
+    yield AsyncDataScopeProgress('migrating');
+    await database.migrate();
+    // ignore: avoid_catching_errors
+  } on Object {
+    await database.close();
+
+    rethrow;
+  }
+
+  yield AsyncDataScopeReady(database);
+},
+dispose: (database) => database.close(),
+```
+
+The guard covers a cancellation too — a scope that leaves the tree mid-`init`
+resumes the generator so that it can run out, and a `finally` there runs like
+any other.
+
+Two ways to avoid writing the guard at all: build the value in one step that
+cannot fail halfway, or use the dependency container of the `Scope` family,
+which does exactly this bookkeeping for a whole tree of resources. And if the
+value is an object with a lifecycle of its own rather than a plain resource,
+`AsyncControllerScope` disposes of it on every path, including the one where
+its `init()` threw.
+
 ### Why `builder` is handed the value, when `ScopeModel`'s is not
 
 `ScopeModel.builder` takes a context and nothing else, and the widgets below it

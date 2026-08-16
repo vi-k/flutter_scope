@@ -1,6 +1,6 @@
 # AsyncDataScope
 
-> Перевод `doc/async_data_scope.md` (blob `6e39620595eb9fba2dae718393d059aac9456790`).
+> Перевод `doc/async_data_scope.md` (blob `a319f2e8f6ca9d7a94c10f0d1ce77cc5bfff5b24`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 `AsyncScope`, который производит значение. Инициализация заканчивается объектом,
@@ -52,6 +52,59 @@ AsyncDataScopeReady(await Database.open())
 Сторона прогресса намеренно типизирована слабо: `AsyncDataScopeProgress` несёт
 `Object?`, и билдеры получают его как `Object?`. Параметр типа существует ради
 строящегося значения; прогресс — это подпись.
+
+### Значение, которое не доехало, освобождать некому
+
+`AsyncDataScopeReady` — это передача, и до неё значение принадлежит одной лишь
+инициализации. Скоуп его не видел, а значит и освободить не может: `dispose`
+выполняется, только если инициализация удалась, а `unmount` получает `null`.
+
+Из-за этого версия ловушки, специфичная для этого семейства, особенно
+соблазнительна: значение существует, лежит в локальной переменной и выглядит
+так, будто за ним уже присматривает скоуп:
+
+```dart
+// Неправильно: база открыта, и с ней `dispose` никогда не позовут.
+init: (context) async* {
+  final database = await Database.open();
+
+  yield AsyncDataScopeProgress('migrating');
+  await database.migrate();             // бросает
+
+  yield AsyncDataScopeReady(database);
+},
+dispose: (database) => database.close(),
+```
+
+```dart
+// Правильно: не передал — значит закрывать самому.
+init: (context) async* {
+  final database = await Database.open();
+
+  try {
+    yield AsyncDataScopeProgress('migrating');
+    await database.migrate();
+    // ignore: avoid_catching_errors
+  } on Object {
+    await database.close();
+
+    rethrow;
+  }
+
+  yield AsyncDataScopeReady(database);
+},
+dispose: (database) => database.close(),
+```
+
+Та же защита покрывает и отмену: скоуп, ушедший с дерева посреди `init`,
+возобновляет генератор, чтобы тот доработал, и `finally` там отрабатывает как
+обычно.
+
+Два способа не писать защиту вовсе: строить значение одним шагом, который не
+может упасть на середине, — или взять контейнер зависимостей семейства `Scope`,
+который ведёт ровно этот учёт для целого дерева ресурсов. А если значение — это
+объект со своим жизненным циклом, а не простой ресурс, то `AsyncControllerScope`
+утилизирует его на любом пути, включая тот, где его `init()` бросил.
 
 ### Почему значение отдают билдеру, а модель `ScopeModel` — нет
 

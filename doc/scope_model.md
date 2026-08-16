@@ -46,6 +46,27 @@ only: `create` is called once and never again, so a subscription taken there
 would rebuild the subtree around a value that stays as it was. An assertion
 catches it.
 
+"A failed `create` has nothing to hand over" is worth reading as a warning as
+well: a `create` that takes two things and fails between them leaves the first
+one behind, since the scope never learned of it. Either build the model in one
+step that cannot fail halfway, or give the first thing back before letting the
+failure out:
+
+```dart
+create: (context) {
+  final channel = Channel.open();
+
+  try {
+    return Session(channel, Store.open());
+    // ignore: avoid_catching_errors
+  } on Object {
+    channel.close();
+
+    rethrow;
+  }
+},
+```
+
 `ScopeModel.value` takes a model somebody else owns:
 
 ```dart

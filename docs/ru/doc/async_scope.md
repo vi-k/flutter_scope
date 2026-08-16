@@ -1,6 +1,6 @@
 # AsyncScope
 
-> Перевод `doc/async_scope.md` (blob `ae49b1f961e12fcb65d30a88cd3cf4e05e4d9081`).
+> Перевод `doc/async_scope.md` (blob `3c5c9c249ddaf978070d5643f1ca1c54393aa927`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 Скоуп, всё содержимое которого — жизненный цикл: асинхронная инициализация и
@@ -53,6 +53,97 @@ AsyncScope(
 котором он появился; с ним готовая ветка придерживается на заданное время.
 `ScopeConfig.pauseAfterInitializationEnabled = false` выключает все такие паузы
 глобально — см. тему `debug`.
+
+## Прогресс
+
+Прогресс — это то, чем его назовёт инициализация. `AsyncScopeProgress` несёт
+`Object?`, билдеры получают `Object?`, и пакет внутрь не заглядывает. Обычный
+случай — `String`; сгодится что угодно с `toString`.
+
+```dart
+AsyncScope(
+  init: (context) async* {
+    yield AsyncScopeProgress('connecting');
+    await api.connect();
+
+    yield AsyncScopeProgress('loading the profile');
+    await api.loadProfile();
+
+    yield AsyncScopeReady();
+  },
+  dispose: api.close,
+  initBuilder: (context, progress) => Center(child: Text('$progress')),
+  errorBuilder: (context, error, stackTrace, progress) =>
+      Center(child: Text('failed at $progress: $error')),
+  builder: (context) => const HomeScreen(),
+);
+```
+
+Про аргумент `progress` стоит знать четыре вещи.
+
+**До первого события он `null`.** Скоуп находится в `AsyncScopeWaiting` с
+момента постановки на дерево и до первого `yield`, а если `buildOnWaiting`
+вернул `null`, ветка ожидания — это `buildOnInitializing(context, null)`. Пишите
+билдер так, чтобы `null` значил «ещё ничего не сообщали»; то же он значит и в
+`buildOnError`, когда провал случился раньше любого прогресса.
+
+**Последнему значению достаётся свой кадр.** `AsyncScopeReady` применяется в
+post-frame-колбэке, поэтому значение прогресса, выданное прямо перед ним,
+успевает отрисоваться, а не подменяется внутри того же кадра.
+`pauseAfterInitialization` придерживает готовую ветку ещё дольше — за ним и
+тянутся, когда шаги слишком быстры, чтобы их прочитать.
+
+**Прогресс после готовности — ошибка, и её отвергают.** Скоуп инициализируется
+один раз; событие, пришедшее после `AsyncScopeReady` — второй `ready` или
+запоздавший прогресс, — сообщается через `FlutterError.reportError` и на экран
+не влияет. Инициализации, которая продолжает выдавать значения после того, как
+скоуп стал пригоден, нужен `Listenable` под скоупом, а не этот поток.
+
+**Не сообщать прогресс вовсе — нормально.** `init`, выдающий только
+`AsyncScopeReady`, не выходит из `AsyncScopeWaiting`, так что скоуп показывает
+`buildOnWaiting` — обычно спиннер, — а затем готовую ветку.
+
+### Счёт шагов
+
+Для инициализации, которая знает число своих шагов, есть `ProgressIterator`, а
+`Progress` — значение, которое он выдаёт: `number`, `total`, `progress` как доля
+от 0 до 1 и `toString` вида `2/3`.
+
+```dart
+init: (context) async* {
+  final steps = ProgressIterator(3);
+
+  yield AsyncScopeProgress(steps.nextStep()); // 1/3
+  await api.connect();
+
+  yield AsyncScopeProgress(steps.nextStep()); // 2/3
+  await api.loadProfile();
+
+  yield AsyncScopeProgress(steps.nextStep()); // 3/3
+  await api.warmUpCache();
+
+  yield AsyncScopeReady();
+},
+initBuilder: (context, progress) => switch (progress) {
+  final Progress progress => LinearProgressIndicator(value: progress.progress),
+  _ => const LinearProgressIndicator(),
+},
+```
+
+Доля всегда лежит между 0 и 1 — пустая работа читается как завершённая, а не как
+`NaN`, — поэтому её можно отдавать индикатору как есть. См. тему `utils`.
+
+### Где тип возвращается
+
+`Scope` прогресс типизирует: `ScopeInitState<P, D>` несёт `P`, так что
+`buildOnInitializing` может объявить `covariant P? progress` и читать поля, а не
+звать `toString`. `ScopeAutoDependencies` этим и пользуется, сообщая
+`ScopeAutoDependenciesProgress` на каждую зависимость — путь, имя и счётчик
+шагов в одном объекте. См. тему `Scope`.
+
+`AsyncScope` и `AsyncDataScope` остаются нетипизированными намеренно: их
+параметр типа, где он есть, принадлежит строящемуся значению. Прогресс — это
+подпись.
 
 ## Чтение состояния из поддерева
 
@@ -128,6 +219,57 @@ if (scope.isInitialized) { … }
 Ради этого порядка семейство и берут: родитель никогда не утилизирует то, чем
 ещё пользуется ребёнок, а пересозданный скоуп никогда не пересекается с тем,
 которого он сменяет.
+
+### Упавшая инициализация убирает за собой сама
+
+Шаг 6 стоит прочитать дважды: **`dispose` выполняется, только если
+инициализация удалась.** Скоуп, упавший на полпути, до него не доходит, и
+второго хука, который дошёл бы, нет: `onUnmount` отрабатывает, но ему нечего
+передать.
+
+Это не недосмотр. `dispose` пишут для законченного скоупа, а недостроенный —
+другая вещь с другим разбором, и как далеко он успел зайти, знает только тот
+код, который его строил. Значит, отдавать взятое до провала — дело самой
+инициализации:
+
+```dart
+// Неправильно: соединение открыто, и закрыть его теперь некому.
+init: (context) async* {
+  connection = await Api.connect();
+  await connection.authenticate();      // бросает
+
+  yield AsyncScopeReady();
+},
+dispose: () => connection.close(),      // не будет вызван
+```
+
+```dart
+// Правильно: что шаг взял, то он и отдаёт, когда следующий падает.
+init: (context) async* {
+  connection = await Api.connect();
+
+  try {
+    await connection.authenticate();
+    // ignore: avoid_catching_errors
+  } on Object {
+    await connection.close();
+
+    rethrow;
+  }
+
+  yield AsyncScopeReady();
+},
+dispose: () => connection.close(),
+```
+
+Та же защита покрывает и отмену — второй способ закончить инициализацию
+досрочно: отмена `async*` возобновляет его тело, так что `finally` там тоже
+отработает.
+
+Инициализация из нескольких таких шагов превращается в стопку вложенных `try`,
+и ровно для этого существует контейнер зависимостей семейства `Scope` — см. тему
+`Scope`. `AsyncControllerScope` закрывает ту же дыру с другой стороны: его
+контроллер утилизируется на **любом** пути, включая тот, где `init()` бросил.
 
 ## Родители и дети
 

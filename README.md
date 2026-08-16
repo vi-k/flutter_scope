@@ -68,7 +68,9 @@ final class AppDependencies implements ScopeDependencies {
     yield ScopeReady(AppDependencies(sharedPreferences: sharedPreferences));
   }
 
-  /// Called synchronously when the scope is unmounted.
+  /// Lets go of whatever cannot wait for the asynchronous teardown. Runs
+  /// once and always before `dispose`, whether the scope left the tree or
+  /// was closed with `close()`.
   @override
   void onUnmount() {}
 
@@ -202,6 +204,8 @@ class HomeScreen extends StatelessWidget {
 }
 ```
 
+**In depth:** the topic [Scope](https://pub.dev/documentation/scopo/latest/topics/Scope-topic.html).
+
 ## Specialized scopes
 
 Lightweight alternatives for cases where a full `Scope` is too much.
@@ -231,6 +235,8 @@ final class ApiConfig extends ScopeWidgetBase<ApiConfig> {
   Widget build(BuildContext context) => child;
 }
 ```
+
+**In depth:** the topic [ScopeWidget](https://pub.dev/documentation/scopo/latest/topics/ScopeWidget-topic.html).
 
 ### ScopeModel
 
@@ -270,6 +276,8 @@ class UserView extends StatelessWidget {
 }
 ```
 
+**In depth:** the topic [ScopeModel](https://pub.dev/documentation/scopo/latest/topics/ScopeModel-topic.html).
+
 ### ScopeNotifier
 
 The same as `ScopeModel`, but for a `Listenable` (`ChangeNotifier`,
@@ -308,6 +316,8 @@ class CounterText extends StatelessWidget {
 }
 ```
 
+**In depth:** the topic [ScopeNotifier](https://pub.dev/documentation/scopo/latest/topics/ScopeNotifier-topic.html).
+
 ### AsyncScope
 
 Async initialization and disposal without a dependency container: use it when
@@ -335,6 +345,8 @@ class ConnectionGate extends StatelessWidget {
 }
 ```
 
+**In depth:** the topic [AsyncScope](https://pub.dev/documentation/scopo/latest/topics/AsyncScope-topic.html).
+
 ### AsyncDataScope
 
 `AsyncScope` plus one value: the data produced by `init` is passed to `builder`
@@ -359,6 +371,8 @@ class DatabaseGate extends StatelessWidget {
       );
 }
 ```
+
+**In depth:** the topic [AsyncDataScope](https://pub.dev/documentation/scopo/latest/topics/AsyncDataScope-topic.html).
 
 ### AsyncControllerScope
 
@@ -420,6 +434,8 @@ final class PlayerController extends ScopeController {
 `AsyncControllerScope<C>` is the same thing with a `create` callback instead of
 a subclass.
 
+**In depth:** the topic [AsyncControllerScope](https://pub.dev/documentation/scopo/latest/topics/AsyncControllerScope-topic.html).
+
 ### LiteScope
 
 `Scope` without the dependency container: the state is created without an async
@@ -460,6 +476,8 @@ final class ScreenScopeState
 Every family above is demonstrated side by side, with a live log of each
 lifecycle call, in the
 [scopo_demo](https://github.com/vi-k/scopo/tree/main/example/scopo_demo) app.
+
+**In depth:** the topic [LiteScope](https://pub.dev/documentation/scopo/latest/topics/LiteScope-topic.html).
 
 ## scopeKey
 

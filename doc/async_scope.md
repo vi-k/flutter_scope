@@ -52,6 +52,97 @@ frame it appeared in; with it, the ready branch is held back for that duration.
 `ScopeConfig.pauseAfterInitializationEnabled = false` turns all such pauses off
 globally — see the `debug` topic.
 
+## Progress
+
+Progress is whatever the initialization says it is. `AsyncScopeProgress` carries
+an `Object?`, the builders receive an `Object?`, and the package never looks
+inside it. A `String` is the common case; anything with a `toString` will do.
+
+```dart
+AsyncScope(
+  init: (context) async* {
+    yield AsyncScopeProgress('connecting');
+    await api.connect();
+
+    yield AsyncScopeProgress('loading the profile');
+    await api.loadProfile();
+
+    yield AsyncScopeReady();
+  },
+  dispose: api.close,
+  initBuilder: (context, progress) => Center(child: Text('$progress')),
+  errorBuilder: (context, error, stackTrace, progress) =>
+      Center(child: Text('failed at $progress: $error')),
+  builder: (context) => const HomeScreen(),
+);
+```
+
+Four things are worth knowing about the `progress` argument.
+
+**It is `null` before the first event.** The scope is `AsyncScopeWaiting` from
+the moment it is mounted until `init` yields, and if `buildOnWaiting` returns
+`null` the waiting branch is `buildOnInitializing(context, null)`. Write the
+builder so that `null` means "nothing reported yet" — that is also what it means
+in `buildOnError` when the failure came before any progress did.
+
+**The last value gets a frame of its own.** `AsyncScopeReady` is applied in a
+post-frame callback, so a progress value yielded immediately before it is
+actually painted instead of being replaced within the same frame.
+`pauseAfterInitialization` holds the ready branch back further still, which is
+what to reach for when the steps are too fast to read.
+
+**Progress after ready is a mistake, and is refused.** The scope is initialized
+once; an event arriving after `AsyncScopeReady` — another `ready`, or a late
+progress value — is reported through `FlutterError.reportError` and does not
+change what is on screen. An initialization that goes on producing values after
+the scope is usable wants a `Listenable` under the scope, not this stream.
+
+**No progress at all is fine.** An `init` that yields only `AsyncScopeReady`
+never leaves `AsyncScopeWaiting`, so the scope shows `buildOnWaiting` — a
+spinner, usually — and then the ready branch.
+
+### Counting steps
+
+For an initialization that knows how many steps it has, `ProgressIterator`
+counts them and `Progress` is the value it produces: `number`, `total`,
+`progress` as a fraction between 0 and 1, and a `toString` of `2/3`.
+
+```dart
+init: (context) async* {
+  final steps = ProgressIterator(3);
+
+  yield AsyncScopeProgress(steps.nextStep()); // 1/3
+  await api.connect();
+
+  yield AsyncScopeProgress(steps.nextStep()); // 2/3
+  await api.loadProfile();
+
+  yield AsyncScopeProgress(steps.nextStep()); // 3/3
+  await api.warmUpCache();
+
+  yield AsyncScopeReady();
+},
+initBuilder: (context, progress) => switch (progress) {
+  final Progress progress => LinearProgressIndicator(value: progress.progress),
+  _ => const LinearProgressIndicator(),
+},
+```
+
+The fraction is always between 0 and 1 — an empty task reads as complete rather
+than as `NaN` — so it can go straight into a progress indicator. See the `utils`
+topic.
+
+### Where the type comes back
+
+`Scope` types its progress: `ScopeInitState<P, D>` carries a `P`, so
+`buildOnInitializing` can declare `covariant P? progress` and read fields
+instead of calling `toString`. `ScopeAutoDependencies` uses that to report a
+`ScopeAutoDependenciesProgress` per dependency — the path, the name and the step
+counter in one object. See the `Scope` topic.
+
+`AsyncScope` and `AsyncDataScope` stay untyped on purpose: their type parameter,
+where they have one, belongs to the value being built. Progress is a caption.
+
 ## Reading the state from the subtree
 
 ```dart
@@ -126,6 +217,58 @@ awaited:
 The order is what makes the family worth using: a parent never disposes of
 something while a child is still using it, and a re-created scope never
 overlaps with the one it replaces.
+
+### An initialization that fails owns its own mess
+
+Step 6 is the one to read twice: **`dispose` runs only when the initialization
+succeeded.** A scope that failed halfway never reaches it, and there is no
+second hook that does — `onUnmount` runs, but it is handed nothing to work
+with.
+
+That is not an oversight. `dispose` is written against a scope that is finished,
+and a half-built one is a different thing with a different teardown; only the
+code that did the building knows how far it got. So it is the initialization's
+job to give back what it took before it failed:
+
+```dart
+// Wrong: the connection is open and nobody will ever close it.
+init: (context) async* {
+  connection = await Api.connect();
+  await connection.authenticate();      // throws
+
+  yield AsyncScopeReady();
+},
+dispose: () => connection.close(),      // never called
+```
+
+```dart
+// Right: whatever a step took, that step gives back when the next one fails.
+init: (context) async* {
+  connection = await Api.connect();
+
+  try {
+    await connection.authenticate();
+    // ignore: avoid_catching_errors
+  } on Object {
+    await connection.close();
+
+    rethrow;
+  }
+
+  yield AsyncScopeReady();
+},
+dispose: () => connection.close(),
+```
+
+The same guard covers a cancellation, which is the other way an initialization
+ends early: cancelling an `async*` resumes its body, so a `finally` runs there
+too.
+
+An initialization with several steps like that turns into a pile of nested
+`try`s, and that is what the dependency container of the `Scope` family exists
+for — see the `Scope` topic. `AsyncControllerScope` closes the same hole from
+the other side: its controller is disposed of on **every** path, including the
+one where `init()` threw.
 
 ## Parents and children
 

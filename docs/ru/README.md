@@ -1,6 +1,6 @@
 # scopo
 
-> Перевод `README.md` (blob `bcfac5b0105999633b2d623c1ee96fd4475951fa`).
+> Перевод `README.md` (blob `13c6139294f6d969ce16d7397521a59dbc474b75`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 [![pub version](https://img.shields.io/pub/v/scopo)](https://pub.dev/packages/scopo)
@@ -72,7 +72,9 @@ final class AppDependencies implements ScopeDependencies {
     yield ScopeReady(AppDependencies(sharedPreferences: sharedPreferences));
   }
 
-  /// Called synchronously when the scope is unmounted.
+  /// Lets go of whatever cannot wait for the asynchronous teardown. Runs
+  /// once and always before `dispose`, whether the scope left the tree or
+  /// was closed with `close()`.
   @override
   void onUnmount() {}
 
@@ -207,6 +209,8 @@ class HomeScreen extends StatelessWidget {
 }
 ```
 
+**Подробнее:** тема [Scope](https://pub.dev/documentation/scopo/latest/topics/Scope-topic.html).
+
 ## Специализированные скоупы
 
 Облегчённые варианты для случаев, когда полный `Scope` — это слишком.
@@ -236,6 +240,8 @@ final class ApiConfig extends ScopeWidgetBase<ApiConfig> {
   Widget build(BuildContext context) => child;
 }
 ```
+
+**Подробнее:** тема [ScopeWidget](https://pub.dev/documentation/scopo/latest/topics/ScopeWidget-topic.html).
 
 ### ScopeModel
 
@@ -276,6 +282,8 @@ class UserView extends StatelessWidget {
 }
 ```
 
+**Подробнее:** тема [ScopeModel](https://pub.dev/documentation/scopo/latest/topics/ScopeModel-topic.html).
+
 ### ScopeNotifier
 
 То же, что `ScopeModel`, но для `Listenable` (`ChangeNotifier`,
@@ -314,6 +322,8 @@ class CounterText extends StatelessWidget {
 }
 ```
 
+**Подробнее:** тема [ScopeNotifier](https://pub.dev/documentation/scopo/latest/topics/ScopeNotifier-topic.html).
+
 ### AsyncScope
 
 Асинхронные инициализация и утилизация без контейнера зависимостей: берите его,
@@ -341,6 +351,8 @@ class ConnectionGate extends StatelessWidget {
 }
 ```
 
+**Подробнее:** тема [AsyncScope](https://pub.dev/documentation/scopo/latest/topics/AsyncScope-topic.html).
+
 ### AsyncDataScope
 
 `AsyncScope` плюс одно значение: данные, полученные в `init`, передаются в
@@ -365,6 +377,8 @@ class DatabaseGate extends StatelessWidget {
       );
 }
 ```
+
+**Подробнее:** тема [AsyncDataScope](https://pub.dev/documentation/scopo/latest/topics/AsyncDataScope-topic.html).
 
 ### AsyncControllerScope
 
@@ -425,6 +439,8 @@ final class PlayerController extends ScopeController {
 
 `AsyncControllerScope<C>` — то же самое с колбэком `create` вместо наследования.
 
+**Подробнее:** тема [AsyncControllerScope](https://pub.dev/documentation/scopo/latest/topics/AsyncControllerScope-topic.html).
+
 ### LiteScope
 
 `Scope` без контейнера зависимостей: состояние создаётся без асинхронной фазы
@@ -466,6 +482,8 @@ final class ScreenScopeState
 Все семейства выше показаны рядом, с живым журналом каждого вызова жизненного
 цикла, в приложении
 [scopo_demo](https://github.com/vi-k/scopo/tree/main/example/scopo_demo).
+
+**Подробнее:** тема [LiteScope](https://pub.dev/documentation/scopo/latest/topics/LiteScope-topic.html).
 
 ## scopeKey
 

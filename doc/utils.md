@@ -127,8 +127,15 @@ progress.isCompleted; // true
 ```
 
 `Progress` is the value it produces: `number`, `total`, `progress` as a
-fraction between 0 and 1, and a `toString` of `2/3`. `ScopeAutoDependencies`
-uses exactly this to report a step per dependency — see the `Scope` topic.
+fraction between 0 and 1, and a `toString` of `2/3`. The fraction holds those
+bounds whatever the pair says: a task of no steps at all reads as complete
+rather than as the `NaN` of `0 / 0`, so it can go straight into a
+`LinearProgressIndicator`. Stepping past the total is a mistake in the caller
+and is caught by an assertion.
+
+Reporting these from an initialization is the `AsyncScope` topic;
+`ScopeAutoDependencies` uses exactly this to report a step per dependency — see
+the `Scope` topic.
 
 ## ScreenshotReplacer
 
