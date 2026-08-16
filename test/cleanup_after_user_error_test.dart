@@ -20,17 +20,20 @@ void main() {
   late final Duration? defaultScopeKeysTimeout;
   late final Duration? defaultWaitForChildrenTimeout;
   late final Duration? defaultInitCancellationTimeout;
+  late final Duration? defaultDisposeAsyncTimeout;
 
   setUpAll(() {
     defaultScopeKeysTimeout = ScopeConfig.defaultScopeKeysTimeout;
     defaultWaitForChildrenTimeout = ScopeConfig.defaultWaitForChildrenTimeout;
     defaultInitCancellationTimeout = ScopeConfig.defaultInitCancellationTimeout;
+    defaultDisposeAsyncTimeout = ScopeConfig.defaultDisposeAsyncTimeout;
   });
 
   tearDown(() {
     ScopeConfig.defaultScopeKeysTimeout = defaultScopeKeysTimeout;
     ScopeConfig.defaultWaitForChildrenTimeout = defaultWaitForChildrenTimeout;
     ScopeConfig.defaultInitCancellationTimeout = defaultInitCancellationTimeout;
+    ScopeConfig.defaultDisposeAsyncTimeout = defaultDisposeAsyncTimeout;
   });
 
   group('AsyncScope', () {
@@ -178,6 +181,81 @@ void main() {
         _readyCount(tester),
         1,
         reason: 'the hook is user code; the teardown behind it is not',
+      );
+    });
+
+    // `disposeAsync` is the scope's own release, and it is user code twice
+    // over: it can hang, and the expiry of the wait for it can fail. Neither
+    // may keep the key of a scope that has already left the tree.
+    testWidgets('releases its scopeKey after a failing onDisposeAsyncTimeout',
+        (tester) async {
+      final disposed = <String>[];
+      final errors = <Object>[];
+
+      // Never completed: the holder's own teardown never finishes.
+      final hang = Completer<void>();
+
+      Widget build({required bool holder, required bool successor}) => _wrap(
+            Column(
+              children: [
+                if (holder)
+                  _Async(
+                    label: 'holder',
+                    scopeKey: 'shared',
+                    disposeGate: hang,
+                    disposeAsyncTimeout: const Duration(milliseconds: 50),
+                    onDisposeAsyncTimeout: () =>
+                        throw StateError('onDisposeAsyncTimeout failed'),
+                    disposed: disposed,
+                  ),
+                if (successor)
+                  _Async(
+                    label: 'successor',
+                    scopeKey: 'shared',
+                    scopeKeyTimeout: const Duration(days: 1),
+                    disposed: disposed,
+                  ),
+              ],
+            ),
+          );
+
+      // What the hook throws is re-thrown at the end of the disposal, which
+      // runs on a discarded future: a guarded child zone catches it before
+      // `flutter_test` ends the test on it.
+      await runZonedGuarded(
+        () async {
+          await tester.pumpWidget(build(holder: true, successor: false));
+          await tester.pumpAndSettle();
+
+          await tester.pumpWidget(build(holder: false, successor: false));
+          await settle(tester, until: () => false);
+        },
+        (error, stackTrace) => errors.add(error),
+      );
+
+      expect(
+        tester.takeException(),
+        isA<TimeoutException>(),
+        reason: 'the expiry itself is reported',
+      );
+      expect(
+        errors.single,
+        isA<StateError>(),
+        reason: 'and so is what the callback made of it',
+      );
+      expect(
+        disposed,
+        isEmpty,
+        reason: 'the teardown is still parked; it was given up on, not run',
+      );
+
+      await tester.pumpWidget(build(holder: false, successor: true));
+      await settle(tester, until: () => _readyCount(tester) == 1);
+
+      expect(
+        _readyCount(tester),
+        1,
+        reason: 'the key came back even though the teardown never finished',
       );
     });
 
@@ -357,6 +435,8 @@ final class _Async extends AsyncScopeBase<_Async> {
     super.scopeKeyTimeout,
     super.initCancellationTimeout,
     super.onInitCancellationTimeout,
+    super.disposeAsyncTimeout,
+    super.onDisposeAsyncTimeout,
     super.waitForChildrenTimeout,
     super.onWaitForChildrenTimeout,
     Widget? child,

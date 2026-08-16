@@ -34,6 +34,18 @@ abstract final class ScopeConfig {
   /// If zero, then the timeout expires immediately.
   static Duration? defaultWaitForChildrenTimeout = const Duration(seconds: 3);
 
+  /// Timeout for waiting for the asynchronous teardown of one scope.
+  ///
+  /// A teardown that never completes held the release that follows it, and
+  /// with it the `scopeKey` of a scope that had already left the tree. When
+  /// this expires, the expiry is reported and the release goes on without
+  /// waiting for the teardown to finish.
+  ///
+  /// If `null`, then there is no timeout and the wait is unbounded.
+  ///
+  /// If zero, then the timeout expires immediately.
+  static Duration? defaultDisposeAsyncTimeout = const Duration(seconds: 3);
+
   /// Timeout for waiting for an initialization to be cancelled.
   ///
   /// A generator suspended on a future that never completes cannot be

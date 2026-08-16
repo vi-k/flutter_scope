@@ -109,6 +109,12 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
   /// Called when the wait for the cancellation of [initAsync] expires.
   void onInitCancellationTimeout() {}
 
+  /// How long to wait for [disposeAsync]; `null` takes the default.
+  Duration? get disposeAsyncTimeout => null;
+
+  /// Called when the wait for [disposeAsync] expires.
+  void onDisposeAsyncTimeout() {}
+
   /// How long to wait for the child scopes; `null` takes the default.
   Duration? get waitForChildrenTimeout => null;
 
@@ -681,7 +687,23 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
           _log.i('dispose…');
           final result = disposeAsync();
           if (result is Future<void>) {
-            await result;
+            // The same bound as the cancellation above, for the same reason:
+            // this is user code, the block below gives back what the scope was
+            // lent, and a release that never finishes must not be able to keep
+            // the key of a scope that is already gone.
+            final limit =
+                disposeAsyncTimeout ?? ScopeConfig.defaultDisposeAsyncTimeout;
+
+            if (limit == null) {
+              await result;
+            } else {
+              await _awaitBounded(
+                result,
+                limit,
+                'its own teardown',
+                onDisposeAsyncTimeout,
+              );
+            }
           }
         } else {
           _log.d('do not dispose of');
@@ -727,23 +749,28 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
     }
   }
 
-  /// Waits for [cancelled], and for no longer than [limit].
+  /// Awaits [work], and for no longer than [limit].
+  ///
+  /// [what] finishes the sentence "couldn't wait for ..." in the reported
+  /// expiry, so it reads as a thing this scope was waiting for.
   ///
   /// The limit is measured on real time, by a timer taken from the root zone,
   /// and not on the clock of the zone the teardown happens to run in. Two
-  /// reasons, and either one is enough. A cancellation that never finishes
-  /// hangs on real time -- a mocked clock has nothing true to say about it.
-  /// And a scope is usually taken down between frames, with nothing left to
-  /// advance a fake clock afterwards: a timer belonging to such a zone would
-  /// still be pending when the tree is gone, which is what `flutter_test` ends
-  /// a test on. Every widget test with a live scope in it would fail on a
-  /// timer this package armed while tidying up after itself.
+  /// reasons, and either one is enough. A teardown that never finishes hangs
+  /// on real time -- a mocked clock has nothing true to say about it. And a
+  /// scope is usually taken down between frames, with nothing left to advance
+  /// a fake clock afterwards: a timer belonging to such a zone would still be
+  /// pending when the tree is gone, which is what `flutter_test` ends a test
+  /// on. Every widget test with a live scope in it would fail on a timer this
+  /// package armed while tidying up after itself.
   ///
-  /// Reaches user code through [onInitCancellationTimeout], so its failures
-  /// are the caller's to absorb.
-  Future<void> _waitForCancellation(
-    Future<void> cancelled,
+  /// Reaches user code through [onExpiry], so its failures are the caller's to
+  /// absorb.
+  Future<void> _awaitBounded(
+    Future<void> work,
     Duration limit,
+    String what,
+    void Function() onExpiry,
   ) async {
     var finished = false;
     final expired = Completer<void>();
@@ -754,11 +781,11 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
     });
 
     try {
-      // A cancellation that fails still fails here: `Future.any` takes the
-      // error of whichever future settles first, and this one settling at all
-      // is what the race is about.
+      // Work that fails still fails here: `Future.any` takes the error of
+      // whichever future settles first, and this one settling at all is what
+      // the race is about.
       await Future.any([
-        cancelled.whenComplete(() => finished = true),
+        work.whenComplete(() => finished = true),
         expired.future,
       ]);
     } finally {
@@ -769,14 +796,14 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
       return;
     }
 
-    // Abandoned, not forgotten. The cancellation may still fail long after
-    // nobody is waiting for it -- a generator resumed at last, throwing from
-    // its `finally` -- and a failure that reaches no listener is one more
-    // thing lost in silence.
+    // Abandoned, not forgotten. The work may still fail long after nobody is
+    // waiting for it -- a generator resumed at last, throwing from its
+    // `finally` -- and a failure that reaches no listener is one more thing
+    // lost in silence.
     unawaited(
-      cancelled.catchError((Object error, StackTrace stackTrace) {
+      work.catchError((Object error, StackTrace stackTrace) {
         _log.e(
-          'abandoned initialization cancellation failed',
+          'an abandoned wait for $what ended in a failure',
           error: error,
           stackTrace: stackTrace,
         );
@@ -790,19 +817,19 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
       }),
     );
 
-    _log.e('initialization cancellation timed out');
+    _log.e('gave up waiting for $what');
     FlutterError.reportError(
       FlutterErrorDetails(
         exception: TimeoutException(
           '${widget.toStringShort(showHashCode: true)} '
-          "couldn't wait for its initialization to be cancelled",
+          "couldn't wait for $what",
           limit,
         ),
         stack: StackTrace.current,
         library: 'scopo',
       ),
     );
-    onInitCancellationTimeout();
+    onExpiry();
   }
 
   /// Gives up on everything the disposal has to stop waiting for.
@@ -848,7 +875,12 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
         if (limit == null) {
           await cancelled;
         } else {
-          await _waitForCancellation(cancelled, limit);
+          await _awaitBounded(
+            cancelled,
+            limit,
+            'its initialization to be cancelled',
+            onInitCancellationTimeout,
+          );
         }
       } on Object catch (error, stackTrace) {
         _log.e(

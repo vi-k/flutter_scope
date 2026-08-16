@@ -265,7 +265,10 @@ it is awaited:
    dependency a child is still using. The wait is bounded by
    `waitForChildrenTimeout` (`ScopeConfig.defaultWaitForChildrenTimeout` by
    default).
-4. `ScopeState.disposeAsync` — the state's own asynchronous teardown.
+4. `ScopeState.disposeAsync` — the state's own asynchronous teardown, bounded
+   by `disposeAsyncTimeout` (`ScopeConfig.defaultDisposeAsyncTimeout` by
+   default), so that a teardown which never completes cannot hold the release
+   of the `scopeKey` in step 6.
 5. `ScopeDependencies.dispose` — for a `ScopeAutoDependencies`, this walks the
    tree in reverse: the children of a `sequential` group in reverse declaration
    order, the children of a `concurrent` group in parallel, and only those that

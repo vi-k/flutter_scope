@@ -32,6 +32,17 @@ abstract base class AsyncScopeBase<W extends AsyncScopeBase<W>>
   /// and the teardown goes on without the initialization.
   final void Function()? onInitCancellationTimeout;
 
+  /// How long to wait for [disposeAsync]; `null` waits indefinitely.
+  ///
+  /// Defaults to [ScopeConfig.defaultDisposeAsyncTimeout].
+  final Duration? disposeAsyncTimeout;
+
+  /// Called when the wait for [disposeAsync] expires.
+  ///
+  /// The expiry is reported through [FlutterError.reportError] either way,
+  /// and the release goes on without waiting for the teardown to finish.
+  final void Function()? onDisposeAsyncTimeout;
+
   /// How long to wait for the child scopes; `null` waits indefinitely.
   ///
   /// Defaults to [ScopeConfig.defaultWaitForChildrenTimeout].
@@ -56,6 +67,8 @@ abstract base class AsyncScopeBase<W extends AsyncScopeBase<W>>
     this.onScopeKeyTimeout,
     this.initCancellationTimeout,
     this.onInitCancellationTimeout,
+    this.disposeAsyncTimeout,
+    this.onDisposeAsyncTimeout,
     this.waitForChildrenTimeout,
     this.onWaitForChildrenTimeout,
     this.pauseAfterInitialization,
@@ -161,6 +174,12 @@ final class _AsyncScopeElement<W extends AsyncScopeBase<W>>
 
   @override
   void onInitCancellationTimeout() => widget.onInitCancellationTimeout?.call();
+
+  @override
+  Duration? get disposeAsyncTimeout => widget.disposeAsyncTimeout;
+
+  @override
+  void onDisposeAsyncTimeout() => widget.onDisposeAsyncTimeout?.call();
 
   @override
   Duration? get waitForChildrenTimeout => widget.waitForChildrenTimeout;

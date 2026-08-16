@@ -1,6 +1,6 @@
 # Scope
 
-> Перевод `doc/h_scope.md` (blob `5c2107d226a5d082c9c9c334065ccf26b4a1f453`).
+> Перевод `doc/h_scope.md` (blob `d001f14f04fc4230deec7a5e1ede507d08b84a45`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 `Scope` — основной строительный блок пакета: виджет, который владеет контейнером
@@ -265,7 +265,10 @@ concurrent1/sequential1/dep3: Exception: no network
    зависимость, которой ребёнок ещё пользуется. Ожидание ограничено
    `waitForChildrenTimeout` (по умолчанию
    `ScopeConfig.defaultWaitForChildrenTimeout`).
-4. `ScopeState.disposeAsync` — собственный асинхронный разбор состояния.
+4. `ScopeState.disposeAsync` — собственный асинхронный разбор состояния, с
+   ограничением `disposeAsyncTimeout` (по умолчанию
+   `ScopeConfig.defaultDisposeAsyncTimeout`), чтобы разбор, который никогда не
+   завершится, не держал освобождение `scopeKey` на шаге 6.
 5. `ScopeDependencies.dispose` — для `ScopeAutoDependencies` это обход дерева в
    обратную сторону: дети `sequential`-группы в обратном порядке объявления,
    дети `concurrent`-группы параллельно, и только те, кто действительно

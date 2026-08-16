@@ -1,6 +1,6 @@
 # AsyncScope
 
-> Перевод `doc/e_async_scope.md` (blob `286733ddc3d0ecac9ed05458a15ac5df48d8c47a`).
+> Перевод `doc/e_async_scope.md` (blob `c7e2ecfad5c4e96780ef11293fc081e3da402a38`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 Скоуп, всё содержимое которого — жизненный цикл: асинхронная инициализация и
@@ -28,9 +28,9 @@ AsyncScope(
 `AsyncScopeBase` — форма для наследования: те же члены переопределениями —
 `initAsync`, `disposeAsync`, `onMount`, `onUnmount`, `buildOnWaiting`,
 `buildOnInitializing`, `buildOnReady`, `buildOnError` — плюс `scopeKey`,
-`scopeKeyTimeout`, `initCancellationTimeout`, `waitForChildrenTimeout`, их
-колбэки `onTimeout` и `pauseAfterInitialization`. Под обоими лежит
-`AsyncScopeCore` — для скоупа, которому нужен свой элемент.
+`scopeKeyTimeout`, `initCancellationTimeout`, `disposeAsyncTimeout`,
+`waitForChildrenTimeout`, их колбэки `onTimeout` и `pauseAfterInitialization`.
+Под обоими лежит `AsyncScopeCore` — для скоупа, которому нужен свой элемент.
 
 ## Четыре состояния
 
@@ -114,8 +114,13 @@ if (scope.isInitialized) { … }
    умолчанию `ScopeConfig.defaultWaitForChildrenTimeout`). Истечение репортят
    через `FlutterError.reportError`, и разбор идёт дальше.
 6. **`disposeAsync`** — собственный разбор скоупа; если он вернул future, его
-   дожидаются. Шаг выполняется, только если инициализация удалась: скоупу,
-   который так и не стал готовым — всё ещё ждал или упал, — освобождать нечего.
+   дожидаются с ограничением `disposeAsyncTimeout` (по умолчанию
+   `ScopeConfig.defaultDisposeAsyncTimeout`). Шаг выполняется, только если
+   инициализация удалась: скоупу, который так и не стал готовым — всё ещё ждал
+   или упал, — освобождать нечего. Разбор, который никогда не завершится, — это
+   пользовательский код, держащий шаг 7 ниже, а с ним и `scopeKey` скоупа,
+   которого уже нет на дереве; по истечении лимита это репортят, шаг 7
+   выполняется всё равно, а сам разбор дорабатывает когда доработает.
 7. **Скоуп снимается с учёта у родителя и освобождает `scopeKey`**, пропуская
    следующий скоуп, ждущий этот ключ.
 

@@ -11,11 +11,13 @@ void main() {
   late final Duration? defaultScopeKeysTimeout;
   late final Duration? defaultWaitForChildrenTimeout;
   late final Duration? defaultInitCancellationTimeout;
+  late final Duration? defaultDisposeAsyncTimeout;
 
   setUpAll(() {
     defaultScopeKeysTimeout = ScopeConfig.defaultScopeKeysTimeout;
     defaultWaitForChildrenTimeout = ScopeConfig.defaultWaitForChildrenTimeout;
     defaultInitCancellationTimeout = ScopeConfig.defaultInitCancellationTimeout;
+    defaultDisposeAsyncTimeout = ScopeConfig.defaultDisposeAsyncTimeout;
   });
 
   setUp(_TestScopeElement.reset);
@@ -24,6 +26,7 @@ void main() {
     ScopeConfig.defaultScopeKeysTimeout = defaultScopeKeysTimeout;
     ScopeConfig.defaultWaitForChildrenTimeout = defaultWaitForChildrenTimeout;
     ScopeConfig.defaultInitCancellationTimeout = defaultInitCancellationTimeout;
+    ScopeConfig.defaultDisposeAsyncTimeout = defaultDisposeAsyncTimeout;
   });
 
   testWidgets('two coordinators do not share a key', (tester) async {
@@ -802,6 +805,77 @@ void main() {
       tester,
       until: () => _TestScopeElement.initialized == 2,
     );
+    await tester.pumpAndSettle();
+
+    final successor =
+        tester.element<_TestScopeElement>(find.byType(_TestScope));
+
+    expect(
+      successor.state,
+      isA<AsyncScopeReady>(),
+      reason: 'the stuck scope gave the key back on its way out',
+    );
+    expect(
+      successor.keyTimedOut,
+      isFalse,
+      reason: 'it got the key, it was not let in on an expired wait',
+    );
+  });
+
+  // The same hole one step further down the teardown. `disposeAsync()` is the
+  // scope's own release, and it is user code: one that never completes held
+  // the block that gives the key back exactly as an uncancellable
+  // initialization did.
+  //
+  // Proved the same way: the successor's own limit is a day, so it can only be
+  // in because the key came back.
+  testWidgets('a scopeKey is given back by a scope stuck in disposeAsync',
+      (tester) async {
+    // Short enough to expire inside `_settle`'s budget of real time.
+    ScopeConfig.defaultDisposeAsyncTimeout = const Duration(milliseconds: 50);
+
+    // Never completed: this is the hang under test.
+    final hang = Completer<void>();
+
+    Widget build({required bool hung, required bool successor}) =>
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: AsyncScopeCoordinator(
+            child: Column(
+              children: [
+                if (hung) _TestScope(testKey: 'shared', disposeGate: hang),
+                if (successor)
+                  const _TestScope(
+                    testKey: 'shared',
+                    disposeLabel: 'successor',
+                    keyTimeout: Duration(days: 1),
+                  ),
+              ],
+            ),
+          ),
+        );
+
+    await tester.pumpWidget(build(hung: true, successor: false));
+    await tester.pumpAndSettle();
+
+    expect(_TestScopeElement.initialized, 1, reason: 'it holds the key');
+
+    // It leaves the tree and parks inside its own teardown.
+    await tester.pumpWidget(build(hung: false, successor: false));
+    await _settle(tester, until: () => false);
+
+    expect(
+      tester.takeException(),
+      isA<TimeoutException>().having(
+        (error) => error.message,
+        'message',
+        contains("couldn't wait for its own teardown"),
+      ),
+      reason: 'giving up on a teardown is reported, never silent',
+    );
+
+    await tester.pumpWidget(build(hung: false, successor: true));
+    await _settle(tester, until: () => _TestScopeElement.initialized == 2);
     await tester.pumpAndSettle();
 
     final successor =

@@ -43,6 +43,17 @@
   and an empty stack — which is why the node kept the first one and the new key
   simply never resolved. An assertion says so, and points at `Widget.key` and
   at the `GlobalKey()` written inside `build` that usually causes it.
+* Fix a teardown held forever by a `disposeAsync` that never completes — the
+  same hole one step further down, and user code on both sides of it. The
+  release that follows it, and with it the `scopeKey` of a scope that had
+  already left the tree, waited for it with no limit. Bounded now by
+  `disposeAsyncTimeout`, three seconds by default
+  (`ScopeConfig.defaultDisposeAsyncTimeout`, `null` to wait indefinitely), with
+  an `onDisposeAsyncTimeout` callback. On expiry the teardown is left to finish
+  whenever it does, the expiry is reported, and the scope gives back what it
+  was holding. A release that legitimately takes longer than the limit is
+  therefore no longer waited out — raise the limit for such a scope, or drop it
+  with `null`.
 * Fix a teardown held forever by an initialization that cannot be cancelled.
   Cancelling an `async*` means resuming its body and letting it run out, so a
   body parked on a future that never completes is never cancelled at all — and

@@ -64,6 +64,13 @@ abstract base class Scope<W extends Scope<W, D, S>, D extends ScopeDependencies,
   /// A callback invoked when the [initCancellationTimeout] expires.
   final void Function()? onInitCancellationTimeout;
 
+  /// The timeout duration for the asynchronous teardown of this scope, before
+  /// it triggers [onDisposeAsyncTimeout].
+  final Duration? disposeAsyncTimeout;
+
+  /// A callback invoked when the [disposeAsyncTimeout] expires.
+  final void Function()? onDisposeAsyncTimeout;
+
   /// The timeout duration for waiting to dispose child scopes.
   final Duration? waitForChildrenTimeout;
 
@@ -82,6 +89,8 @@ abstract base class Scope<W extends Scope<W, D, S>, D extends ScopeDependencies,
     this.onScopeKeyTimeout,
     this.initCancellationTimeout,
     this.onInitCancellationTimeout,
+    this.disposeAsyncTimeout,
+    this.onDisposeAsyncTimeout,
     this.waitForChildrenTimeout,
     this.onWaitForChildrenTimeout,
     this.pauseAfterInitialization,
@@ -205,6 +214,12 @@ final class _ScopeElement<W extends Scope<W, D, S>, D extends ScopeDependencies,
 
   @override
   void onInitCancellationTimeout() => widget.onInitCancellationTimeout?.call();
+
+  @override
+  Duration? get disposeAsyncTimeout => widget.disposeAsyncTimeout;
+
+  @override
+  void onDisposeAsyncTimeout() => widget.onDisposeAsyncTimeout?.call();
 
   @override
   Duration? get waitForChildrenTimeout => widget.waitForChildrenTimeout;

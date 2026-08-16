@@ -25,9 +25,10 @@ AsyncScope(
 `AsyncScopeBase` is the subclassable form: the same members as overrides —
 `initAsync`, `disposeAsync`, `onMount`, `onUnmount`, `buildOnWaiting`,
 `buildOnInitializing`, `buildOnReady`, `buildOnError` — plus `scopeKey`,
-`scopeKeyTimeout`, `initCancellationTimeout`, `waitForChildrenTimeout`, their
-`onTimeout` callbacks and `pauseAfterInitialization`. `AsyncScopeCore` sits
-under both for a scope that needs its own element.
+`scopeKeyTimeout`, `initCancellationTimeout`, `disposeAsyncTimeout`,
+`waitForChildrenTimeout`, their `onTimeout` callbacks and
+`pauseAfterInitialization`. `AsyncScopeCore` sits under both for a scope that
+needs its own element.
 
 ## The four states
 
@@ -111,8 +112,13 @@ awaited:
    (`ScopeConfig.defaultWaitForChildrenTimeout` by default). An expiry is
    reported through `FlutterError.reportError` and the disposal proceeds.
 6. **`disposeAsync`** — the scope's own teardown, awaited when it returns a
-   future. It runs only when the initialization succeeded: a scope that never
-   became ready — still waiting, or failed — has nothing to release.
+   future, and bounded by `disposeAsyncTimeout`
+   (`ScopeConfig.defaultDisposeAsyncTimeout` by default). It runs only when the
+   initialization succeeded: a scope that never became ready — still waiting,
+   or failed — has nothing to release. A teardown that never completes is user
+   code holding step 7 below, and with it the `scopeKey` of a scope that has
+   already left the tree; on expiry that is reported and step 7 runs anyway,
+   while the teardown itself is left to finish whenever it does.
 7. **The scope unregisters from its parent and releases its `scopeKey`**, which
    lets the next scope waiting on that key through.
 

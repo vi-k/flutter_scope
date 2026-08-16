@@ -20,6 +20,13 @@ abstract base class AsyncDataScopeBase<W extends AsyncDataScopeBase<W, T>,
   /// Called when the wait for the cancellation expires.
   final void Function()? onInitCancellationTimeout;
 
+  /// How long to wait for the asynchronous teardown; `null` waits
+  /// indefinitely.
+  final Duration? disposeAsyncTimeout;
+
+  /// Called when the wait for the asynchronous teardown expires.
+  final void Function()? onDisposeAsyncTimeout;
+
   /// How long to wait for the child scopes; `null` waits indefinitely.
   final Duration? waitForChildrenTimeout;
 
@@ -38,6 +45,8 @@ abstract base class AsyncDataScopeBase<W extends AsyncDataScopeBase<W, T>,
     this.onScopeKeyTimeout,
     this.initCancellationTimeout,
     this.onInitCancellationTimeout,
+    this.disposeAsyncTimeout,
+    this.onDisposeAsyncTimeout,
     this.waitForChildrenTimeout,
     this.onWaitForChildrenTimeout,
     this.pauseAfterInitialization,
@@ -143,6 +152,12 @@ final class _AsyncDataScopeElement<W extends AsyncDataScopeBase<W, T>,
 
   @override
   void onInitCancellationTimeout() => widget.onInitCancellationTimeout?.call();
+
+  @override
+  Duration? get disposeAsyncTimeout => widget.disposeAsyncTimeout;
+
+  @override
+  void onDisposeAsyncTimeout() => widget.onDisposeAsyncTimeout?.call();
 
   @override
   Duration? get waitForChildrenTimeout => widget.waitForChildrenTimeout;
