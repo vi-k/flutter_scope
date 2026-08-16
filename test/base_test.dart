@@ -104,10 +104,11 @@ void main() {
       // A self-dependency: `InheritedElement` refuses to let an element depend
       // on itself, so the scope keeps those subscriptions apart. The value it
       // selects is its own, and it must still be told when that value changes.
-      scope.dependOnSelf = true;
       // A build first, so the subscription is taken where subscriptions are
       // taken; then the change it is meant to hear about.
-      scope.markNeedsBuild();
+      scope
+        ..dependOnSelf = true
+        ..markNeedsBuild();
       await tester.pump();
 
       scope.bump();
