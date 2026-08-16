@@ -712,7 +712,7 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
         // ignore: avoid_catching_errors
       } on Object catch (error, stackTrace) {
         _log.e('unmount failed', error: error, stackTrace: stackTrace);
-        failure = AsyncError(error, stackTrace);
+        failure ??= AsyncError(error, stackTrace);
       }
 
       try {
@@ -724,7 +724,7 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
           error: error,
           stackTrace: stackTrace,
         );
-        failure = AsyncError(error, stackTrace);
+        failure ??= AsyncError(error, stackTrace);
       }
 
       try {

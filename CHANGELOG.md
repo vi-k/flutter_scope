@@ -44,6 +44,14 @@
   still reported as before. The state is applied outside the frame, because
   such a failure is raised before the first `await` and therefore inside the
   build that started the initialization.
+* Fix a teardown passing on its last failure instead of its first. Its four
+  stages are guarded apart so that a failure in one never skips the ones after
+  it, and the first of them is what the caller was meant to hear — but two of
+  the three handlers assigned to the record instead of keeping what was
+  already there, so the last one won and the first was left in a log that is
+  off by default. Only a scope closed with `close()` could show it: on a scope
+  taken off the tree the framework has already run the synchronous half before
+  the teardown reaches it, so that stage cannot fail there at all.
 * `AsyncScopeParent.waitForChildren` defaults its `timeout` to
   `ScopeConfig.defaultWaitForChildrenTimeout`, the same default the identically
   named helper on `AsyncScopeCoordinator` has always applied. It passed `null`

@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:scopo/scopo.dart';
 
+import 'utils/settle.dart';
+
 void main() {
   group('LiteScope.close()', () {
     // `close()` installs a screenshot barrier and waits for it. The barrier is
@@ -736,6 +738,78 @@ void main() {
 
       expect(closed, isTrue);
     });
+
+    // The four stages of a teardown are guarded apart so that a failure in
+    // one never skips the ones after it, and the comment over them promises
+    // the caller hears the *first* of them. Two of the three `catch`es
+    // assigned to `failure` rather than keeping what was already there, so
+    // the last failure won and the first was left in a log that is off by
+    // default.
+    //
+    // Only `close()` can show it. On a scope taken off the tree the framework
+    // has run `unmountScope()` before the teardown even starts, so its first
+    // stage is a no-op there and cannot fail at all.
+    testWidgets('reports the first failure of a teardown, not the last',
+        (tester) async {
+      final childGate = Completer<void>();
+      addTearDown(childGate.complete);
+
+      await tester.pumpWidget(
+        _app(
+          _CloseScope(
+            init: _becomesReady,
+            // Stage one fails...
+            failStateUnmount: true,
+            waitForChildren: const Duration(milliseconds: 50),
+            // ...and stage two fails after it, on a wait that can only
+            // expire: the scope below is held open by a teardown of its own
+            // that never finishes, so it never unregisters.
+            failOnWaitForChildrenTimeout: true,
+            body: _CloseScope(
+              init: _becomesReady,
+              disposeGate: childGate,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final outer = tester.element<_CloseScopeElement>(
+        find.byType(_CloseScope, skipOffstage: false).first,
+      );
+      expect(outer.childrenCount, 1);
+
+      Object? failure;
+      var done = false;
+      unawaited(
+        outer.close().then(
+          (_) => done = true,
+          onError: (Object error) {
+            failure = error;
+            done = true;
+          },
+        ),
+      );
+      // The shared helper, not the `_settle` of this file: that one pumps
+      // without a duration, so the fake clock never moves and the zone timer
+      // behind `waitForChildren` never fires. The wait has to actually expire
+      // here, or the second stage never fails and the test asks nothing.
+      await settle(tester, until: () => done);
+
+      expect(
+        failure,
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          'state onUnmount failed',
+        ),
+        reason: 'the caller of close() hears the first failure of the '
+            'teardown, which is what the four stages were written to promise',
+      );
+
+      // The expiry of the wait is reported on its own, as it always is.
+      expect(tester.takeException(), isA<TimeoutException>());
+    });
   });
 
   // `_performAsyncInit` hands the cancellation over to `_subscription`, and
@@ -1052,6 +1126,33 @@ final class _CloseScope
   /// never reaches its asynchronous phase at all.
   final bool failSyncInit;
 
+  /// Makes [_CloseScopeState.onUnmount] fail. On the `close()` path this is
+  /// the *first* stage of the teardown, and the only path on which that stage
+  /// can fail at all: a scope taken off the tree has already been unmounted
+  /// by the framework by the time the teardown gets there.
+  final bool failStateUnmount;
+
+  /// Becomes [AsyncScopeElementBase.waitForChildrenTimeout], so the second
+  /// stage of the teardown can be made to expire.
+  final Duration? waitForChildren;
+
+  /// Makes the expiry callback of that wait fail, which is how the second
+  /// stage raises: it is user code and it is not wrapped.
+  final bool failOnWaitForChildrenTimeout;
+
+  /// Built by the state instead of its usual leaf. A scope in here stays
+  /// registered with this one for as long as it is mounted -- and `close()`
+  /// keeps everything mounted -- so the wait for the children runs out.
+  ///
+  /// Not `child`: that name belongs to [ProxyWidget] and is not nullable.
+  final Widget? body;
+
+  /// Parks [_CloseScopeState.disposeAsync] on this. A scope below another
+  /// one unregisters from it only once its own teardown is over, so a scope
+  /// held here keeps its parent waiting -- which is the only way to make the
+  /// parent's wait for its children expire.
+  final Completer<void>? disposeGate;
+
   /// Becomes [AsyncScopeElementBase.scopeKey], so `close()` can be exercised
   /// on a scope that actually holds a key.
   final Object? testKey;
@@ -1063,6 +1164,11 @@ final class _CloseScope
     this.failStateInitAsync = false,
     this.failStateDispose = false,
     this.failSyncInit = false,
+    this.failStateUnmount = false,
+    this.waitForChildren,
+    this.failOnWaitForChildrenTimeout = false,
+    this.body,
+    this.disposeGate,
     this.testKey,
   });
 
@@ -1084,6 +1190,16 @@ final class _CloseScopeElement extends LiteScopeElementBase<_CloseScope,
 
   @override
   Object? get scopeKey => widget.testKey;
+
+  @override
+  Duration? get waitForChildrenTimeout => widget.waitForChildren;
+
+  @override
+  void onWaitForChildrenTimeout() {
+    if (widget.failOnWaitForChildrenTimeout) {
+      throw StateError('onWaitForChildrenTimeout failed');
+    }
+  }
 
   @override
   void init() {
@@ -1139,6 +1255,9 @@ final class _CloseScopeState extends LiteScopeCoreState<_CloseScope,
   @override
   FutureOr<void> disposeAsync() {
     disposeAsyncCount++;
+    if (params.disposeGate case final gate?) {
+      return gate.future;
+    }
     if (!params.failStateDispose) return null;
 
     // A real asynchronous failure, delivered through an awaited future one
@@ -1148,5 +1267,13 @@ final class _CloseScopeState extends LiteScopeCoreState<_CloseScope,
   }
 
   @override
-  Widget build(BuildContext context) => const Text('ready');
+  void onUnmount() {
+    super.onUnmount();
+    if (params.failStateUnmount) {
+      throw StateError('state onUnmount failed');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => params.body ?? const Text('ready');
 }
