@@ -104,12 +104,42 @@ void main() {
       // A self-dependency: `InheritedElement` refuses to let an element depend
       // on itself, so the scope keeps those subscriptions apart. The value it
       // selects is its own, and it must still be told when that value changes.
-      scope
-        ..dependOnSelf()
-        ..bump();
+      scope.dependOnSelf = true;
+      // A build first, so the subscription is taken where subscriptions are
+      // taken; then the change it is meant to hear about.
+      scope.markNeedsBuild();
+      await tester.pump();
+
+      scope.bump();
       await tester.pump();
 
       expect(scope.selfNotifications, 1);
+    });
+  });
+
+  group('where a subscription may be taken', () {
+    // What a dependent asked for is remembered per build, and the boundary
+    // between one build and the next is taken from the frame. A registration
+    // made outside a build therefore belongs to whichever build shares its
+    // frame -- `didChangeDependencies` runs in the same frame as the build
+    // that follows it, so the subscription looks like it works -- and is
+    // dropped by the first build that does not share it, which is any rebuild
+    // coming from the parent rather than from a change. Nothing could honour
+    // it, so it is refused instead of quietly forgotten.
+    testWidgets('subscribing from didChangeDependencies is rejected',
+        (tester) async {
+      await tester.pumpWidget(
+        _Host(builder: (context) => const _SubscribesTooEarly()),
+      );
+
+      expect(
+        tester.takeException(),
+        isA<AssertionError>().having(
+          (error) => error.message.toString(),
+          'message',
+          contains('only be subscribed to from a build'),
+        ),
+      );
     });
   });
 
@@ -195,6 +225,28 @@ final class _Host extends StatelessWidget {
       );
 }
 
+/// Subscribes from `didChangeDependencies`, which is a frame too early.
+final class _SubscribesTooEarly extends StatefulWidget {
+  const _SubscribesTooEarly();
+
+  @override
+  State<_SubscribesTooEarly> createState() => _SubscribesTooEarlyState();
+}
+
+final class _SubscribesTooEarlyState extends State<_SubscribesTooEarly> {
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    ScopeWidgetCore.select<_Scope, _ScopeElement, int>(
+      context,
+      (element) => element.value,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => const SizedBox.shrink();
+}
+
 final class _Scope extends ScopeWidgetCore<_Scope, _ScopeElement> {
   final WidgetBuilder? builder;
 
@@ -223,13 +275,12 @@ final class _ScopeElement
     notifyDependents();
   }
 
-  /// Subscribes the scope to a value of its own.
-  void dependOnSelf() {
-    ScopeWidgetCore.select<_Scope, _ScopeElement, int>(
-      this,
-      (element) => element.value,
-    );
-  }
+  /// Whether [buildChild] subscribes the scope to a value of its own.
+  ///
+  /// From the build, because that is the only place a subscription can be
+  /// taken -- see the assertion in `ScopeContext._find`. Called straight from
+  /// a test it would be exactly the mistake that assertion is about.
+  bool dependOnSelf = false;
 
   @override
   void didChangeDependencies() {
@@ -238,7 +289,16 @@ final class _ScopeElement
   }
 
   @override
-  Widget buildChild() => Builder(
-        builder: widget.builder ?? (_) => const SizedBox.shrink(),
+  Widget buildChild() {
+    if (dependOnSelf) {
+      ScopeWidgetCore.select<_Scope, _ScopeElement, int>(
+        this,
+        (element) => element.value,
       );
+    }
+
+    return Builder(
+      builder: widget.builder ?? (_) => const SizedBox.shrink(),
+    );
+  }
 }

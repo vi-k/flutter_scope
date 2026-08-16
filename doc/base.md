@@ -167,6 +167,18 @@ re-established while the dependent builds, as they are anywhere in Flutter, so
 the pair a scope compares against is the one from the dependent's latest build,
 not from its first.
 
+**A subscription may only be taken from a build**, and an assertion says so.
+What a dependent asked for is remembered per build, and the boundary between
+one build and the next is taken from the frame — Flutter offers no hook for
+"this dependent is about to build". A registration made outside a build
+therefore belongs to whichever build shares its frame, and is dropped by the
+first build that does not: `didChangeDependencies` runs in the same frame as
+the build after it, so a `select` there looks like it works and then
+disappears on the first rebuild that comes from the parent rather than from a
+change. To react to a change rather than to show it, keep the subscription in
+`build` and look the scope up with `listen: false` from
+`didChangeDependencies`.
+
 ## Depending on itself
 
 A scope element may subscribe to its own scope — that is how the richer

@@ -88,6 +88,22 @@ abstract interface class ScopeContext<W extends ScopeInheritedWidget> {
       'subscribe from `buildChild()` or from the widgets below instead.',
     );
 
+    assert(
+      !listen || context.debugDoingBuild,
+      'A scope can only be subscribed to from a build. What a dependent asked '
+      'for is remembered per build, and the boundary between one build and '
+      'the next is taken from the frame -- Flutter offers no hook for "this '
+      'dependent is about to build" -- so a registration made outside a build '
+      'belongs to whichever build shares its frame, and is dropped by the '
+      'first build that does not. `didChangeDependencies` is the usual way to '
+      'get here: it runs in the same frame as the build after it, so the '
+      'subscription looks like it works, and then disappears on the first '
+      'rebuild that comes from the parent instead of from a change.\n'
+      'Subscribe from `build` and read the value there. To react to a change '
+      'rather than to show it, keep the subscription in `build` and look the '
+      'scope up with `listen: false` from `didChangeDependencies`.',
+    );
+
     final element = context.getElementForInheritedWidgetOfExactType<W>();
     if (element == null) {
       return null;

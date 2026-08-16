@@ -44,6 +44,15 @@
   still reported as before. The state is applied outside the frame, because
   such a failure is raised before the first `await` and therefore inside the
   build that started the initialization.
+* Subscribing to a scope from anywhere but a build — `select` or
+  `of(listen: true)` in `didChangeDependencies`, say — is caught by an
+  assertion. What a dependent asked for is remembered per build, and the
+  boundary between builds is taken from the frame, so a registration made
+  outside a build belonged to whichever build shared its frame and was dropped
+  by the first one that did not: it looked like it worked, and then stopped,
+  on the first rebuild that came from the parent rather than from a change.
+  Keep the subscription in `build`, and read with `listen: false` from
+  `didChangeDependencies` when the point is to react rather than to show.
 * A notification no longer rebuilds the widgets of the subtree it is not
   rebuilding. "Skips rebuilding the whole subtree" was true of the elements and
   not of the widgets: `ComponentElement.performRebuild` calls `build()`
