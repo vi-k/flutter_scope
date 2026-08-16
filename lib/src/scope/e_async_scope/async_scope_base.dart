@@ -151,27 +151,26 @@ final class _AsyncScopeElement<W extends AsyncScopeBase<W>>
   @override
   Duration? get pauseAfterInitialization => widget.pauseAfterInitialization;
 
+  /// Runs [AsyncScopeBase.onMount] before anything the scope does for itself.
+  ///
+  /// Called from [ScopeWidgetElementBase.init], which is the first point at
+  /// which the element is connected to its ancestors and nothing has begun:
+  /// the asynchronous phase starts on the build this runs in, once it returns.
+  /// Called from `mount()` instead, the hook ran *after* the initialization it
+  /// is documented to precede.
   @override
-  void mount(Element? parent, Object? newSlot) {
-    super.mount(parent, newSlot);
+  void init() {
     widget.onMount(this);
+    super.init();
   }
 
   @override
   Stream<AsyncScopeInitState> initAsync() => widget.initAsync(this);
 
   @override
-  void unmount() {
-    // The hook is user code, the teardown behind it is the promise the scope
-    // made. A failure here used to take the whole of `super.unmount()` with
-    // it: nothing unregistered from the parent, nothing released the
-    // `scopeKey`, and the model was never disposed of. The failure still
-    // surfaces -- once everything has been given back.
-    try {
-      widget.onUnmount();
-    } finally {
-      super.unmount();
-    }
+  void onUnmount() {
+    super.onUnmount();
+    widget.onUnmount();
   }
 
   @override

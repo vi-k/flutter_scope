@@ -88,7 +88,10 @@ case where the difference matters.
 The teardown runs as one sequence, and every asynchronous step of it is
 awaited:
 
-1. **`onUnmount`** — synchronous, the moment the scope leaves the tree.
+1. **`onUnmount`** — synchronous, and always first. Whatever must stop reaching
+   the scope at once is dropped here: subscriptions, listeners. It runs exactly
+   once, whichever way the scope goes — removed from the tree, or closed with
+   `close()` while it stays on screen.
 2. **The wait for a `scopeKey` is cancelled**, if the scope was still queueing
    for one.
 3. **The initialization is cancelled.** A generator runs its `finally` when its

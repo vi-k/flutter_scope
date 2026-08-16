@@ -157,16 +157,55 @@ abstract base class ScopeWidgetElementBase<W extends ScopeWidgetCore<W, E>,
   @override
   W get widget => super.widget as W;
 
+  /// Whether [onUnmount] has run.
+  bool _didUnmount = false;
+
   @override
   void unmount() {
     // Symmetry, not success: an attempt that failed halfway may still have
     // taken something, and this is the only place left to give it back. The
     // families make their own disposers tolerate that partial state.
-    if (_initPhase != _InitPhase.pending) {
-      dispose();
+    try {
+      if (_initPhase != _InitPhase.pending) {
+        try {
+          unmountScope();
+        } finally {
+          dispose();
+        }
+      }
+    } finally {
+      super.unmount();
     }
-    super.unmount();
   }
+
+  /// Runs [onUnmount] once, whichever way out reaches it first.
+  ///
+  /// A scope leaves in one of two ways, and the synchronous half of the
+  /// teardown belongs to both: the framework unmounting the element, and the
+  /// scope closing itself while it stays on screen. Wired to the first alone,
+  /// as it was, a closed scope never dropped what [onUnmount] drops -- and by
+  /// the time the element did leave the tree, the asynchronous half had
+  /// already run and there was nothing left to drop it from.
+  @nonVirtual
+  @protected
+  void unmountScope() {
+    if (_didUnmount) {
+      return;
+    }
+    _didUnmount = true;
+
+    onUnmount();
+  }
+
+  /// Lets go of whatever cannot wait for the asynchronous teardown.
+  ///
+  /// Runs exactly once, before anything is released asynchronously, whether
+  /// the scope was removed from the tree or closed with `close()`. This is
+  /// where a subscription is cancelled and a listener detached — everything
+  /// that must stop reaching a scope that is on its way out.
+  @protected
+  @mustCallSuper
+  void onUnmount() {}
 
   /// Whether the subtree must be rebuilt on every notification.
   ///

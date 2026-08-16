@@ -138,10 +138,11 @@ final class _AsyncDataScopeElement<W extends AsyncDataScopeBase<W, T>,
   @override
   Duration? get pauseAfterInitialization => widget.pauseAfterInitialization;
 
+  /// See `_AsyncScopeElement.init`: the hook runs before the work it precedes.
   @override
-  void mount(Element? parent, Object? newSlot) {
-    super.mount(parent, newSlot);
+  void init() {
     widget.onMount(this);
+    super.init();
   }
 
   @override
@@ -149,14 +150,9 @@ final class _AsyncDataScopeElement<W extends AsyncDataScopeBase<W, T>,
       widget.initData(this);
 
   @override
-  void unmount() {
-    // See `_AsyncScopeElement.unmount`: the hook may fail, the teardown behind
-    // it still runs.
-    try {
-      widget.onUnmount(_data);
-    } finally {
-      super.unmount();
-    }
+  void onUnmount() {
+    super.onUnmount();
+    widget.onUnmount(_data);
   }
 
   @override

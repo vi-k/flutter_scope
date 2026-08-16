@@ -56,6 +56,39 @@ base mixin _ScopeModelElementMixin<W extends _ScopeModelBaseMixin<M>,
 
   M get model => _model ?? widget.value!;
 
+  /// Refuses a rebuild that changes which constructor the scope was built
+  /// with.
+  ///
+  /// The model, its disposer and -- for a notifier -- its listener all belong
+  /// to the mode the scope came into being in, and it is fixed for the
+  /// lifetime of the element. Switching in place has no honest answer:
+  /// arriving at the owning constructor there is nothing to own, since
+  /// `create` runs once and has already not run; leaving it, the model this
+  /// scope made is still its to release, and the widget that says who releases
+  /// it is gone.
+  ///
+  /// Both were silent before. `.value` to owning dereferenced a `value` that
+  /// is no longer there; owning to `.value` kept the model the scope had made,
+  /// ignored the one it was handed, and left nothing to ever release the
+  /// first.
+  ///
+  /// To change the mode, give the widget a different [Widget.key]: the
+  /// framework then builds a new element, which reads the mode afresh and
+  /// releases what the old one owned.
+  @override
+  void update(W newWidget) {
+    assert(
+      widget.hasValue == newWidget.hasValue,
+      'A scope cannot change between the constructor that owns its model and '
+      '`.value`. The model, its disposer and its listener belong to the mode '
+      'the scope was built in, and that mode is fixed for the lifetime of the '
+      'element. Give the widget a different `Widget.key` instead, so the '
+      'framework builds a new element for the new mode and releases what the '
+      'old one owned.',
+    );
+    super.update(newWidget);
+  }
+
   @override
   void init() {
     if (!widget.hasValue) {

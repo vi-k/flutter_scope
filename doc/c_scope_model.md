@@ -137,6 +137,14 @@ The lifetime is the element's, not the widget's. A scope rebuilt with new
 parameters keeps its model; a scope removed from the tree loses it. Moving a
 scope with a `GlobalKey` moves the element and the model with it.
 
+Which constructor the scope was built with is fixed for that same lifetime. A
+rebuild that switches between `ScopeModel(create:)` and `ScopeModel.value` has
+no honest answer — arriving at the owning constructor there is nothing to own,
+since `create` runs once and has already not run; leaving it, the model this
+scope made is still its to release and the widget that says who releases it is
+gone — so an assertion refuses it. Give the widget a different `Widget.key`
+instead, and the framework builds a new element for the new mode.
+
 The disposal here is synchronous. When releasing the object needs an `await`,
 this family is the wrong one: `LiteScope` gives a state with `disposeAsync`,
 and `Scope` gives a dependency container whose `dispose` is awaited — and both

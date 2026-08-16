@@ -171,15 +171,11 @@ abstract base class ScopeElementBase<
       );
 
   @override
-  void unmount() {
-    // The dependencies' `unmount` hooks are user code; the base teardown
-    // behind them is not. A failure there used to skip it altogether, leaving
-    // the scope registered with its parent and its `scopeKey` taken.
-    try {
-      _dependencies?.unmount();
-    } finally {
-      super.unmount();
-    }
+  void onUnmount() {
+    // The state lets go of its own first, the dependencies after it, in the
+    // same order as the asynchronous half below.
+    super.onUnmount();
+    _dependencies?.unmount();
   }
 
   @override

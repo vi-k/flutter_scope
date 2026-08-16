@@ -74,13 +74,22 @@ ScopeNotifier.value(value: currentPlayer, builder: ...)
 ```
 
 When the widget is rebuilt with another `value`, the element moves its listener
-from the old model to the new one before anything else happens. Descendants
-then see the new model through the same accessors, and their selectors compare
-against the values they captured from the old one — so a switch to a model with
-different values rebuilds exactly the widgets those values differ for.
+from the old model to the new one. "Another" means another object, not another
+value: two models that compare `==` are still two listener lists, so the move is
+decided by identity. Descendants then see the new model through the same
+accessors, and their selectors compare against the values they captured from
+the old one — so a switch to a model with different values rebuilds exactly the
+widgets those values differ for.
 
 As with `ScopeModel.value`, the scope does not own a model given this way: no
 `dispose` is called for it.
+
+What cannot change is which constructor the scope was built with. `.value` and
+the owning constructor are two different answers to "who releases this model",
+and the answer is fixed for the lifetime of the element — an assertion refuses
+a rebuild that changes it. To switch, give the widget a different `Widget.key`:
+the framework then builds a new element, which reads the mode afresh and
+releases whatever the old one owned.
 
 ## State models
 

@@ -636,16 +636,27 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
   Future<void> _performAsyncDispose() async {
     _isDisposing = true;
 
-    // Three stages, each guarded on its own rather than chained: every one of
+    // Four stages, each guarded on its own rather than chained: every one of
     // them reaches user code, and a failure in one is never a reason to skip
-    // the ones after it. Preparing gives up on the waits, `disposeAsync()`
+    // the ones after it. [unmountScope] drops what must stop reaching the
+    // scope at once, preparing gives up on the waits, `disposeAsync()`
     // releases what the scope acquired, and the `finally` gives back what the
     // scope was lent -- its place with the parent, its `scopeKey`, its model.
-    // The first failure is passed on once all three are over, so the caller
+    // The first failure is passed on once all four are over, so the caller
     // still hears about it.
     AsyncError? failure;
 
     try {
+      try {
+        // Nothing on a removed element: the framework got here first. On a
+        // scope that closed itself this is the only place that ever will.
+        unmountScope();
+        // ignore: avoid_catching_errors
+      } on Object catch (error, stackTrace) {
+        _log.e('unmount failed', error: error, stackTrace: stackTrace);
+        failure = AsyncError(error, stackTrace);
+      }
+
       try {
         await _prepareForDisposal();
         // ignore: avoid_catching_errors

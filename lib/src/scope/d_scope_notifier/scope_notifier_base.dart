@@ -88,15 +88,21 @@ final class _ScopeNotifierElement<W extends ScopeNotifierBase<W, M>,
 
   @override
   void update(W newWidget) {
+    // The old model is read before `super.update`, and the subscription is
+    // moved after it: the constructor mode is checked there, and a rebuild
+    // that has no honest answer must not have moved a listener first.
+    final oldValue = widget.value;
+
+    super.update(newWidget);
+
     // Identity, not equality: a listener belongs to the object that holds the
     // list it is in. Two models that compare equal are still two lists, and
     // reading `==` as "the same subscription" left the listener on the model
     // the scope had just let go of, with every notification of the new one
     // lost.
-    if (!identical(widget.value, newWidget.value)) {
-      widget.value?.removeListener(notifyDependents);
+    if (!identical(oldValue, newWidget.value)) {
+      oldValue?.removeListener(notifyDependents);
       newWidget.value?.addListener(notifyDependents);
     }
-    super.update(newWidget);
   }
 }

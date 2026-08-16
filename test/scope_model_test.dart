@@ -246,6 +246,78 @@ void main() {
       );
     });
 
+    // The model, its disposer and its listener all belong to the mode the
+    // scope was built in. Switching modes in place used to dereference an
+    // absent `value` one way, and keep the owned model -- disposer and all --
+    // the other way, with nothing ever releasing it.
+    group('the constructor mode of a live scope', () {
+      testWidgets('cannot go from .value to the owning constructor',
+          (tester) async {
+        final model = _Model('alice');
+
+        await tester.pumpWidget(_ModeHost(external: model));
+        await tester.pumpAndSettle();
+
+        await tester.pumpWidget(const _ModeHost(external: null));
+
+        expect(
+          tester.takeException(),
+          isA<AssertionError>().having(
+            (error) => error.message.toString(),
+            'message',
+            contains('`Widget.key`'),
+          ),
+        );
+      });
+
+      testWidgets('cannot go from the owning constructor to .value',
+          (tester) async {
+        final external = _Model('bob');
+
+        await tester.pumpWidget(const _ModeHost(external: null));
+        await tester.pumpAndSettle();
+
+        await tester.pumpWidget(_ModeHost(external: external));
+
+        expect(
+          tester.takeException(),
+          isA<AssertionError>().having(
+            (error) => error.message.toString(),
+            'message',
+            contains('`Widget.key`'),
+          ),
+        );
+      });
+
+      testWidgets('a different key builds a new scope instead', (tester) async {
+        final external = _Model('bob');
+        final owned = <_Model>[];
+
+        await tester.pumpWidget(
+          _ModeHost(
+            external: null,
+            scopeKey: const ValueKey('owned'),
+            created: owned.add,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.pumpWidget(
+          _ModeHost(external: external, scopeKey: const ValueKey('given')),
+        );
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.text('name: bob'), findsOneWidget);
+        expect(
+          owned.single.disposeCount,
+          1,
+          reason: 'the scope that owned a model was replaced, so it released '
+              'what it owned',
+        );
+      });
+    });
+
     testWidgets('a selector rebuilds only the dependents of what changed', (
       tester,
     ) async {
@@ -399,6 +471,38 @@ final class _ValueHost extends StatelessWidget {
           value: model,
           builder: (context) => const _NameText(),
         ),
+      );
+}
+
+/// One host that can be either mode, so a rebuild can try to switch between
+/// them in place.
+final class _ModeHost extends StatelessWidget {
+  final _Model? external;
+  final Key? scopeKey;
+  final void Function(_Model model)? created;
+
+  const _ModeHost({required this.external, this.scopeKey, this.created});
+
+  @override
+  Widget build(BuildContext context) => Directionality(
+        textDirection: TextDirection.ltr,
+        child: external != null
+            ? ScopeModel<_Model>.value(
+                key: scopeKey,
+                value: external,
+                builder: (context) => const _NameText(),
+              )
+            : ScopeModel<_Model>(
+                key: scopeKey,
+                create: (context) {
+                  final model = _Model('alice');
+                  created?.call(model);
+
+                  return model;
+                },
+                dispose: (model) => model.dispose(),
+                builder: (context) => const _NameText(),
+              ),
       );
 }
 

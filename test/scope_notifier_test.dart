@@ -140,6 +140,46 @@ void main() {
       );
     });
 
+    // The same rule as for `ScopeModel`, with one more thing to get wrong: the
+    // listener. The assert fires before any subscription is moved.
+    testWidgets('cannot change between the owning constructor and .value',
+        (tester) async {
+      final external = _NamedCounter('given');
+
+      Widget build({required bool owning}) => Directionality(
+            textDirection: TextDirection.ltr,
+            child: owning
+                ? ScopeNotifier<_NamedCounter>(
+                    create: (context) => _NamedCounter('owned'),
+                    dispose: (model) => model.dispose(),
+                    builder: (context) => const _NamedCounterView(),
+                  )
+                : ScopeNotifier<_NamedCounter>.value(
+                    value: external,
+                    builder: (context) => const _NamedCounterView(),
+                  ),
+          );
+
+      await tester.pumpWidget(build(owning: true));
+      await tester.pumpAndSettle();
+
+      await tester.pumpWidget(build(owning: false));
+
+      expect(
+        tester.takeException(),
+        isA<AssertionError>().having(
+          (error) => error.message.toString(),
+          'message',
+          contains('`Widget.key`'),
+        ),
+      );
+      expect(
+        external.hasAnyListener,
+        isFalse,
+        reason: 'nothing was subscribed to the model the scope refused',
+      );
+    });
+
     testWidgets('disposes of the model it created', (tester) async {
       late _Counter created;
 
@@ -243,6 +283,10 @@ final class _NamedCounter extends ChangeNotifier {
     _value++;
     notifyListeners();
   }
+
+  /// [ChangeNotifier.hasListeners] is `@protected`, and a test is not a
+  /// subclass.
+  bool get hasAnyListener => hasListeners;
 
   @override
   bool operator ==(Object other) =>

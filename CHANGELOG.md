@@ -32,6 +32,34 @@
   release is now guarded on its own, the walk finishes, and the first failure is
   passed upwards afterwards; every failure is recorded on the dependency it
   belongs to, as before.
+* [breaking changes] The synchronous half of a teardown is now a step of the
+  teardown rather than a tail of `Element.unmount`, and `LiteScopeState` /
+  `ScopeState` gained `onUnmount()` to put it in. A scope leaves in one of two
+  ways, and only one of them went through the framework: `close()`, which keeps
+  the element mounted on purpose, skipped the synchronous half altogether — a
+  dependency's `unmount` never ran, and by the time the element did leave the
+  tree the asynchronous half had already released it, so nothing was left to
+  drop the subscription from. `onUnmount` now runs exactly once, always before
+  `disposeAsync`, whichever way the scope goes.
+
+  `State.dispose` is not part of that order and cannot be: it belongs to
+  Flutter, which calls it before the scope's teardown begins on removal, and
+  not until the tree comes down after a `close()`. The synchronous half of a
+  scope's teardown therefore belongs in `onUnmount()`. Scopes that only ever
+  leave by removal are unaffected.
+* [breaking changes] `AsyncScopeBase.onMount` and `AsyncDataScopeBase.onMount`
+  now run before the initialization they are documented to precede. They ran
+  from `Element.mount`, which is after the first build — so after the
+  synchronous `init()` and after the asynchronous phase had started. They run
+  from `init()` now, which is also where the rules of that hook apply: a
+  failure is terminal, and subscribing to an ancestor scope with `listen: true`
+  is rejected by an assertion.
+* A scope now refuses to change between the constructor that owns its model and
+  `.value`. Switching in place had no honest answer and both directions were
+  silent: `.value` to owning dereferenced a `value` that is no longer there,
+  and owning to `.value` kept the model the scope had made, ignored the one it
+  was handed, and left nothing to ever release the first. An assertion refuses
+  the rebuild and points at `Widget.key`.
 * Fix `ScopeNotifier.value` keeping its listener on the model it was given
   before. The swap was decided by `==`, so two models that compare equal were
   taken for one: the listener stayed on the model the scope had let go of, and

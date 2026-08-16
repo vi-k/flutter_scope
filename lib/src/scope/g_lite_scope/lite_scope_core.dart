@@ -154,6 +154,13 @@ abstract base class LiteScopeElementBase<
 
   @override
   @mustCallSuper
+  void onUnmount() {
+    super.onUnmount();
+    _state?.onUnmount();
+  }
+
+  @override
+  @mustCallSuper
   Future<void> disposeAsync() async {
     if (_state case final state?) {
       await state._performAsyncDispose();
@@ -332,6 +339,25 @@ abstract base class LiteScopeCoreState<
 
   /// Initializes the scope asynchronously.
   FutureOr<void> initAsync() {}
+
+  /// Lets go of whatever cannot wait for [disposeAsync].
+  ///
+  /// Cancel subscriptions and detach listeners here — everything that must
+  /// stop reaching a scope on its way out. It runs exactly once, always before
+  /// [disposeAsync], whether the scope was removed from the tree or closed
+  /// with [close].
+  ///
+  /// **[State.dispose] is not part of that order.** It belongs to Flutter, not
+  /// to the scope: on removal the framework calls it before the scope's
+  /// teardown even begins, and after a [close] it does not run until the tree
+  /// comes down — which may be much later, or never, while the closing screen
+  /// is on show. The synchronous half of a scope's teardown therefore goes
+  /// here, not there.
+  ///
+  /// The [BuildContext] is gone by the time this runs on a removed scope, so
+  /// it may only touch what the state holds in its own fields.
+  @mustCallSuper
+  void onUnmount() {}
 
   /// Disposes of the scope asynchronously.
   FutureOr<void> disposeAsync() {}

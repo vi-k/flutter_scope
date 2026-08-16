@@ -44,6 +44,7 @@ final class ScreenScopeState
 | member | what it is |
 | --- | --- |
 | `initAsync()` | asynchronous initialization, awaited before the state is shown as ready |
+| `onUnmount()` | synchronous teardown, always before `disposeAsync()` |
 | `disposeAsync()` | asynchronous teardown, awaited before the scope is gone |
 | `notifyDependents()` | rebuild the subscribed descendants, not the subtree |
 | `close()` | run the teardown while the scope is still on screen |
@@ -52,10 +53,33 @@ and three of its own properties: `params` — the scope widget, so its
 constructor parameters are readable from the state; `isInitialized`; and
 `onInitialized()`, the hook called once the initialization has fully completed.
 
-The ordinary `initState` and `dispose` of a `State` still work and still run
-synchronously. `initAsync` is where an `await` belongs, and `disposeAsync` is
-what makes a parent scope — and `close()` — wait for the release to finish
-rather than fire and forget it.
+The ordinary `initState` of a `State` still works and still runs synchronously,
+and `initAsync` is where an `await` belongs. `disposeAsync` is what makes a
+parent scope — and `close()` — wait for the release to finish rather than fire
+and forget it.
+
+**`dispose` is the one to be careful with.** It belongs to Flutter, not to the
+scope, and it is not part of the teardown order below: when the scope is
+removed from the tree the framework calls it before the scope's own teardown
+even begins, and after a `close()` it does not run until the tree comes down —
+which may be much later, or never while the closing screen is on show. So the
+synchronous half of a scope's teardown goes in `onUnmount()`, which the scope
+itself drives:
+
+```dart
+@override
+void onUnmount() {
+  _subscription.cancel();   // must stop reaching this scope, now
+  super.onUnmount();
+}
+
+@override
+Future<void> disposeAsync() => _connection.close();   // may take its time
+```
+
+`onUnmount()` runs exactly once and always before `disposeAsync()`, whichever
+way the scope goes. The `BuildContext` is gone by the time it runs on a removed
+scope, so it may only touch what the state holds in its own fields.
 
 ## Two initializations
 
@@ -132,10 +156,17 @@ disposal already running rather than installing a second barrier.
 ## The teardown, and what waits for it
 
 The order is the one from the `AsyncScope` topic, with the state's own steps in
-it: the pre-initialization is cancelled, the child scopes are awaited
-(`waitForChildrenTimeout`), `disposeAsync()` of the state runs, the ordinary
-`dispose()` follows, and the `scopeKey` is released last so that the next scope
-with that key starts only when this one is finished.
+it: `onUnmount()` of the state runs first, the pre-initialization is cancelled,
+the child scopes are awaited (`waitForChildrenTimeout`), `disposeAsync()` of
+the state runs, and the `scopeKey` is released last so that the next scope with
+that key starts only when this one is finished.
+
+Flutter's own `dispose()` of the state sits outside that sequence, on either
+side of it depending on how the scope went: before all of it when the tree took
+the scope down, after all of it when the scope closed itself. That is the whole
+point of `close()` — release first, leave later — and it is why the teardown
+the scope guarantees is the `onUnmount()`/`disposeAsync()` pair rather than
+`dispose()`.
 
 A `LiteScope` is an `AsyncScopeParent` like every asynchronous scope: the
 scopes below it register with it, and it waits for them before disposing of
