@@ -203,6 +203,12 @@ below — the usual mistake being a lookup from the very `build` that installs
 the scope. `maybeOf` returns `null` in the same situation and is the right call
 when absence is expected.
 
+A lookup with `listen: true` that found nothing is still remembered as a
+dependency, exactly as Flutter's own `dependOnInheritedWidgetOfExactType` would
+remember it. A widget that asked when there was no scope above it and is later
+carried under one — by a `GlobalKey` — is therefore told its dependencies have
+changed and asks again.
+
 ```text
 Exception: The element of ScopeModel<Counter> is not ScopeModelContext<ScopeModel<Counter>, Counter>
 ```

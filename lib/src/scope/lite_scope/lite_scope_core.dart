@@ -415,9 +415,23 @@ abstract base class LiteScopeCoreState<
 
   late final E _scopeElement;
 
+  /// Not the widget of this state, and there is none to hand back.
+  ///
+  /// A scope state is not driven by a `StatefulWidget` of its own: the widget
+  /// this state belongs to is the scope, its parameters are on that scope, and
+  /// [params] is how to read them. `State.widget` is part of the contract this
+  /// class has to satisfy all the same, so it is here — and it refuses out
+  /// loud rather than handing back something that only looks right.
+  ///
+  /// Anything mixed into a scope state that reads `widget` lands here: a
+  /// `State` mixin written for ordinary widgets, most likely. Read [params]
+  /// instead, or keep what the mixin needs in a field of its own.
+  @nonVirtual
   @override
-  @visibleForTesting
-  Never get widget => throw UnimplementedError();
+  Never get widget => throw UnsupportedError(
+        'A scope state has no widget of its own. The parameters of the scope '
+        'are on the scope widget; read them through `params`.',
+      );
 
   /// The parameters defined in the associated scope widget.
   W get params => _scopeElement.widget;

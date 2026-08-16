@@ -21,6 +21,29 @@ mixin ScopeDependencyMixin implements ScopeDependency {
   /// from one that is done.
   bool _isDisposalDone = false;
 
+  /// Records that the walk passed this dependency by because it holds nothing.
+  ///
+  /// A dependency that registered no disposer is skipped by its group — there
+  /// is nothing to run for it. Skipped in silence it went on saying
+  /// `initialized` after the whole tree had been torn down, so a dump of a
+  /// scope that was fully disposed of read as though half of it were still
+  /// alive. [ScopeDependencyNoDisposalRequired] exists for exactly this and had
+  /// no other way of being reached.
+  ///
+  /// A dependency that never ran keeps [ScopeDependencyInitial]: "not
+  /// initialized" is the true thing to say about it, and it is not what this
+  /// state means.
+  void _markNothingToDispose() {
+    if (_isDisposalDone) {
+      return;
+    }
+
+    _isDisposalDone = true;
+    if (_state is ScopeDependencyInitialized) {
+      _state = const ScopeDependencyNoDisposalRequired();
+    }
+  }
+
   /// Automates the initialization process.
   ///
   /// Runs [init], handles the errors and sets the matching state.

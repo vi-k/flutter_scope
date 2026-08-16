@@ -815,6 +815,31 @@ void main() {
     // `State.context`, though the element it wants is already in a field of
     // the state -- the neighbouring `notifyDependents()` uses exactly that.
     // The lookup costs two things: it goes through a `context` that is gone
+    // `State.widget` is part of the contract a scope state has to satisfy and
+    // has no answer here: the parameters live on the scope widget, and
+    // `params` is the way to them. Anything that reads `widget` all the same --
+    // a `State` mixin written for ordinary widgets -- deserves to be told why
+    // rather than handed a bare `UnimplementedError`.
+    testWidgets('a scope state says it has no widget of its own',
+        (tester) async {
+      await tester.pumpWidget(_app(const _CloseScope(init: _becomesReady)));
+      await tester.pumpAndSettle();
+
+      final state = _scopeOf(tester).createdState!;
+
+      expect(state.params, isA<_CloseScope>());
+      expect(
+        () => state.widget,
+        throwsA(
+          isA<UnsupportedError>().having(
+            (error) => error.message,
+            'message',
+            contains('`params`'),
+          ),
+        ),
+      );
+    });
+
     // once the state has been unmounted, and it finds the *nearest* scope of
     // that type, which is not necessarily this one.
     testWidgets('close() on a state whose tree is gone is a no-op',

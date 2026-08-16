@@ -53,6 +53,11 @@ and three of its own properties: `params` — the scope widget, so its
 constructor parameters are readable from the state; `isInitialized`; and
 `onInitialized()`, the hook called once the initialization has fully completed.
 
+`State.widget` is not among them, and it never will be: a scope state has no
+widget of its own — `params` is the scope widget, and that is the whole answer.
+Reading `widget` throws an `UnsupportedError` saying so, which is what a `State`
+mixin written for ordinary widgets runs into.
+
 The ordinary `initState` of a `State` still works and still runs synchronously,
 and `initAsync` is where an `await` belongs. `disposeAsync` is what makes a
 parent scope — and `close()` — wait for the release to finish rather than fire

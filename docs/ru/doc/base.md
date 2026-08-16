@@ -1,6 +1,6 @@
 # base
 
-> Перевод `doc/base.md` (blob `e59dd504f3385d5c0ed1936b30348c755da3e24f`).
+> Перевод `doc/base.md` (blob `4d03b513ac48ab91ca893ed82ce83b2cd4e426da`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 Каждое семейство скоупов этого пакета — `ScopeWidgetBase`, `ScopeModel`,
@@ -201,6 +201,12 @@ Exception: CounterScope not found in the context
 либо контекст принадлежит виджету над ним, а не под ним — обычная ошибка здесь
 это поиск из того самого `build`, который скоуп и устанавливает. `maybeOf` в
 той же ситуации вернёт `null` и годится там, где отсутствие ожидаемо.
+
+Поиск с `listen: true`, ничего не нашедший, всё равно запоминается как
+зависимость — ровно так же, как его запомнил бы штатный
+`dependOnInheritedWidgetOfExactType`. Виджет, спросивший, когда скоупа над ним
+не было, и позже перенесённый под скоуп по `GlobalKey`, получит
+`didChangeDependencies` и спросит снова.
 
 ```text
 Exception: The element of ScopeModel<Counter> is not ScopeModelContext<ScopeModel<Counter>, Counter>

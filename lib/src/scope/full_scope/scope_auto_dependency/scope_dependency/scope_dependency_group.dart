@@ -58,6 +58,26 @@ abstract base class ScopeDependencyGroup with ScopeDependencyMixin {
     }
   }
 
+  /// The children to walk, innermost first, with the ones that hold nothing
+  /// marked as passed by.
+  ///
+  /// Skipping them is right — there is nothing to run — but skipping them in
+  /// silence left them saying `initialized` after the tree had been torn down.
+  /// See [ScopeDependencyMixin._markNothingToDispose].
+  List<ScopeDependency> _disposalOrder() {
+    final order = <ScopeDependency>[];
+
+    for (final dependency in _dependencies.reversed) {
+      if (dependency.disposalRequired) {
+        order.add(dependency);
+      } else if (dependency is ScopeDependencyMixin) {
+        dependency._markNothingToDispose();
+      }
+    }
+
+    return order;
+  }
+
   String _path(String name) => this.name.isEmpty ? name : '${this.name}/$name';
 
   @override
@@ -109,9 +129,7 @@ final class _ScopeDependencySequential extends ScopeDependencyGroup {
 
   @override
   Stream<String> dispose() async* {
-    final dependencies = _dependencies //
-        .reversed
-        .where((dep) => dep.disposalRequired);
+    final dependencies = _disposalOrder();
     final errors = <AsyncError>[];
 
     for (final dependency in dependencies) {
@@ -171,8 +189,7 @@ final class _ScopeDependencyConcurrent extends ScopeDependencyGroup {
     //
     // The first failure in time is passed upwards once the merged stream is
     // over, as the sequential group passes on the first in walk order.
-    yield* _dependencies.reversed
-        .where((dep) => dep.disposalRequired)
+    yield* _disposalOrder()
         .map(
           (dep) => dep.runDispose().handleError(
                 (Object error, StackTrace stackTrace) =>

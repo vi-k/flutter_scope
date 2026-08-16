@@ -190,6 +190,11 @@ also carries a `ScopeDependencyState` — `ScopeDependencyInitial`,
 `ScopeDependencyDisposalCancelled` — and the `isInitialized`, `isFailed`,
 `isCancelled` and `isDisposed` shorthands of `ScopeDependencyExtension`.
 
+`ScopeDependencyNoDisposalRequired` is the state of a dependency that set no
+`dep.dispose` and so had nothing to give back: the teardown passes it by, and
+this is what it says afterwards. It is a `ScopeDependencyDisposed`, so
+`isDisposed` covers both.
+
 ## Dependency paths
 
 A dependency is identified by its path from the root of the tree: the names of

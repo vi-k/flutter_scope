@@ -339,6 +339,41 @@ void main() {
     //   });
     // });
 
+    // The dump of a torn-down tree used to read as though half of it were
+    // still alive: a dependency that registered no disposer is skipped by its
+    // group -- rightly, there is nothing to run -- and was left saying
+    // `initialized`. `ScopeDependencyNoDisposalRequired` exists for exactly
+    // this state and was reachable from nowhere.
+    test('a dependency that had nothing to release says so', () {
+      myFakeAsync((fakeAsync) {
+        final dependencies = TestDependencies();
+        fakeAsync
+          ..waitFuture(handleInit(dependencies))
+          ..waitFuture(dependencies.dispose());
+
+        ScopeDependency named(String name) => dependencies
+            .flattenDependencies()
+            .firstWhere((info) => info.dependency.name == name)
+            .dependency;
+
+        expect(named('dep3').state, isA<ScopeDependencyNoDisposalRequired>());
+        expect(
+          named('dep3').isDisposed,
+          isTrue,
+          reason: 'nothing left to give back is a finished dependency',
+        );
+        expect(
+          named('dep1').state,
+          isA<ScopeDependencyDisposed>(),
+          reason: 'one that did release something is plainly disposed',
+        );
+        expect(
+          named('dep1').state,
+          isNot(isA<ScopeDependencyNoDisposalRequired>()),
+        );
+      });
+    });
+
     test('normal', () {
       myFakeAsync((fakeAsync) {
         final dependencies = TestDependencies();
@@ -385,14 +420,14 @@ void main() {
           '  [concurrent1] disposed',
           '    "dep4" disposed',
           '    [sequential1] disposed',
-          '      "dep3" initialized',
+          '      "dep3" no disposal required',
           '      [concurrent2] disposed',
           '        "dep5" disposed',
           '        [sequential2] disposed',
           '          "dep7" disposed',
           '          "dep8" disposed',
-          '        "dep6" initialized',
-          '      "dep9" initialized',
+          '        "dep6" no disposal required',
+          '      "dep9" no disposal required',
           '    "dep2" disposed',
           '  "dep10" disposed',
         ]);
@@ -666,7 +701,7 @@ void main() {
             '  [concurrent1] failed: dep4',
             '    "dep4" failed: Exception: dep4 failed',
             '    [sequential1] disposed',
-            '      "dep3" initialized',
+            '      "dep3" no disposal required',
             '      [concurrent2] disposed',
             '        "dep5" disposed',
             '        [sequential2] disposed',
@@ -730,7 +765,7 @@ void main() {
             '  [concurrent1] failed: sequential1/concurrent2/dep5',
             '    "dep4" disposed',
             '    [sequential1] failed: concurrent2/dep5',
-            '      "dep3" initialized',
+            '      "dep3" no disposal required',
             '      [concurrent2] failed: dep5',
             '        "dep5" failed: Exception: dep5 failed',
             '        [sequential2] disposed',
@@ -795,7 +830,7 @@ void main() {
             '  [concurrent1] failed: sequential1/concurrent2/dep6',
             '    "dep4" disposed',
             '    [sequential1] failed: concurrent2/dep6',
-            '      "dep3" initialized',
+            '      "dep3" no disposal required',
             '      [concurrent2] failed: dep6',
             '        "dep5" disposed',
             '        [sequential2] disposed',
@@ -861,13 +896,13 @@ void main() {
             '  [concurrent1] failed: sequential1/concurrent2/sequential2/dep7',
             '    "dep4" disposed',
             '    [sequential1] failed: concurrent2/sequential2/dep7',
-            '      "dep3" initialized',
+            '      "dep3" no disposal required',
             '      [concurrent2] failed: sequential2/dep7',
             '        "dep5" disposed',
             '        [sequential2] failed: dep7',
             '          "dep7" failed: Exception: dep7 failed',
             '          "dep8" not initialized',
-            '        "dep6" initialized',
+            '        "dep6" no disposal required',
             '      "dep9" not initialized',
             '    "dep2" disposed',
             '  "dep10" not initialized',
@@ -928,13 +963,13 @@ void main() {
             '  [concurrent1] failed: sequential1/concurrent2/sequential2/dep8',
             '    "dep4" disposed',
             '    [sequential1] failed: concurrent2/sequential2/dep8',
-            '      "dep3" initialized',
+            '      "dep3" no disposal required',
             '      [concurrent2] failed: sequential2/dep8',
             '        "dep5" disposed',
             '        [sequential2] failed: dep8',
             '          "dep7" disposed',
             '          "dep8" failed: Exception: dep8 failed',
-            '        "dep6" initialized',
+            '        "dep6" no disposal required',
             '      "dep9" not initialized',
             '    "dep2" disposed',
             '  "dep10" not initialized',
@@ -996,13 +1031,13 @@ void main() {
             '  [concurrent1] failed: sequential1/dep9',
             '    "dep4" disposed',
             '    [sequential1] failed: dep9',
-            '      "dep3" initialized',
+            '      "dep3" no disposal required',
             '      [concurrent2] disposed',
             '        "dep5" disposed',
             '        [sequential2] disposed',
             '          "dep7" disposed',
             '          "dep8" disposed',
-            '        "dep6" initialized',
+            '        "dep6" no disposal required',
             '      "dep9" failed: Exception: dep9 failed',
             '    "dep2" disposed',
             '  "dep10" not initialized',
@@ -1065,14 +1100,14 @@ void main() {
             '  [concurrent1] disposed',
             '    "dep4" disposed',
             '    [sequential1] disposed',
-            '      "dep3" initialized',
+            '      "dep3" no disposal required',
             '      [concurrent2] disposed',
             '        "dep5" disposed',
             '        [sequential2] disposed',
             '          "dep7" disposed',
             '          "dep8" disposed',
-            '        "dep6" initialized',
-            '      "dep9" initialized',
+            '        "dep6" no disposal required',
+            '      "dep9" no disposal required',
             '    "dep2" disposed',
             '  "dep10" failed: Exception: dep10 failed',
           ]);
@@ -1194,7 +1229,7 @@ void main() {
             '  [concurrent1] failed: dep4',
             '    "dep4" failed: Exception: dep4 failed',
             '    [sequential1] disposed',
-            '      "dep3" initialized',
+            '      "dep3" no disposal required',
             '      [concurrent2] disposed',
             '        "dep5" disposed',
             '        [sequential2] disposed',
@@ -1261,7 +1296,7 @@ void main() {
             '  [concurrent1] failed: dep4',
             '    "dep4" failed: Exception: dep4 failed',
             '    [sequential1] disposed',
-            '      "dep3" initialized',
+            '      "dep3" no disposal required',
             '      [concurrent2] disposed',
             '        "dep5" cancelled with error: Exception: dep5 failed',
             '        [sequential2] disposed',
@@ -1326,7 +1361,7 @@ void main() {
             '  [concurrent1] failed: sequential1/concurrent2/dep5',
             '    "dep4" disposed',
             '    [sequential1] failed: concurrent2/dep5',
-            '      "dep3" initialized',
+            '      "dep3" no disposal required',
             '      [concurrent2] failed: dep5',
             '        "dep5" failed: Exception: dep5 failed',
             '        [sequential2] disposed',
@@ -1394,7 +1429,7 @@ void main() {
             '  [concurrent1] failed: sequential1/concurrent2/dep5',
             '    "dep4" disposed',
             '    [sequential1] failed: concurrent2/dep5',
-            '      "dep3" initialized',
+            '      "dep3" no disposal required',
             '      [concurrent2] failed: dep5',
             '        "dep5" failed: Exception: dep5 failed',
             '        [sequential2] disposed',

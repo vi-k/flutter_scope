@@ -106,6 +106,16 @@ abstract interface class ScopeContext<W extends ScopeInheritedWidget> {
 
     final element = context.getElementForInheritedWidgetOfExactType<W>();
     if (element == null) {
+      if (listen) {
+        // Records the dependency the lookup could not satisfy. Flutter
+        // remembers those so that a widget carried under a matching ancestor
+        // later -- by a `GlobalKey`, say -- is told its dependencies changed
+        // and reads the scope again. `getElementForInheritedWidgetOfExactType`
+        // above records nothing at all, so without this the widget went on
+        // showing whatever it read when there was no scope above it.
+        context.dependOnInheritedWidgetOfExactType<W>();
+      }
+
       return null;
     }
 

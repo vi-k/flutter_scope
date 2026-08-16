@@ -125,6 +125,22 @@
 * `AsyncScopeElementBase.model` is one object instead of a fresh wrapper on
   every read. `state`, `isInitialized`, `hasError`, `error`, `stackTrace`,
   `buildChild()` and every run of every selector go through it.
+* `ScopeDependencyNoDisposalRequired` is a state a dependency can actually
+  reach. A dependency that set no `dep.dispose` has nothing to give back, so
+  its group passes it by — rightly — but it was passed by in silence and went
+  on saying `initialized` after the whole tree had been torn down, which made
+  the dump of a fully disposed scope read as though half of it were still
+  alive. The state that exists for exactly this was created nowhere.
+* A lookup with `listen: true` that finds no scope is remembered as an
+  unsatisfied dependency, the way Flutter's own
+  `dependOnInheritedWidgetOfExactType` remembers one. A widget that asked when
+  there was no scope above it and is later carried under one by a `GlobalKey`
+  is now told its dependencies changed, instead of going on showing what it
+  read when there was nothing to read.
+* `State.widget` on a scope state throws an `UnsupportedError` that says why,
+  and is no longer marked `@visibleForTesting` — an annotation that read as
+  "use this from tests" where the meaning is "there is nothing here to use".
+  A scope state has no widget of its own; `params` is the scope widget.
 * A notification no longer rebuilds the widgets of the subtree it is not
   rebuilding. "Skips rebuilding the whole subtree" was true of the elements and
   not of the widgets: `ComponentElement.performRebuild` calls `build()`

@@ -116,6 +116,38 @@ void main() {
 
       expect(scope.selfNotifications, 1);
     });
+
+    // Flutter remembers a lookup that found nothing, so that a widget moved
+    // under a matching ancestor later is told about it. The lookup here went
+    // through `getElementForInheritedWidgetOfExactType`, which records
+    // nothing, so a `GlobalKey` widget carried under a scope was never
+    // notified: it went on showing what it read when there was no scope.
+    testWidgets('a lookup that found nothing is remembered as a dependency', (
+      tester,
+    ) async {
+      final key = GlobalKey();
+      final seeker = _Seeker(key: key);
+
+      await tester.pumpWidget(
+        Directionality(textDirection: TextDirection.ltr, child: seeker),
+      );
+
+      final state = tester.state<_SeekerState>(find.byType(_Seeker));
+
+      expect(state.found, isFalse);
+      expect(state.dependencyChanges, 1, reason: 'the one after initState');
+
+      // The same element, carried under a scope by its key.
+      await tester.pumpWidget(_Host(builder: (context) => seeker));
+
+      expect(
+        tester.state<_SeekerState>(find.byType(_Seeker)),
+        same(state),
+        reason: 'the key kept the element, so this is a move and not a rebuild',
+      );
+      expect(state.found, isTrue);
+      expect(state.dependencyChanges, 2);
+    });
   });
 
   group('where a subscription may be taken', () {
@@ -224,6 +256,37 @@ final class _Host extends StatelessWidget {
         textDirection: TextDirection.ltr,
         child: _Scope(builder: builder),
       );
+}
+
+/// Looks the scope up with `listen: true` and counts how often Flutter tells
+/// it its dependencies changed.
+final class _Seeker extends StatefulWidget {
+  const _Seeker({super.key});
+
+  @override
+  State<_Seeker> createState() => _SeekerState();
+}
+
+final class _SeekerState extends State<_Seeker> {
+  int dependencyChanges = 0;
+  bool found = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    dependencyChanges++;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    found = ScopeWidgetCore.maybeOf<_Scope, _ScopeElement>(
+          context,
+          listen: true,
+        ) !=
+        null;
+
+    return const SizedBox.shrink();
+  }
 }
 
 /// Subscribes from `didChangeDependencies`, which is a frame too early.

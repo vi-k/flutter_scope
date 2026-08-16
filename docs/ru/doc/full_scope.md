@@ -1,6 +1,6 @@
 # Scope
 
-> Перевод `doc/full_scope.md` (blob `707ce419b1930ea50779508ad7d1442dc8b875f6`).
+> Перевод `doc/full_scope.md` (blob `ac200fb8139c19de547cc6e3eabe722fc815b1db`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 `Scope` — основной строительный блок пакета: виджет, который владеет контейнером
@@ -191,6 +191,11 @@ Widget buildOnInitializing(
 `ScopeDependencyNoDisposalRequired`, `ScopeDependencyDisposalFailed`,
 `ScopeDependencyDisposalCancelled` — и сокращения `isInitialized`, `isFailed`,
 `isCancelled`, `isDisposed` из `ScopeDependencyExtension`.
+
+`ScopeDependencyNoDisposalRequired` — состояние зависимости, которая не задала
+`dep.dispose` и отдавать ей нечего: разбор проходит мимо неё, и вот что она
+говорит после. Это `ScopeDependencyDisposed`, так что `isDisposed` покрывает оба
+случая.
 
 ## Пути зависимостей
 
