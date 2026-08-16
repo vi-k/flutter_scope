@@ -134,11 +134,6 @@ Stream<AsyncDataScopeInitState<Object, C>> initDataAsync() async* {
     await controller.performInit();
 
     yield AsyncDataScopeReady(controller);
-  } on Object catch (error, stackTrace) {
-    FlutterError.reportError(
-      FlutterErrorDetails(exception: error, stack: stackTrace, library: 'scopo'),
-    );
-    rethrow;
   } finally {
     // Критерий — тот же признак, по которому `_performAsyncDispose` решает,
     // звать ли `disposeAsync`. Свой флаг здесь врёт: событие могли выбросить
@@ -198,17 +193,25 @@ Widget buildOnError(BuildContext context, Object error, StackTrace stackTrace);
 Widget buildOnReady(BuildContext context, C controller);
 ```
 
-Значения по умолчанию: готово — `child` (он обязателен в `Base` и в
-конструкторной форме, семейство существует ради обёртывания поддерева),
-остальные ветки — `const SizedBox.shrink()`.
+Обязательность — как у `AsyncDataScope`, без исключений: `buildOnWaiting`
+необязателен и по умолчанию возвращает `null` (тогда строится
+`buildOnInitializing`), остальные три обязательны; в конструкторной форме
+обязательны `initBuilder`, `errorBuilder` и `builder`. Умолчаний вроде
+«показывать пустоту» нет: решение показать пустоту автор принимает явно, той же
+рукой, что и в соседних семействах.
 
-**Провал `init()` репортится через `FlutterError.reportError` один раз, в
-момент падения.** Это сознательное отличие от `AsyncScope` и `AsyncDataScope`,
-где ошибка приезжает только в `buildOnError`. Причина в типичной форме этого
-семейства: его билдеры обычно ничего не рисуют (скоуп владеет побочными
-эффектами, а не экраном), и молча съеденный провал инициализации — не
-гипотетическая, а уже случившаяся в боевом коде ошибка. `buildOnError` при этом
-получает ошибку как обычно, так что показать что-то на экране никто не мешает.
+`child` — тоже как везде: необязательный унаследованный слот без особого
+смысла. Скоуп, который просто оборачивает поддерево, пишет
+`buildOnReady(context, controller) => child` сам — одна строка, и в ней виден
+выбор, а не умолчание пакета.
+
+**Провал `init()` семейство никуда не репортит** — как и `AsyncScope` с
+`AsyncDataScope`: ошибка приезжает в `buildOnError`, который здесь обязателен,
+значит автор её видел и решил, что с ней делать. Отдельный репорт обсуждался и
+отвергнут: он держался на том, что билдеры этого семейства обычно ничего не
+рисуют, но обязательный `buildOnError` эту посылку снимает. В документации —
+строка о том, куда провал направить: в `buildOnError` или через
+`ScopeConfig.logger`.
 
 ## Чего семейство не делает
 
@@ -263,8 +266,8 @@ Widget buildOnReady(BuildContext context, C controller);
 
 1. обычный путь: `init` → готово → построен `child`; при уходе с дерева
    `onUnmount` и затем `dispose`, каждый ровно один раз, в этом порядке;
-2. `init()` бросил: построена ветка ошибки, `onUnmount` и `dispose` всё равно
-   выполнены, провал отрепорчен;
+2. `init()` бросил: построена ветка ошибки и получила ошибку, `onUnmount` и
+   `dispose` всё равно выполнены;
 3. скоуп ушёл, пока шёл `init()`: готовности не было, `onUnmount` и `dispose`
    выполнены;
 4. идемпотентность: повторные `performUnmount` и `performDispose` ничего не
@@ -303,5 +306,3 @@ Widget buildOnReady(BuildContext context, C controller);
   `_initSucceeded` из `AsyncScopeElementBase`. Внутри одной библиотеки это
   законно, но связь неявная; в коде она закрыта комментарием, а в тестах —
   мутацией.
-- **Отличие в репорте ошибки** от двух соседних семейств придётся объяснять в
-  документации каждый раз, когда кто-то сравнит.
