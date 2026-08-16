@@ -690,6 +690,29 @@ void main() {
   // The assertions are about effects, never about timings: what proves the
   // defect is which error the app receives, which state the scope is left in,
   // and whether `disposeAsync()` still runs.
+  group('the model of a scope', () {
+    testWidgets('is one object rather than a wrapper made on every read',
+        (tester) async {
+      await tester.pumpWidget(
+        const Directionality(
+          textDirection: TextDirection.ltr,
+          child: _ReadyRaceScope(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final element = tester.element(find.byType(_ReadyRaceScope))
+          as _ReadyRaceScopeElement;
+
+      expect(
+        element.model,
+        same(element.model),
+        reason: '`state`, `isInitialized`, `hasError`, `error`, `stackTrace`, '
+            '`buildChild` and every run of every selector go through this',
+      );
+    });
+  });
+
   group('a child scope moved with a GlobalKey', () {
     Widget treeWith({required GlobalKey childKey, required bool underSecond}) =>
         Directionality(

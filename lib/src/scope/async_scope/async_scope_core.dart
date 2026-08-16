@@ -134,8 +134,14 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
   // End of overriding block
   //
 
+  /// The read-only face of [_model], made once.
+  ///
+  /// Everything the scope shows of its state goes through here — [state],
+  /// [isInitialized], [hasError], [error], [stackTrace], `buildChild()`,
+  /// `debugFillProperties` and every run of every selector — so a wrapper
+  /// built on each read was rubbish on every build of every dependent.
   @override
-  AsyncScopeModel get model => _model.asUnmodifiable();
+  late final AsyncScopeModel model = _model.asUnmodifiable();
   final _AsyncScopeNotifier _model = _AsyncScopeNotifier();
 
   /// Keeps the widget reachable during the asynchronous disposal.

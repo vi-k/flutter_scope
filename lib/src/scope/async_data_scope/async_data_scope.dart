@@ -11,9 +11,13 @@ final class AsyncDataScope<T extends Object?>
     BuildContext context,
   ) init;
 
-  /// Called synchronously when the scope leaves the tree.
+  /// Called synchronously when the scope leaves the tree, and on the way out
+  /// of a `close()`.
   ///
-  /// The value is `null` when the initialization never finished.
+  /// The value is `null` when the initialization never produced one. For a
+  /// nullable [T] that is the same `null` the initialization may have produced
+  /// itself, and the two cannot be told apart from here — read `hasData` off
+  /// the scope's context when the difference matters.
   final void Function(T? data)? unmount;
 
   /// Releases the value [init] produced.

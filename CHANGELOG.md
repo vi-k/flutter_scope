@@ -101,6 +101,30 @@
   The logger is left alone. The dartdoc of `pauseAfterInitializationEnabled`
   described what setting it to `false` does while documenting a field whose
   value is `true`; it now says what the field is.
+* `AsyncDataScopeContext.hasData` says whether the initialization has produced
+  its value. For a nullable `T` nothing else could: `dataOrNull` is `null` on
+  both sides of the moment the value arrives, since `null` is a value the
+  initialization may legitimately produce, and the flag the family kept for
+  exactly this was consulted only by `data`. The dartdoc of `data` and of
+  `unmount`/`onUnmount` now also says when the value starts being there — a
+  shade before the scope shows its ready branch, and deliberately much earlier
+  than that when `pauseAfterInitialization` is set.
+* A second `AsyncDataScopeReady` no longer replaces the value behind the
+  model's back. The value is caught in the `map` the family wraps the
+  initialization in, which runs as the event goes past, while the check for a
+  second initialization sits one layer up in an `asyncMap`, which runs after
+  it: by the time the diagnostic was raised the new value had already been
+  stored, the model stayed as it was, the dependents heard nothing, `data`
+  handed out the newcomer — and the value the scope had been given was left
+  with nobody to release it. The second `ready` is refused where the value is
+  caught.
+* `AsyncScopeModel` is documented rather than hidden with `@nodoc`. It is the
+  third type argument of `AsyncScopeCore` and what
+  `AsyncScopeElementBase.model` returns, so a scope written on the `Core` layer
+  has to name it.
+* `AsyncScopeElementBase.model` is one object instead of a fresh wrapper on
+  every read. `state`, `isInitialized`, `hasError`, `error`, `stackTrace`,
+  `buildChild()` and every run of every selector go through it.
 * A notification no longer rebuilds the widgets of the subtree it is not
   rebuilding. "Skips rebuilding the whole subtree" was true of the elements and
   not of the widgets: `ComponentElement.performRebuild` calls `build()`

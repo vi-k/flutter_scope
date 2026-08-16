@@ -74,18 +74,34 @@ reason `dispose(data)` and `unmount(T? data)` receive it.
 final database = AsyncDataScope.of<Database>(context, listen: false).data;
 ```
 
-`of`, `maybeOf` and `select` return an `AsyncDataScopeContext`, which adds two
+`of`, `maybeOf` and `select` return an `AsyncDataScopeContext`, which adds three
 members to everything `AsyncScopeContext` has:
 
-| member | before the scope is ready | after |
+| member | before the value arrives | after |
 | --- | --- | --- |
 | `data` | throws `StateError('Not initialized')` | the value |
 | `dataOrNull` | `null` | the value |
+| `hasData` | `false` | `true` |
 
 A widget under `builder` is by definition below a ready scope and can use
 `data`. A widget that may also be built while the scope is still initializing —
 one in `initBuilder`, or one reached from elsewhere in the tree — should use
-`dataOrNull`, or check `isInitialized` first.
+`dataOrNull`, or check `hasData` first.
+
+For a nullable `T` — `AsyncDataScope<Session?>` — `dataOrNull` cannot answer
+the question at all: it is `null` on both sides of the moment the value
+arrives, since `null` is a value the initialization may legitimately produce.
+`hasData` is the difference, and `data` is the other way of asking: it throws
+while there is nothing and returns the `null` once there is. The same
+ambiguity reaches `unmount`/`onUnmount`, which is handed a `T?` and cannot tell
+the two apart on its own.
+
+"Before the value arrives" is a shade earlier than `isInitialized`. The value
+is caught as it goes past; the state of the scope is applied at the end of the
+frame, or after the whole of `pauseAfterInitialization`, which is deliberately
+longer. In that window the scope is still building `initBuilder` while `data`
+already answers — and that is the window the teardown of a scope that left
+early runs in, which is why `dispose` can be promised the value at all.
 
 `select` is the cheap way in when only a part of the value matters:
 

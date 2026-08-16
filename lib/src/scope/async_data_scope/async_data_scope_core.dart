@@ -91,7 +91,16 @@ abstract base class AsyncDataScopeElementBase<
   /// answer for itself: `null` is something the initialization may legitimately
   /// produce, and reading it as "nothing yet" made [data] hand out a value the
   /// scope had never been given.
+  ///
+  /// It is set the moment the value goes past, which is a little before the
+  /// model says [AsyncScopeReady] — the model update waits for the end of the
+  /// frame, or for the whole of `pauseAfterInitialization`. The teardown reads
+  /// [data] in exactly that window, so this is the moment that matters and not
+  /// the state of the model.
   bool _hasData = false;
+
+  @override
+  bool get hasData => _hasData;
 
   @override
   T? get dataOrNull => _data;
@@ -111,6 +120,16 @@ abstract base class AsyncDataScopeElementBase<
             case AsyncDataScopeProgress(:final progress):
               return AsyncScopeProgress(progress);
             case AsyncDataScopeReady(:final data):
+              // Refused here rather than one layer up. This `map` runs as the
+              // event goes past and `asyncMap` only after it, so the check for
+              // a second initialization up there arrived to find the value
+              // already replaced: the model stayed as it was, the dependents
+              // heard nothing, `data` handed out the newcomer, and the value
+              // the scope had been given was left with nobody to release it.
+              if (_hasData) {
+                throw StateError('$W already initialized');
+              }
+
               _data = data;
               _hasData = true;
               return AsyncScopeReady();

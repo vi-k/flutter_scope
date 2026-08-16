@@ -106,6 +106,55 @@ void main() {
       },
     );
 
+    // The value is caught in the `map` the family wraps the initialization
+    // in, one step ahead of the "already initialized" check in the layer
+    // above: `map` runs as the event goes past, `asyncMap` only after. A
+    // second `ready` therefore replaced the value before anything could refuse
+    // it -- the model stayed as it was, the dependents heard nothing, and the
+    // first value was left with nobody to release it.
+    testWidgets('a second ready neither replaces the value nor strands it',
+        (tester) async {
+      final gate = Completer<void>();
+      final disposed = <_Database>[];
+      final first = _Database('first');
+      final second = _Database('second');
+
+      await tester.pumpWidget(
+        _Host(
+          init: (context) async* {
+            yield AsyncDataScopeReady(first);
+            await gate.future;
+
+            yield AsyncDataScopeReady(second);
+          },
+          dispose: disposed.add,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('ready: first'), findsOneWidget);
+
+      gate.complete();
+      await tester.pumpAndSettle();
+
+      expect(
+        tester.takeException(),
+        isA<StateError>(),
+        reason: 'a second ready is a mistake in the initialization, and the '
+            'scope says so instead of quietly acting on it',
+      );
+      expect(find.text('ready: first'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await settle(tester, until: () => disposed.isNotEmpty);
+
+      expect(
+        disposed,
+        [same(first)],
+        reason: 'what is released is what the scope was given and handed on',
+      );
+    });
+
     testWidgets(
       'nothing is disposed of when the data never arrived',
       (tester) async {
@@ -183,6 +232,35 @@ void main() {
         reason: 'the value is there, and it is `null`',
       );
     });
+
+    // `dataOrNull` cannot answer this one: it is `null` on both sides of the
+    // moment the value arrives. `_hasData` was kept for exactly this and was
+    // only ever consulted by `data`.
+    testWidgets('hasData tells "nothing yet" from "the value is null"',
+        (tester) async {
+      final gate = Completer<void>();
+      final seen = <bool>[];
+
+      await tester.pumpWidget(
+        _NullableHost(
+          init: (context) async* {
+            await gate.future;
+
+            yield AsyncDataScopeReady(null);
+          },
+          onInitializingHasData: seen.add,
+          onReadyHasData: seen.add,
+        ),
+      );
+      await tester.pump();
+
+      expect(seen, [false], reason: 'nothing has been produced yet');
+
+      gate.complete();
+      await tester.pumpAndSettle();
+
+      expect(seen, [false, true]);
+    });
   });
 }
 
@@ -231,8 +309,16 @@ final class _NullableHost extends StatelessWidget {
   ) init;
   final void Function(Object? data)? onInitializing;
   final void Function(Object? data)? onReady;
+  final void Function(bool hasData)? onInitializingHasData;
+  final void Function(bool hasData)? onReadyHasData;
 
-  const _NullableHost({required this.init, this.onInitializing, this.onReady});
+  const _NullableHost({
+    required this.init,
+    this.onInitializing,
+    this.onReady,
+    this.onInitializingHasData,
+    this.onReadyHasData,
+  });
 
   @override
   Widget build(BuildContext context) => Directionality(
@@ -240,24 +326,31 @@ final class _NullableHost extends StatelessWidget {
         child: AsyncDataScope<String?>(
           init: init,
           dispose: (data) {},
-          initBuilder: (context, progress) => _NullableReader(onInitializing),
+          initBuilder: (context, progress) =>
+              _NullableReader(onInitializing, onInitializingHasData),
           errorBuilder: (context, error, stackTrace, progress) =>
               const SizedBox.shrink(),
-          builder: (context, data) => _NullableReader(onReady),
+          builder: (context, data) => _NullableReader(onReady, onReadyHasData),
         ),
       );
 }
 
-/// Reports what `data` gave it: the value, or whatever it threw.
+/// Reports what `data` gave it: the value, or whatever it threw. And what
+/// `hasData` said, which for a nullable value is the only way to tell the two
+/// `null`s apart.
 final class _NullableReader extends StatelessWidget {
   final void Function(Object? data)? report;
+  final void Function(bool hasData)? reportHasData;
 
-  const _NullableReader(this.report);
+  const _NullableReader(this.report, [this.reportHasData]);
 
   @override
   Widget build(BuildContext context) {
+    final scope = AsyncDataScope.of<String?>(context, listen: false);
+    reportHasData?.call(scope.hasData);
+
     try {
-      report?.call(AsyncDataScope.of<String?>(context, listen: false).data);
+      report?.call(scope.data);
       // ignore: avoid_catching_errors
     } on Object catch (error) {
       report?.call(error);
