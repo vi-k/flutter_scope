@@ -1,6 +1,6 @@
 # Scope
 
-> Перевод `doc/full_scope.md` (blob `724140dc85c34f5a48d134c1c56c2a3e77789ea6`).
+> Перевод `doc/full_scope.md` (blob `d6787b39ddee89159da8a13eef54e15228f9ce6f`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 `Scope` — основной строительный блок пакета: виджет, который владеет контейнером
@@ -249,25 +249,33 @@ dep('database', (dep) async {
 `dispose()` никогда не позовут.
 
 Поэтому написанный руками `init` принимает ту же форму, что и в теме
-`AsyncScope`: что шаг взял, то он и отдаёт, когда следующий падает.
+`AsyncScope`: что шаг взял, то и отдаётся, если контейнер не передали дальше.
 
 ```dart
 static Stream<ScopeInitState<String, AppDependencies>> init() async* {
   final storage = await Storage.open();
+  var handedOver = false;
 
   try {
     yield ScopeProgress('signing in');
     final session = await Session.restore(storage);
 
     yield ScopeReady(AppDependencies(storage: storage, session: session));
-    // ignore: avoid_catching_errors
-  } on Object {
-    await storage.close();
-
-    rethrow;
+    handedOver = true;
+  } finally {
+    if (!handedOver) {
+      await storage.close();
+    }
   }
 }
 ```
+
+`finally`, а не `catch`: второй способ закончить это досрочно — отмена, когда
+скоуп убрали из дерева, так и не дав ему стать готовым, — и она не бросает
+ничего, поэтому до `catch` дело не доходит. Разбор целиком — в теме
+`AsyncScope`. Эту же форму контейнер пишет за вас: то, что зависимость
+зарегистрировала через `dep.dispose`, отдаётся и когда обход упал, и когда его
+отменили.
 
 ## Осмотр дерева
 

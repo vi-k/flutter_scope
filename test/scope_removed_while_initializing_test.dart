@@ -21,6 +21,9 @@ import 'utils/settle.dart';
 /// the widget — and the two are not the same path: between them lie the
 /// synchronous teardown, the bounded wait for the cancellation to land, and the
 /// order the four stages of the disposal run in.
+///
+/// The second group is the same promise one layer up, where a hand-written
+/// `initAsync` guards its own steps instead of handing them to a container.
 void main() {
   tearDown(ScopeConfig.reset);
 
@@ -127,6 +130,81 @@ void main() {
       );
     });
   });
+
+  // A hand-written `initAsync` gives back what it took by guarding its own
+  // steps, and the topics show how. What shape that guard has to be is the
+  // whole of it: a cancellation raises nothing, so the two shapes that look
+  // equivalent are not.
+  group('an initialization cancelled after it took something', () {
+    testWidgets('does not reach a catch, which raising is what would',
+        (tester) async {
+      final log = <String>[];
+      final gate = Completer<void>();
+
+      await tester.pumpWidget(_wrap(_Guarded.withCatch(log: log, gate: gate)));
+      await settle(tester, until: () => log.contains('took'));
+
+      await tester.pumpWidget(_wrap(const SizedBox.shrink()));
+      gate.complete();
+      await settle(tester, until: () => log.length > 1);
+
+      expect(
+        log,
+        ['took'],
+        reason: 'cancelling an `async*` resumes its body and ends it at the '
+            'next yield -- nothing is thrown, so the catch never runs; and '
+            'the scope never became ready, so `disposeAsync` does not run '
+            'either. What the initialization took is held by nobody',
+      );
+    });
+
+    testWidgets('does reach a finally, which can tell it from a handover',
+        (tester) async {
+      final log = <String>[];
+      final gate = Completer<void>();
+
+      await tester
+          .pumpWidget(_wrap(_Guarded.withFinally(log: log, gate: gate)));
+      await settle(tester, until: () => log.contains('took'));
+
+      await tester.pumpWidget(_wrap(const SizedBox.shrink()));
+      gate.complete();
+      await settle(tester, until: () => log.contains('released'));
+
+      expect(
+        log,
+        ['took', 'released'],
+        reason: 'the flag is set after the yield, so a body ended at that '
+            'yield leaves it false -- which is exactly the case where what '
+            'was taken is still the initialization`s to give back',
+      );
+    });
+
+    testWidgets('leaves alone what the scope did take over', (tester) async {
+      final log = <String>[];
+      final gate = Completer<void>()..complete();
+
+      await tester
+          .pumpWidget(_wrap(_Guarded.withFinally(log: log, gate: gate)));
+      await tester.pumpAndSettle();
+
+      expect(
+        log,
+        ['took', 'handed over'],
+        reason: 'the guard has to keep quiet once the scope is ready, or the '
+            'value would be released twice',
+      );
+
+      await tester.pumpWidget(_wrap(const SizedBox.shrink()));
+      await settle(tester, until: () => log.contains('disposeAsync'));
+
+      expect(
+        log,
+        ['took', 'handed over', 'disposeAsync'],
+        reason: 'and from there it is the scope that releases it',
+      );
+    });
+  });
 }
 
 Widget _wrap(Widget child) => Directionality(
@@ -207,4 +285,77 @@ final class _DepScopeState
     extends ScopeState<_DepScope, _Deps, _DepScopeState> {
   @override
   Widget build(BuildContext context) => const SizedBox.shrink();
+}
+
+/// A scope whose initialization takes something and guards it — in one of the
+/// two shapes the topics could show.
+///
+/// [gate] stands for the step that follows the acquisition, so the scope can
+/// be caught between having taken something and having handed it over.
+final class _Guarded extends AsyncScopeBase<_Guarded> {
+  final List<String> log;
+  final Completer<void> gate;
+
+  /// Whether the guard is a `finally` rather than a `catch`.
+  final bool guardIsFinally;
+
+  const _Guarded.withCatch({required this.log, required this.gate})
+      : guardIsFinally = false,
+        super(child: const SizedBox.shrink());
+
+  const _Guarded.withFinally({required this.log, required this.gate})
+      : guardIsFinally = true,
+        super(child: const SizedBox.shrink());
+
+  @override
+  Stream<AsyncScopeInitState> initAsync(BuildContext context) async* {
+    log.add('took');
+
+    if (!guardIsFinally) {
+      try {
+        await gate.future;
+        // ignore: avoid_catching_errors
+      } on Object {
+        log.add('released');
+        rethrow;
+      }
+
+      yield AsyncScopeReady();
+
+      return;
+    }
+
+    var handedOver = false;
+
+    try {
+      await gate.future;
+
+      yield AsyncScopeReady();
+      handedOver = true;
+      log.add('handed over');
+    } finally {
+      if (!handedOver) {
+        log.add('released');
+      }
+    }
+  }
+
+  @override
+  Future<void> disposeAsync() async => log.add('disposeAsync');
+
+  @override
+  Widget buildOnInitializing(BuildContext context, Object? progress) =>
+      const SizedBox.shrink();
+
+  @override
+  Widget buildOnError(
+    BuildContext context,
+    Object error,
+    StackTrace stackTrace,
+    Object? progress,
+  ) =>
+      const SizedBox.shrink();
+
+  @override
+  Widget buildOnReady(BuildContext context) => child;
 }

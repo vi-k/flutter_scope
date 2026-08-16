@@ -242,27 +242,39 @@ dispose: () => connection.close(),      // never called
 ```
 
 ```dart
-// Right: whatever a step took, that step gives back when the next one fails.
+// Right: what a step took is given back unless the scope took it over.
 init: (context) async* {
   connection = await Api.connect();
+  var handedOver = false;
 
   try {
     await connection.authenticate();
-    // ignore: avoid_catching_errors
-  } on Object {
-    await connection.close();
 
-    rethrow;
+    yield AsyncScopeReady();
+    handedOver = true;
+  } finally {
+    if (!handedOver) {
+      await connection.close();
+    }
   }
-
-  yield AsyncScopeReady();
 },
 dispose: () => connection.close(),
 ```
 
-The same guard covers a cancellation, which is the other way an initialization
-ends early: cancelling an `async*` resumes its body, so a `finally` runs there
-too.
+**`finally`, and not `catch`** — this is the part that is easy to get wrong. An
+initialization ends early in two ways: a step of it fails, or the scope goes
+away before it was ever ready, removed from the tree or `close()`d. The second
+raises nothing at all. Cancelling an `async*` resumes its body and ends it at
+the next `yield`, so `catch` blocks are skipped and only `finally` blocks run —
+a guard written as `try`/`catch` gives back what it took when a step throws, and
+leaks it when the scope leaves first.
+
+The flag is what keeps the guard quiet afterwards. `yield AsyncScopeReady()` is
+the handover, and a body ended at that `yield` never reaches the line below it:
+a `finally` that finds the flag still false is exactly the case where the scope
+never took the connection over and `dispose` will not be called for it. Once the
+flag is set, releasing it is the scope's job and the guard must not do it a
+second time.
 
 An initialization with several steps like that turns into a pile of nested
 `try`s, and that is what the dependency container of the `Scope` family exists

@@ -1,6 +1,6 @@
 # AsyncDataScope
 
-> Перевод `doc/async_data_scope.md` (blob `a319f2e8f6ca9d7a94c10f0d1ce77cc5bfff5b24`).
+> Перевод `doc/async_data_scope.md` (blob `ec27d4b5203b4e4ba253c94d7660fb21862e1481`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 `AsyncScope`, который производит значение. Инициализация заканчивается объектом,
@@ -80,25 +80,29 @@ dispose: (database) => database.close(),
 // Правильно: не передал — значит закрывать самому.
 init: (context) async* {
   final database = await Database.open();
+  var handedOver = false;
 
   try {
     yield AsyncDataScopeProgress('migrating');
     await database.migrate();
-    // ignore: avoid_catching_errors
-  } on Object {
-    await database.close();
 
-    rethrow;
+    yield AsyncDataScopeReady(database);
+    handedOver = true;
+  } finally {
+    if (!handedOver) {
+      await database.close();
+    }
   }
-
-  yield AsyncDataScopeReady(database);
 },
 dispose: (database) => database.close(),
 ```
 
-Та же защита покрывает и отмену: скоуп, ушедший с дерева посреди `init`,
-возобновляет генератор, чтобы тот доработал, и `finally` там отрабатывает как
-обычно.
+`finally`, а не `catch`: упавший шаг — только один из двух способов закончить
+эту инициализацию досрочно. Второй — отмена: скоуп убрали из дерева или закрыли
+через `close()`, так и не дав ему стать готовым, — и она не бросает ничего,
+поэтому до `catch` дело не доходит. Разбор целиком — в теме `AsyncScope`; здесь
+ловушка хуже, потому что `yield` внутри защиты сам по себе точка, на которой
+отмена может закончить тело.
 
 Два способа не писать защиту вовсе: строить значение одним шагом, который не
 может упасть на середине, — или взять контейнер зависимостей семейства `Scope`,

@@ -78,25 +78,29 @@ dispose: (database) => database.close(),
 // Right: not handed over yet means still mine to close.
 init: (context) async* {
   final database = await Database.open();
+  var handedOver = false;
 
   try {
     yield AsyncDataScopeProgress('migrating');
     await database.migrate();
-    // ignore: avoid_catching_errors
-  } on Object {
-    await database.close();
 
-    rethrow;
+    yield AsyncDataScopeReady(database);
+    handedOver = true;
+  } finally {
+    if (!handedOver) {
+      await database.close();
+    }
   }
-
-  yield AsyncDataScopeReady(database);
 },
 dispose: (database) => database.close(),
 ```
 
-The guard covers a cancellation too — a scope that leaves the tree mid-`init`
-resumes the generator so that it can run out, and a `finally` there runs like
-any other.
+`finally`, and not `catch`: a failing step is only one of the two ways this
+initialization ends early. The other is a cancellation — the scope removed from
+the tree, or `close()`d, before it was ready — and it raises nothing, so a
+`catch` is never reached. See the `AsyncScope` topic for the whole of it; here
+the trap is worse, because a `yield` inside the guard is itself a point the
+cancellation can end the body at.
 
 Two ways to avoid writing the guard at all: build the value in one step that
 cannot fail halfway, or use the dependency container of the `Scope` family,

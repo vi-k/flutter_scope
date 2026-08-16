@@ -246,25 +246,32 @@ that never handed one over. Nothing the scope holds points at it, and its
 `dispose()` is never called.
 
 So an `init` written by hand takes the same shape as the one in the `AsyncScope`
-topic — what a step took, that step gives back when the next one fails:
+topic — what a step took is given back unless the container was handed over:
 
 ```dart
 static Stream<ScopeInitState<String, AppDependencies>> init() async* {
   final storage = await Storage.open();
+  var handedOver = false;
 
   try {
     yield ScopeProgress('signing in');
     final session = await Session.restore(storage);
 
     yield ScopeReady(AppDependencies(storage: storage, session: session));
-    // ignore: avoid_catching_errors
-  } on Object {
-    await storage.close();
-
-    rethrow;
+    handedOver = true;
+  } finally {
+    if (!handedOver) {
+      await storage.close();
+    }
   }
 }
 ```
+
+`finally`, and not `catch`: a cancellation is the other way this ends early —
+the scope removed from the tree before it was ready — and it raises nothing, so
+a `catch` is never reached. The `AsyncScope` topic has the whole of it. This is
+also the shape the container writes for you: what a dependency registered with
+`dep.dispose` is released whether the walk failed or was cancelled.
 
 ## Inspecting the tree
 
