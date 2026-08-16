@@ -85,7 +85,7 @@ void main() {
       // it draws no frame at all; the error branch needs one.
       await tester.pump();
 
-      expect(find.text('error'), findsOneWidget);
+      expect(find.textContaining('error:'), findsOneWidget);
       expect(controller.calls, ['init', 'onUnmount', 'dispose']);
       expect(tester.takeException(), isNull);
     });
@@ -165,6 +165,76 @@ void main() {
       expect(find.text('reader: init'), findsOneWidget);
     });
   });
+
+  group('a controller whose dispose also fails', () {
+    // `dispose()` runs on every path, including the one where `init()` failed
+    // halfway -- and the documentation says so, which makes that the path it
+    // is most likely to fail on. An exception raised from a `finally`
+    // replaces the one the `finally` was entered for, so the failure that
+    // actually broke the scope disappeared and `buildOnError` was handed the
+    // secondary one instead.
+    testWidgets('shows the failure of init, not the failure of dispose',
+        (tester) async {
+      final controller = _TestController(failOnInit: true, failOnDispose: true);
+
+      await tester.pumpWidget(_Host(controller: controller));
+      await tester.pumpAndSettle();
+
+      expect(
+        tester.takeException(),
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          'dispose failed',
+        ),
+        reason: 'the secondary failure is reported rather than swallowed',
+      );
+      expect(
+        find.textContaining('init failed'),
+        findsOneWidget,
+        reason: 'but what the scope shows is the reason it failed',
+      );
+      expect(
+        controller.calls,
+        containsAllInOrder(['init', 'onUnmount', 'dispose']),
+        reason: 'and the controller was still released',
+      );
+    });
+
+    // The same path, with the teardown hanging rather than failing. Nothing
+    // bounded it: the generator never finished, so the failure of `init()`
+    // never reached the model and the scope showed its loading branch for
+    // ever -- while `doc/async_controller_scope.md` promises the wait for
+    // `dispose()` is bounded by `disposeAsyncTimeout`.
+    testWidgets('gives up on a hanging dispose and still shows the failure',
+        (tester) async {
+      final hang = Completer<void>();
+      addTearDown(hang.complete);
+      final controller = _TestController(failOnInit: true, disposeGate: hang);
+
+      await tester.pumpWidget(
+        _Host(
+          controller: controller,
+          disposeAsyncTimeout: const Duration(milliseconds: 50),
+        ),
+      );
+      bool errorShown() => find.textContaining('error:').evaluate().isNotEmpty;
+
+      await settle(tester, until: errorShown);
+
+      expect(
+        tester.takeException(),
+        isA<TimeoutException>(),
+        reason: 'the wait was given up on, and said so',
+      );
+      expect(
+        find.textContaining('init failed'),
+        findsOneWidget,
+        reason: 'a teardown that never finishes must not keep the scope on '
+            'its loading branch for ever',
+      );
+    });
+  });
 }
 
 /// Reads the controller from the context, the way a descendant does.
@@ -184,13 +254,17 @@ final class _Reader extends StatelessWidget {
 
 final class _Host extends StatelessWidget {
   final _TestController controller;
+  final Duration? disposeAsyncTimeout;
 
-  const _Host({required this.controller});
+  const _Host({required this.controller, this.disposeAsyncTimeout});
 
   @override
   Widget build(BuildContext context) => Directionality(
         textDirection: TextDirection.ltr,
-        child: _TestScope(controller: controller),
+        child: _TestScope(
+          controller: controller,
+          disposeAsyncTimeout: disposeAsyncTimeout,
+        ),
       );
 }
 
@@ -199,7 +273,7 @@ final class _TestScope
     extends AsyncControllerScopeBase<_TestScope, _TestController> {
   final _TestController controller;
 
-  const _TestScope({required this.controller});
+  const _TestScope({required this.controller, super.disposeAsyncTimeout});
 
   @override
   _TestController createController(BuildContext context) => controller;
@@ -214,7 +288,7 @@ final class _TestScope
     Object error,
     StackTrace stackTrace,
   ) =>
-      const Text('error');
+      Text('error: $error');
 
   @override
   Widget buildOnReady(BuildContext context, _TestController controller) =>
@@ -231,7 +305,19 @@ final class _TestController extends ScopeController {
   /// Makes [init] fail, the way user code does.
   final bool failOnInit;
 
-  _TestController({this.initGate, this.failOnInit = false});
+  /// Makes [dispose] fail. It runs on every path, including the one where
+  /// [init] failed halfway -- which is where it is most likely to.
+  final bool failOnDispose;
+
+  /// Holds [dispose] until it is completed.
+  final Completer<void>? disposeGate;
+
+  _TestController({
+    this.initGate,
+    this.failOnInit = false,
+    this.failOnDispose = false,
+    this.disposeGate,
+  });
 
   @override
   Future<void> init() async {
@@ -248,5 +334,13 @@ final class _TestController extends ScopeController {
   void onUnmount() => calls.add('onUnmount');
 
   @override
-  Future<void> dispose() async => calls.add('dispose');
+  Future<void> dispose() async {
+    calls.add('dispose');
+    if (disposeGate case final gate?) {
+      await gate.future;
+    }
+    if (failOnDispose) {
+      throw StateError('dispose failed');
+    }
+  }
 }

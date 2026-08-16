@@ -44,6 +44,18 @@
   still reported as before. The state is applied outside the frame, because
   such a failure is raised before the first `await` and therefore inside the
   build that started the initialization.
+* Fix a controller whose `dispose()` fails taking the failure of its `init()`
+  with it. The release runs from a `finally`, and an exception raised there
+  replaces the one the `finally` was entered for — so `buildOnError` was handed
+  the secondary failure and the reason the scope actually broke disappeared.
+  It is reported now, and the original is what the scope shows. `dispose()` is
+  documented to run on the path where `init()` failed halfway, which makes
+  that the path it is most likely to fail on.
+* The same release is bounded by `disposeAsyncTimeout`, which the
+  `AsyncControllerScope` topic already promised for it. Nothing bounded it on
+  the path where `init()` threw: a teardown that never finished never let the
+  generator finish either, so the failure never reached the model and the
+  scope showed its loading branch for ever, with no report of any kind.
 * [breaking changes] The `value` of `ScopeModel.value` and
   `ScopeNotifier.value` is a non-nullable `M`. The field behind it stays
   nullable — the owning constructor leaves it empty — and `required` therefore
