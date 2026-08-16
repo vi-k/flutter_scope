@@ -5,8 +5,12 @@ part of '../scope.dart';
 /// {@category Scope}
 // ignore: one_member_abstracts
 abstract interface class ScopeDependencies {
-  /// Called when the scope is unmounted from the widget tree.
-  void unmount();
+  /// Lets go of whatever cannot wait for [dispose].
+  ///
+  /// Cancel subscriptions and detach listeners here. It runs exactly once,
+  /// always before [dispose], whether the scope was removed from the tree or
+  /// closed with `close()`.
+  void onUnmount();
 
   /// Disposes of the dependencies, releasing any resources they hold.
   FutureOr<void> dispose();

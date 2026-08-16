@@ -35,7 +35,7 @@ final class _ScopeDependencyImpl with ScopeDependencyMixin {
   }
 
   @override
-  void unmount() {
+  void onUnmount() {
     _helper?.unmount?.call();
   }
 
@@ -75,10 +75,12 @@ final class DepHelper {
   String get name =>
       _dep?.name ?? (throw StateError('helper already disposed'));
 
-  /// Called synchronously when the scope leaves the tree.
+  /// Lets go of whatever cannot wait for [dispose].
   ///
-  /// Assign it from the initializer for whatever cannot wait for the
-  /// asynchronous teardown — unsubscribing, for instance.
+  /// Assign it from the initializer for whatever the asynchronous teardown
+  /// cannot wait for — unsubscribing, for instance. It runs exactly once,
+  /// always before [dispose], whether the scope was removed from the tree or
+  /// closed with `close()`.
   void Function()? unmount;
 
   /// Releases what this dependency acquired; awaited during the disposal.

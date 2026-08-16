@@ -62,9 +62,9 @@ final class AppDependencies implements ScopeDependencies {
     yield ScopeReady(AppDependencies(sharedPreferences: sharedPreferences));
   }
 
-  /// Called synchronously when the scope is unmounted.
+  /// Lets go of whatever cannot wait for the asynchronous teardown.
   @override
-  void unmount() {}
+  void onUnmount() {}
 
   /// Called after the state has been disposed of. May be asynchronous.
   @override
@@ -120,10 +120,10 @@ final class HomeDependencies
 Three builders describe the tree, and all of them return a `ScopeDependency`:
 
 - `dep(name, init)` — a single dependency. The `DepHelper` handed to `init` is
-  where the reverse operations are registered: `dep.dispose` is awaited during
-  disposal, `dep.unmount` is called synchronously when the scope leaves the
-  tree. Setting neither is fine — a dependency that owns nothing needs no
-  teardown. The name must not be empty.
+  where the reverse operations are registered: `dep.unmount` runs synchronously
+  before anything is released, `dep.dispose` is awaited during the disposal.
+  Setting neither is fine — a dependency that owns nothing needs no teardown.
+  The name must not be empty.
 - `sequential(name, [...])` — a `ScopeDependencyGroup` whose children are
   initialized one after another, and disposed of in reverse order.
 - `concurrent(name, [...])` — the same, except that the children are
@@ -243,12 +243,19 @@ that: the failed children by name, and any error that is not itself a
 The teardown of a scope happens in a fixed order, and every asynchronous step of
 it is awaited:
 
-1. `unmount` — synchronous, called the moment the scope is removed from the
-   widget tree and before any asynchronous step begins. The scope forwards it to
-   `ScopeDependencies.unmount`, and `ScopeAutoDependencies` forwards it further
+1. `onUnmount` — synchronous, always first, and before any asynchronous step
+   begins. It runs exactly once, whichever way the scope goes: removed from the
+   widget tree, or closed with `close()` while it stays on screen. The scope
+   runs `ScopeState.onUnmount` and then forwards to
+   `ScopeDependencies.onUnmount`, which `ScopeAutoDependencies` forwards further
    to every `dep.unmount`. This is the place for whatever has to happen
    immediately and cannot wait for the asynchronous teardown — unsubscribing,
    for instance.
+
+   Flutter's own `State.dispose` is not part of this order and cannot be: the
+   framework calls it before the whole teardown when the tree takes the scope
+   down, and not until the tree comes down after a `close()`. It is sealed on
+   `ScopeState` for that reason.
 2. An initialization still in flight is cancelled, or awaited if it cannot be
    cancelled.
 3. The child scopes are awaited, so that a parent never disposes of a

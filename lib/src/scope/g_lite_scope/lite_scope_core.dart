@@ -362,6 +362,20 @@ abstract base class LiteScopeCoreState<
   /// Disposes of the scope asynchronously.
   FutureOr<void> disposeAsync() {}
 
+  /// Sealed on purpose: put the teardown in [onUnmount] and [disposeAsync].
+  ///
+  /// [State.dispose] belongs to Flutter and lands on either side of a scope's
+  /// teardown depending on how the scope went — before all of it when the tree
+  /// took the scope down, and not until the tree comes down after a [close],
+  /// which may be much later or never while the closing screen is on show.
+  /// Nothing a scope has to let go of can be released on a schedule like that,
+  /// so this is not a hook to write in.
+  @nonVirtual
+  @override
+  void dispose() {
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context);
 

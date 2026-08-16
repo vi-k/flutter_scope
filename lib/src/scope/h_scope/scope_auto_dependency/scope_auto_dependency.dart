@@ -88,8 +88,8 @@ abstract base class ScopeAutoDependencies<T extends ScopeDependencies,
   }
 
   @override
-  void unmount() {
-    _root?.unmount();
+  void onUnmount() {
+    _root?.onUnmount();
   }
 
   @override

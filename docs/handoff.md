@@ -34,6 +34,15 @@
 > Порядок на обоих путях один:
 > `['state.onUnmount', 'dep.unmount', 'state.disposeAsync', 'dep.dispose']`.
 >
+> По вопросам владельца в тот же коммит вошли ещё две правки. `State.dispose`
+> **закрыт от переопределения** у `LiteScopeState`/`ScopeState` (`@nonVirtual`:
+> у потребителя warning, роняющий `flutter analyze`, — гарантия анализаторная,
+> тестами не покрывается). И `ScopeDependencies.unmount()`/
+> `ScopeDependency.unmount()` переименованы в `onUnmount()`. Правило пакета
+> теперь без исключений: **присваиваемый колбэк — короткий глагол
+> (`dep.unmount`, `AsyncScope(unmount:)`), переопределяемый хук — `onX`**.
+> `DepHelper.unmount` поэтому не трогали.
+>
 > **Волна 3.** Три находки оказались одной ошибкой в трёх местах: равенство
 > спутали с тождеством или с актуальностью. `ScopeNotifier.value` переносит
 > подписку по `identical`, а не по `==` (две равные модели — два списка

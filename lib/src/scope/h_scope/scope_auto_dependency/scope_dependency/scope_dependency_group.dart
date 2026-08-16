@@ -41,12 +41,12 @@ abstract base class ScopeDependencyGroup with ScopeDependencyMixin {
   /// siblings mounted -- each of them has its own subscription to drop. The
   /// first failure is passed on once the walk is over.
   @override
-  void unmount() {
+  void onUnmount() {
     AsyncError? failure;
 
     for (final dependency in _dependencies) {
       try {
-        dependency.unmount();
+        dependency.onUnmount();
         // ignore: avoid_catching_errors
       } on Object catch (error, stackTrace) {
         failure ??= AsyncError(error, stackTrace);

@@ -175,7 +175,7 @@ abstract base class ScopeElementBase<
     // The state lets go of its own first, the dependencies after it, in the
     // same order as the asynchronous half below.
     super.onUnmount();
-    _dependencies?.unmount();
+    _dependencies?.onUnmount();
   }
 
   @override

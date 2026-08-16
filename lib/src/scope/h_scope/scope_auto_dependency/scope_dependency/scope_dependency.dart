@@ -36,8 +36,11 @@ abstract interface class ScopeDependency {
   /// Runs [init] and keeps [state] in step with how it went.
   Stream<String> runInit();
 
-  /// Called synchronously when the scope leaves the tree.
-  void unmount();
+  /// Lets go of whatever cannot wait for [dispose].
+  ///
+  /// Runs exactly once, always before [dispose], whether the scope was removed
+  /// from the tree or closed with `close()`.
+  void onUnmount();
 
   /// Releases this dependency, yielding the path of each step.
   Stream<String> dispose();

@@ -32,6 +32,15 @@
   release is now guarded on its own, the walk finishes, and the first failure is
   passed upwards afterwards; every failure is recorded on the dependency it
   belongs to, as before.
+* [breaking changes] `State.dispose` is sealed on `LiteScopeState` and
+  `ScopeState`. It belongs to Flutter and lands on either side of a scope's
+  teardown depending on how the scope went, so nothing a scope has to let go of
+  can be released on that schedule. Overriding it is now an analyzer warning
+  that says so; the teardown goes in `onUnmount()` and `disposeAsync()`.
+* [breaking changes] `ScopeDependencies.unmount` and `ScopeDependency.unmount`
+  are now `onUnmount`, so that every hook a scope calls to drop what must stop
+  reaching it goes by one name. The assignable callbacks keep the short verb
+  they always had: `dep.unmount`, and `AsyncScope(unmount:)`.
 * [breaking changes] The synchronous half of a teardown is now a step of the
   teardown rather than a tail of `Element.unmount`, and `LiteScopeState` /
   `ScopeState` gained `onUnmount()` to put it in. A scope leaves in one of two

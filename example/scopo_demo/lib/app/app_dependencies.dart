@@ -79,7 +79,7 @@ final class AppDependencies implements ScopeDependencies {
   }
 
   @override
-  void unmount() {}
+  void onUnmount() {}
 
   @override
   Future<void> dispose() async {
