@@ -862,10 +862,13 @@ void main() {
 
       final element = _scopeOf(tester);
 
+      _CloseScopeState lookUp() =>
+          LiteScopeCore.of<_CloseScope, _CloseScopeElement, _CloseScopeState>(
+            element,
+          );
+
       expect(
-        () =>
-            LiteScopeCore.of<_CloseScope, _CloseScopeElement, _CloseScopeState>(
-                element),
+        lookUp,
         throwsA(
           isA<StateError>()
               .having(

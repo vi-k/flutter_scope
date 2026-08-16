@@ -1,6 +1,6 @@
 # Scope
 
-> Перевод `doc/full_scope.md` (blob `8eeebc64673cf379593046bdc6805096cdf4269a`).
+> Перевод `doc/full_scope.md` (blob `47d6d10d16777f235dd0eedf043682978aab45c1`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 `Scope` — основной строительный блок пакета: виджет, который владеет контейнером
@@ -76,7 +76,7 @@ final class AppDependencies implements ScopeDependencies {
 
 `ScopeDependenciesExtension.asStream` сокращает вырожденный случай — контейнер,
 которому асинхронная работа не нужна вовсе:
-`AppDependencies().asStream<String, AppDependencies>()` выдаёт единственный
+`AppDependencies().asStream<String>()` выдаёт единственный
 `ScopeReady`.
 
 У трёх функциональных типов, из которых собран скоуп, есть имена — на случай,

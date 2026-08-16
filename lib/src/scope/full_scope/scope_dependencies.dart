@@ -19,9 +19,15 @@ abstract interface class ScopeDependencies {
 /// Extension on [ScopeDependencies] to provide streaming capabilities.
 ///
 /// {@category Scope}
-extension ScopeDependenciesExtension on ScopeDependencies {
+extension ScopeDependenciesExtension<T extends ScopeDependencies> on T {
   /// Converts the dependencies into a stream emitting a [ScopeReady] state.
-  Stream<ScopeInitState<P, T>>
-      asStream<P extends Object, T extends ScopeDependencies>() =>
-          Stream.value(ScopeReady(this as T));
+  ///
+  /// The container type is the type of the receiver, so it is inferred rather
+  /// than written out. Named separately, as it used to be, it was a downcast
+  /// the compiler could not check: `AppDependencies().asStream<String,
+  /// OldDependencies>()` compiled and failed on the first frame, and the
+  /// shortest way to build an initialization stream was the one that moved a
+  /// type error from compilation to run time.
+  Stream<ScopeInitState<P, T>> asStream<P extends Object>() =>
+      Stream.value(ScopeReady(this));
 }

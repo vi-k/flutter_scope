@@ -75,7 +75,7 @@ final class AppDependencies implements ScopeDependencies {
 
 `ScopeDependenciesExtension.asStream` shortens the degenerate case of a
 container that needs no asynchronous work at all:
-`AppDependencies().asStream<String, AppDependencies>()` yields a single
+`AppDependencies().asStream<String>()` yields a single
 `ScopeReady`.
 
 The three function types the scope is built from are named as well, for anyone

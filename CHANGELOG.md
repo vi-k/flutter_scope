@@ -44,6 +44,14 @@
   still reported as before. The state is applied outside the frame, because
   such a failure is raised before the first `await` and therefore inside the
   build that started the initialization.
+* [breaking changes] `ScopeDependenciesExtension.asStream` takes one type
+  argument instead of two: the container type is the type of the receiver and
+  is inferred, so `AppDependencies().asStream<String>()` replaces
+  `AppDependencies().asStream<String, AppDependencies>()`. Written out, it was
+  a downcast the compiler could not check — a container renamed in a refactor
+  left the old name in the call, which still compiled and failed on the first
+  frame. The shortest way to build an initialization stream was the one that
+  moved a type error from compilation to run time.
 * `of` and `select` on `LiteScope` and `Scope` say which scope they found and
   what state it is in when there is no state to answer with. The state is
   created in the ready branch, so any other state — waiting for a `scopeKey`,
