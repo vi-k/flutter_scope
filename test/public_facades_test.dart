@@ -1,0 +1,317 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:scopo/scopo.dart';
+
+import 'utils/settle.dart';
+
+/// The facades a user actually extends, which nothing in the suite had built.
+///
+/// The behaviour lives one layer below, in the `*Core` classes, and that is
+/// where the suite works. What is left untried in between is the wiring: the
+/// facade element forwards every hook and every parameter to the widget, one
+/// line each, and a line that forwards the wrong thing — or forwards nothing —
+/// reads exactly like its neighbours.
+void main() {
+  group('LiteScope', () {
+    testWidgets('drives the hooks of the widget and of the state it makes',
+        (tester) async {
+      final log = <String>[];
+
+      await tester.pumpWidget(_wrap(_Lite(log: log)));
+      await tester.pumpAndSettle();
+
+      expect(
+        log,
+        [
+          'buildOnWaiting',
+          'init',
+          'buildOnInitializing: half',
+          'state.initAsync',
+          'state.build',
+        ],
+        reason: 'every one of these is a separate line of forwarding in the '
+            'facade element, and the branches are shown in the order the '
+            'states arrive -- the waiting branch first of all, because the '
+            'asynchronous phase starts only after the build that would show '
+            'it',
+      );
+
+      await tester.pumpWidget(_wrap(const SizedBox.shrink()));
+      await settle(tester, until: () => log.contains('state.disposeAsync'));
+
+      expect(
+        log.sublist(5),
+        ['state.onUnmount', 'state.disposeAsync'],
+        reason: 'the teardown reaches the state through the facade too, and '
+            'the synchronous half comes first',
+      );
+    });
+
+    testWidgets('wraps the ready branch with what wrapState returns',
+        (tester) async {
+      final log = <String>[];
+
+      await tester.pumpWidget(_wrap(_Lite(log: log)));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byType(_Wrapper),
+        findsOneWidget,
+        reason: 'wrapState is the documented way to put a widget around the '
+            'ready branch alone, and a facade that never calls it leaves a '
+            'public hook that quietly does nothing',
+      );
+      expect(
+        find.descendant(of: find.byType(_Wrapper), matching: find.text('body')),
+        findsOneWidget,
+        reason: 'and what it wraps is the state, not something beside it',
+      );
+    });
+
+    testWidgets('is found from below, by state and by parameters',
+        (tester) async {
+      final seen = <String, Object?>{};
+      final log = <String>[];
+
+      await tester.pumpWidget(
+        _wrap(
+          _Lite(
+            log: log,
+            label: 'named',
+            body: Builder(
+              builder: (context) {
+                seen['of'] = LiteScope.of<_Lite, _LiteState>(context).answer;
+                seen['maybeOf'] =
+                    LiteScope.maybeOf<_Lite, _LiteState>(context)?.answer;
+                seen['paramsOf'] = LiteScope.paramsOf<_Lite, _LiteState>(
+                  context,
+                  listen: false,
+                ).label;
+                seen['select'] = LiteScope.select<_Lite, _LiteState, String>(
+                  context,
+                  (scope) => scope.answer,
+                );
+                seen['selectParam'] =
+                    LiteScope.selectParam<_Lite, _LiteState, String>(
+                  context,
+                  (widget) => widget.label,
+                );
+
+                return const SizedBox.shrink();
+              },
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(seen, {
+        'of': 'answer',
+        'maybeOf': 'answer',
+        'paramsOf': 'named',
+        'select': 'answer',
+        'selectParam': 'named',
+      });
+    });
+
+    testWidgets('answers null from maybeOf where there is no such scope',
+        (tester) async {
+      _LiteState? seen;
+      var asked = false;
+
+      await tester.pumpWidget(
+        _wrap(
+          Builder(
+            builder: (context) {
+              asked = true;
+              seen = LiteScope.maybeOf<_Lite, _LiteState>(context);
+
+              return const SizedBox.shrink();
+            },
+          ),
+        ),
+      );
+
+      expect(asked, isTrue, reason: 'the builder did run');
+      expect(seen, isNull);
+    });
+  });
+
+  group('ScopeWidgetBase', () {
+    testWidgets('hands its own parameters down', (tester) async {
+      String? seen;
+
+      await tester.pumpWidget(
+        _wrap(
+          _Params(
+            value: 'above',
+            child: Builder(
+              builder: (context) {
+                seen =
+                    ScopeWidgetBase.of<_Params>(context, listen: false).value;
+
+                return const SizedBox.shrink();
+              },
+            ),
+          ),
+        ),
+      );
+
+      expect(seen, 'above');
+    });
+
+    testWidgets('rebuilds a dependent when the parameter it selected changes',
+        (tester) async {
+      _Reader.builds = 0;
+
+      // The dependent is `const`, so it is the same widget on every pump:
+      // anything that rebuilds it came from the scope rather than from a
+      // parent handing it a new instance of itself.
+      Widget build(String value, String other) => _wrap(
+            _Params(
+              value: value,
+              other: other,
+              child: const _Reader(),
+            ),
+          );
+
+      await tester.pumpWidget(build('a', 'x'));
+      expect(_Reader.builds, 1);
+
+      await tester.pumpWidget(build('a', 'y'));
+      expect(
+        _Reader.builds,
+        1,
+        reason: 'the parameter the dependent selected did not change',
+      );
+
+      await tester.pumpWidget(build('b', 'y'));
+      expect(_Reader.builds, 2, reason: 'and this one did');
+    });
+  });
+}
+
+Widget _wrap(Widget child) => Directionality(
+      textDirection: TextDirection.ltr,
+      child: child,
+    );
+
+/// A scope built on the public facade, reporting every hook it is asked for.
+final class _Lite extends LiteScope<_Lite, _LiteState> {
+  final List<String> log;
+  final String label;
+  final Widget body;
+
+  const _Lite({
+    required this.log,
+    this.label = 'lite',
+    this.body = const Text('body'),
+  }) : super(child: const SizedBox.shrink());
+
+  @override
+  Stream<AsyncScopeInitState> init() async* {
+    log.add('init');
+    yield AsyncScopeProgress('half');
+    yield AsyncScopeReady();
+  }
+
+  @override
+  Widget? buildOnWaiting(BuildContext context) {
+    log.add('buildOnWaiting');
+
+    return const Text('waiting');
+  }
+
+  @override
+  Widget buildOnInitializing(BuildContext context, Object? progress) {
+    log.add('buildOnInitializing: $progress');
+
+    return Text('initializing: $progress');
+  }
+
+  @override
+  Widget buildOnError(
+    BuildContext context,
+    Object error,
+    StackTrace stackTrace,
+    Object? progress,
+  ) =>
+      Text('error: $error');
+
+  @override
+  Widget wrapState(BuildContext context, Widget child) =>
+      _Wrapper(child: child);
+
+  @override
+  _LiteState createState() => _LiteState();
+}
+
+final class _LiteState extends LiteScopeState<_Lite, _LiteState> {
+  /// What a lookup from below reads off the state.
+  String get answer => 'answer';
+
+  @override
+  FutureOr<void> initAsync() {
+    params.log.add('state.initAsync');
+  }
+
+  @override
+  void onUnmount() {
+    super.onUnmount();
+    params.log.add('state.onUnmount');
+  }
+
+  @override
+  FutureOr<void> disposeAsync() {
+    params.log.add('state.disposeAsync');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    params.log.add('state.build');
+
+    return params.body;
+  }
+}
+
+/// Marks what [_Lite.wrapState] put around the ready branch.
+final class _Wrapper extends StatelessWidget {
+  final Widget child;
+
+  const _Wrapper({required this.child});
+
+  @override
+  Widget build(BuildContext context) => child;
+}
+
+/// Subscribes to one parameter of [_Params] and counts what it cost.
+final class _Reader extends StatelessWidget {
+  static int builds = 0;
+
+  const _Reader();
+
+  @override
+  Widget build(BuildContext context) {
+    builds++;
+    ScopeWidgetBase.select<_Params, String>(context, (widget) => widget.value);
+
+    return const SizedBox.shrink();
+  }
+}
+
+/// A scope over its own parameters, on the public facade.
+final class _Params extends ScopeWidgetBase<_Params> {
+  final String value;
+  final String other;
+
+  const _Params({
+    required this.value,
+    required super.child,
+    this.other = '',
+  });
+
+  @override
+  Widget build(BuildContext context) => child;
+}

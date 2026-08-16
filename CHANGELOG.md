@@ -141,6 +141,10 @@
   and is no longer marked `@visibleForTesting` — an annotation that read as
   "use this from tests" where the meaning is "there is nothing here to use".
   A scope state has no widget of its own; `params` is the scope widget.
+* Fix `LiteScope.wrapState` doing nothing. The hook is documented as the way
+  to put a widget around the ready branch alone, and `Scope` has always
+  honoured it, but the element behind `LiteScope` never called it: whatever it
+  returned was thrown away, and the ready branch was built unwrapped.
 * A notification no longer rebuilds the widgets of the subtree it is not
   rebuilding. "Skips rebuilding the whole subtree" was true of the elements and
   not of the widgets: `ComponentElement.performRebuild` calls `build()`

@@ -236,6 +236,9 @@ final class _LiteScopeElement<W extends LiteScope<W, S>,
   S createState() => widget.createState();
 
   @override
+  Widget wrapState(Widget child) => widget.wrapState(this, child);
+
+  @override
   Widget? buildOnClosing() => widget.buildOnClosing(this);
 }
 

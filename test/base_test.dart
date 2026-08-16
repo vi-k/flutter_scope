@@ -244,7 +244,99 @@ void main() {
       );
     });
   });
+
+  // The invariant every dependency injection rests on, and the one thing the
+  // suite had never put two scopes of one type in a tree to check. It is not
+  // hypothetical either: `close()` reads the element it was made for rather
+  // than looking one up precisely because a `wrapState` can nest a second
+  // scope of the same type around the state.
+  group('a scope shadowed by one of the same type', () {
+    testWidgets('is not what a lookup from below finds', (tester) async {
+      final seen = <String>[];
+
+      await tester.pumpWidget(
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: _Scope(
+            label: 'outer',
+            builder: (context) {
+              seen.add(_labelOf(context));
+
+              return _Scope(
+                label: 'inner',
+                builder: (context) {
+                  seen.add(_labelOf(context));
+
+                  return const SizedBox.shrink();
+                },
+              );
+            },
+          ),
+        ),
+      );
+
+      expect(
+        seen,
+        ['outer', 'inner'],
+        reason: 'each lookup answers the nearest scope above it, so the same '
+            'call reads a different scope on either side of the inner one',
+      );
+    });
+
+    testWidgets('does not wake the dependents of the one shadowing it',
+        (tester) async {
+      var builds = 0;
+
+      await tester.pumpWidget(
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: _Scope(
+            label: 'outer',
+            builder: (context) => _Scope(
+              label: 'inner',
+              builder: (context) {
+                builds++;
+                ScopeWidgetCore.select<_Scope, _ScopeElement, int>(
+                  context,
+                  (element) => element.value,
+                );
+
+                return const SizedBox.shrink();
+              },
+            ),
+          ),
+        ),
+      );
+      final scopes = tester
+          .elementList(find.byType(_Scope))
+          .cast<_ScopeElement>()
+          .toList();
+
+      expect(builds, 1);
+
+      scopes.first.bump();
+      await tester.pump();
+
+      expect(
+        builds,
+        1,
+        reason: 'the value that changed belongs to the shadowed scope, which '
+            'is not the one the dependent read',
+      );
+
+      scopes.last.bump();
+      await tester.pump();
+
+      expect(builds, 2, reason: 'the scope it did read is another matter');
+    });
+  });
 }
+
+/// The label of the nearest [_Scope] above [context].
+String _labelOf(BuildContext context) =>
+    ScopeWidgetCore.of<_Scope, _ScopeElement>(context, listen: false)
+        .widget
+        .label;
 
 final class _Host extends StatelessWidget {
   final WidgetBuilder? builder;
@@ -314,7 +406,10 @@ final class _SubscribesTooEarlyState extends State<_SubscribesTooEarly> {
 final class _Scope extends ScopeWidgetCore<_Scope, _ScopeElement> {
   final WidgetBuilder? builder;
 
-  const _Scope({this.builder});
+  /// Tells one scope from another when a tree holds two of them.
+  final String label;
+
+  const _Scope({this.builder, this.label = ''});
 
   @override
   _ScopeElement createScopeElement() => _ScopeElement(this);

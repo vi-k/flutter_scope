@@ -325,6 +325,93 @@ void main() {
     });
   });
 
+  // The family whose whole point is that the controller is released on every
+  // path. The path where `init()` failed and the release failed behind it is
+  // covered by its own suite; these two are the ordinary one -- a controller
+  // that was handed over, used, and then failed on its way out.
+  group('AsyncControllerScope', () {
+    testWidgets('releases its controller after a failing onUnmount',
+        (tester) async {
+      final controller = _Controller(failOnUnmount: true);
+
+      await tester.pumpWidget(_wrap(_Controlled(controller: controller)));
+      await tester.pumpAndSettle();
+
+      await tester.pumpWidget(_wrap(const SizedBox.shrink()));
+      await settle(tester, until: () => controller.calls.contains('dispose'));
+
+      expect(
+        tester.takeException(),
+        isA<StateError>(),
+        reason: 'the failure is still reported',
+      );
+      expect(
+        controller.calls,
+        ['init', 'onUnmount', 'dispose'],
+        reason: 'the hook is user code; releasing the controller behind it is '
+            'the whole promise of the family, and a synchronous half that '
+            'threw is no reason to break it',
+      );
+    });
+
+    // The other half: a release that fails is still a scope that has to give
+    // back what it was lent. `dispose()` is the last thing the controller is
+    // asked for, and the key is handed back after it.
+    testWidgets('releases its scopeKey after a failing controller dispose',
+        (tester) async {
+      final controller = _Controller(failOnDispose: true);
+      final disposed = <String>[];
+      final errors = <Object>[];
+
+      Widget build({required bool holder, required bool successor}) => _wrap(
+            Column(
+              children: [
+                if (holder)
+                  _Controlled(controller: controller, scopeKey: 'shared'),
+                if (successor)
+                  _Async(
+                    label: 'successor',
+                    scopeKey: 'shared',
+                    scopeKeyTimeout: const Duration(days: 1),
+                    disposed: disposed,
+                  ),
+              ],
+            ),
+          );
+
+      // See the `onWaitForChildrenTimeout` test: a disposal that re-throws
+      // does so on a discarded future.
+      await runZonedGuarded(
+        () async {
+          await tester.pumpWidget(build(holder: true, successor: false));
+          await tester.pumpAndSettle();
+
+          await tester.pumpWidget(build(holder: false, successor: false));
+          await settle(
+            tester,
+            until: () => controller.calls.contains('dispose'),
+          );
+        },
+        (error, stackTrace) => errors.add(error),
+      );
+
+      expect(
+        errors.single,
+        isA<StateError>(),
+        reason: 'the failure is still reported',
+      );
+
+      await tester.pumpWidget(build(holder: false, successor: true));
+      await settle(tester, until: () => _readyCount(tester) == 1);
+
+      expect(
+        _readyCount(tester),
+        1,
+        reason: 'the key came back even though the controller refused to go',
+      );
+    });
+  });
+
   group('Scope', () {
     // `unmount` on a dependency is the one hook that runs synchronously, in
     // the middle of the element leaving the tree. A failure there used to stop
@@ -533,6 +620,61 @@ final class _AsyncData extends AsyncDataScopeBase<_AsyncData, String> {
 
   @override
   Widget buildOnReady(BuildContext context, String data) => child;
+}
+
+/// A scope owning a controller, handed one made outside so the test can read
+/// what it was asked for.
+final class _Controlled
+    extends AsyncControllerScopeBase<_Controlled, _Controller> {
+  final _Controller controller;
+
+  const _Controlled({required this.controller, super.scopeKey})
+      : super(child: const SizedBox.shrink());
+
+  @override
+  _Controller createController(BuildContext context) => controller;
+
+  @override
+  Widget buildOnInitializing(BuildContext context) => const SizedBox.shrink();
+
+  @override
+  Widget buildOnError(
+    BuildContext context,
+    Object error,
+    StackTrace stackTrace,
+  ) =>
+      const SizedBox.shrink();
+
+  @override
+  Widget buildOnReady(BuildContext context, _Controller controller) => child;
+}
+
+/// A controller that records what it was asked for, and can refuse one step.
+final class _Controller extends ScopeController {
+  final calls = <String>[];
+  final bool failOnUnmount;
+  final bool failOnDispose;
+
+  _Controller({this.failOnUnmount = false, this.failOnDispose = false});
+
+  @override
+  Future<void> init() async => calls.add('init');
+
+  @override
+  void onUnmount() {
+    calls.add('onUnmount');
+    if (failOnUnmount) {
+      throw StateError('onUnmount failed');
+    }
+  }
+
+  @override
+  FutureOr<void> dispose() {
+    calls.add('dispose');
+    if (failOnDispose) {
+      throw StateError('dispose failed');
+    }
+  }
 }
 
 /// A scope with two dependencies, either of whose hooks can be made to fail.
