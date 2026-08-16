@@ -1,6 +1,6 @@
 # scopo
 
-> Перевод `README.md` (blob `2c4257e2177e290eafb9779756ca5193788f5239`).
+> Перевод `README.md` (blob `33aaacc909fda820072adc3645f617425bb0aeba`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 [![pub version](https://img.shields.io/pub/v/scopo)](https://pub.dev/packages/scopo)
@@ -74,7 +74,7 @@ final class AppDependencies implements ScopeDependencies {
 
   /// Called synchronously when the scope is unmounted.
   @override
-  void unmount() {}
+  void onUnmount() {}
 
   /// Called after the state has been disposed of. May be asynchronous.
   @override

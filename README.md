@@ -70,7 +70,7 @@ final class AppDependencies implements ScopeDependencies {
 
   /// Called synchronously when the scope is unmounted.
   @override
-  void unmount() {}
+  void onUnmount() {}
 
   /// Called after the state has been disposed of. May be asynchronous.
   @override

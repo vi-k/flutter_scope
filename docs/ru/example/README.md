@@ -1,17 +1,23 @@
-For a full tour of scopo, see
-[scopo_demo](https://github.com/vi-k/scopo/tree/main/example/scopo_demo) — 9
-interactive demos covering every scope family, nested scopes, `scopeKey`,
-deferred closing, and navigation nodes.
+# example
 
-For `NavigationNode` on its own — nested navigators, dialogs that belong to the
-screen, `onPop`, `isRoot`, and a system back you can press on a desktop — see
-[navigation_node](https://github.com/vi-k/scopo/tree/main/example/navigation_node),
-six lessons with a journal that shows what answered each press.
+> Перевод `example/README.md` (blob `aee8243001cc1fb8a95bee45012dbc2f83f43d70`).
+> Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
-The minimal example below demonstrates a simple counter app where
-`SharedPreferences` is initialized asynchronously before the UI is shown. It
-handles loading states and errors gracefully. Full source on GitHub:
-[minimal](https://github.com/vi-k/scopo/tree/main/example/minimal).
+Полный обзор scopo — в
+[scopo_demo](https://github.com/vi-k/scopo/tree/main/example/scopo_demo): 9
+интерактивных демонстраций, охватывающих все семейства скоупов, вложенные
+скоупы, `scopeKey`, отложенное закрытие и узлы навигации.
+
+Отдельно про `NavigationNode` — вложенные навигаторы, диалоги, принадлежащие
+экрану, `onPop`, `isRoot` и системный «назад», который можно нажать на
+десктопе, — в
+[navigation_node](https://github.com/vi-k/scopo/tree/main/example/navigation_node):
+шесть уроков с журналом, показывающим, что ответило на каждое нажатие.
+
+Минимальный пример ниже показывает простое приложение-счётчик, в котором
+`SharedPreferences` инициализируется асинхронно, до показа интерфейса.
+Состояния загрузки и ошибки обрабатываются аккуратно. Полный исходный код на
+GitHub: [minimal](https://github.com/vi-k/scopo/tree/main/example/minimal).
 
 ```dart
 import 'dart:io';
