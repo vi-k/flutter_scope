@@ -610,6 +610,75 @@ void main() {
         expect(tester.takeException(), isNull);
       },
     );
+
+    // The two tests above ask where the failure goes and what the teardown
+    // does with it. This one asks what the user sees, which is the half
+    // nobody was asking: a failure raised while the stream is being built
+    // never reached the model, so the scope stayed in `AsyncScopeWaiting` and
+    // went on showing its loading branch for good. Loud in the console,
+    // silent on screen.
+    testWidgets(
+      'a scope whose initialization fails synchronously shows its error branch',
+      (tester) async {
+        final errors = <Object>[];
+
+        await runZonedGuarded(
+          () async {
+            await tester.pumpWidget(
+              Directionality(
+                textDirection: TextDirection.ltr,
+                // No `AsyncScopeCoordinator` above a scope that asks for a
+                // `scopeKey`: the lookup throws, and it throws before the
+                // subscription exists. This is the likeliest way an
+                // initialization fails synchronously, and it is a mistake in
+                // the tree rather than in the work.
+                child: AsyncScope(
+                  scopeKey: 'k',
+                  init: (context) => Stream.value(AsyncScopeReady()),
+                  dispose: () {},
+                  initBuilder: (context, progress) => const Text('init'),
+                  errorBuilder: (context, error, stackTrace, progress) =>
+                      const Text('error'),
+                  builder: (context) => const Text('ready'),
+                ),
+              ),
+            );
+            await tester.pumpAndSettle();
+          },
+          (error, stackTrace) => errors.add(error),
+        );
+
+        expect(
+          find.text('error'),
+          findsOneWidget,
+          reason: 'the state table says a failure before the ready state '
+              'builds `buildOnError`, and this is such a failure',
+        );
+        expect(
+          find.text('init'),
+          findsNothing,
+          reason: 'the loading branch is not what a scope that will never '
+              'load should be left showing',
+        );
+        expect(
+          errors.single,
+          isA<FlutterError>(),
+          reason: 'and the failure is still reported, as it was',
+        );
+        expect(
+          errors.single.toString(),
+          contains('No `AsyncScopeCoordinator`'),
+        );
+
+        await tester.pumpWidget(
+          const Directionality(
+            textDirection: TextDirection.ltr,
+            child: SizedBox.shrink(),
+          ),
+        );
+        await _settle(tester, until: () => false);
+      },
+    );
   });
 
   // Both tests below cover the same defect: an event that arrives *after*

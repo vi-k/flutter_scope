@@ -637,9 +637,54 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
       // `_initSucceeded` stays false: nothing was initialized, so nothing is
       // disposed of either.
       _log.e('initialization failed', error: error, stackTrace: stackTrace);
+
+      // Settled before anything below is attempted. This future is discarded,
+      // so nothing retries and nothing else settles the completer, while
+      // `_performAsyncDispose` parks on it before it may unregister the scope
+      // from its parent: a failure on the way to the model would otherwise
+      // leave the whole teardown waiting for an initialization that is long
+      // over.
       if (!_initCompleter.isCompleted) {
         _initCompleter.complete();
       }
+
+      // The same state the stream's own failures land in, for the same
+      // reason. A failure raised here -- the coordinator lookup, an
+      // `initAsync()` that throws while the stream is being built -- is an
+      // initialization that failed before it was ready, which is what
+      // [AsyncScopeError] means and what `buildOnError` is for. Left out, as
+      // it was, the model stayed [AsyncScopeWaiting] and the scope went on
+      // showing its loading branch for good: loud in the console, where the
+      // re-throw below puts it, and silent on screen, which is the half the
+      // user sees.
+      //
+      // Outside the frame, and that is not a precaution: the failures this
+      // catch exists for are raised *before the first `await`*, so it runs
+      // inside the very `performRebuild` that started the initialization.
+      // Updating the model there marks the element dirty in the middle of its
+      // own build, which Flutter refuses -- and the refusal would replace the
+      // failure being reported with a second, derived one.
+      //
+      // The callback is guarded like every other deferred write to the model:
+      // by the time it runs the scope may be gone, and a scope closed with
+      // `close()` stays mounted while its notifier is disposed of.
+      SchedulerBinding.instance.runOutsideFrame(() {
+        if (!mounted || _isDisposing) {
+          return;
+        }
+
+        _model.update(
+          AsyncScopeError(
+            error,
+            stackTrace,
+            progress: switch (_model.state) {
+              AsyncScopeProgress(:final progress) => progress,
+              _ => null,
+            },
+          ),
+        );
+      });
+
       rethrow;
     }
 

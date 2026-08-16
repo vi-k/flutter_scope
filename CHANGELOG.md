@@ -32,6 +32,18 @@
   release is now guarded on its own, the walk finishes, and the first failure is
   passed upwards afterwards; every failure is recorded on the dependency it
   belongs to, as before.
+* Fix an initialization that fails synchronously leaving the scope on its
+  loading branch for good. `AsyncScopeError` was reached only from the
+  stream's own failures, so a throw raised while the stream was still being
+  built — the `AsyncScopeCoordinator` lookup of a scope that asks for a
+  `scopeKey` and has no coordinator above it, or an `initAsync` that is not a
+  generator and throws — never reached the model: the scope stayed in
+  `AsyncScopeWaiting` and went on showing `buildOnInitializing`, which for a
+  missing coordinator is the commonest mistake in the tree. It now shows
+  `buildOnError`, as the state table always said it would, and the failure is
+  still reported as before. The state is applied outside the frame, because
+  such a failure is raised before the first `await` and therefore inside the
+  build that started the initialization.
 * Fix a failing `ScopeState.onUnmount` taking the synchronous teardown of the
   dependencies with it. The state let go of its own first and the dependencies
   after it, unguarded, so a hook that threw meant no dependency ever heard
