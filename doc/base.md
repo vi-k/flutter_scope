@@ -1,8 +1,8 @@
 # base
 
 Every scope family of this package — `ScopeWidgetBase`, `ScopeModel`,
-`ScopeNotifier`, `AsyncScope`, `AsyncDataScope`, `LiteScope` and `Scope` —
-stands on the same three types. Together they say what a scope is to the widget
+`ScopeNotifier`, `AsyncScope`, `AsyncDataScope`, `AsyncControllerScope`,
+`LiteScope` and `Scope` — stands on the same three types. Together they say what a scope is to the widget
 tree: an `InheritedWidget` that can be found from below, an element that owns
 whatever the scope holds, and one lookup protocol shared by all of them.
 
@@ -206,6 +206,7 @@ scope of a different family.
 | `ScopeWidget` | the element base every family extends: subscriptions, notify-only rebuilds |
 | `ScopeModel`, `ScopeNotifier` | scopes that own a plain object or a `Listenable` |
 | `AsyncScope`, `AsyncDataScope` | asynchronous initialization and disposal |
+| `AsyncControllerScope` | a scope whose whole content is a controller with a lifecycle of its own |
 | `LiteScope` | a scope without a dependency container |
 | `Scope` | the full family: dependencies, state, and the four build branches |
 | `debug` | logging, timeouts and what a `tag` looks like in the output |

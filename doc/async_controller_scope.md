@@ -9,7 +9,7 @@ has to be *shown*.
 
 ```dart
 AsyncControllerScope<PlayerController>(
-  create: (context) => PlayerController(api: context.read<Api>()),
+  create: (context) => PlayerController(api: ScopeModel.of<Api>(context, listen: false)),
   initBuilder: (context) => const SizedBox.shrink(),
   errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
   builder: (context, controller) => const PlayerView(),
@@ -25,7 +25,7 @@ final class Player extends AsyncControllerScopeBase<Player, PlayerController> {
 
   @override
   PlayerController createController(BuildContext context) =>
-      PlayerController(api: context.read<Api>());
+      PlayerController(api: ScopeModel.of<Api>(context, listen: false));
 
   @override
   Widget buildOnInitializing(BuildContext context) => const SizedBox.shrink();

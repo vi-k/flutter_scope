@@ -94,8 +94,8 @@ releases whatever the old one owned.
 ## State models
 
 Four types in this family exist for scopes whose state is a single immutable
-value that changes over time — `AsyncScope` is built on them, and a scope of
-your own can be:
+value that changes over time. `AsyncScope` is built on the first three; the
+fourth is offered for a family of your own:
 
 | type | what it is |
 | --- | --- |
@@ -124,12 +124,18 @@ is a value type and repeated equal updates are common.
 `state`, `addListener` and `removeListener` and nothing else. Hand that to the
 subtree when the state must be readable but not settable from below.
 
-The error-carrying pair is the interesting one. `setError` stores the error with
-its stack trace, `hasError` reports it — and reading `state` afterwards
-**rethrows** that error with its original stack trace instead of returning a
-value. A builder that reads `state` therefore fails loudly on a scope that has
-failed, rather than rendering a stale value, which is why the asynchronous
-families check `hasError` before touching `state`.
+The error-carrying pair is the interesting one, and nothing in the package
+uses it. `setError` stores the error with its stack trace, `hasError` reports
+it — and reading `state` afterwards **rethrows** that error with its original
+stack trace instead of returning a value, so a builder that reads `state`
+fails loudly on a scope that has failed rather than rendering a stale value.
+
+That is not how the asynchronous families model a failure. They hold an
+ordinary `ScopeStateNotifier` and put the failure *in* the state, as an
+`AsyncScopeError` beside `AsyncScopeWaiting`, `AsyncScopeProgress` and
+`AsyncScopeReady`: reading `AsyncScope.of(context).state` never throws, and
+`hasError` is derived from what the state is. Both shapes work; which one to
+pick depends on whether a failed scope still has something to show.
 
 ## Where to go next
 
@@ -138,4 +144,4 @@ families check `hasError` before touching `state`.
 | `ScopeModel` | the family this one extends: `create`, `dispose`, `.value`, lifetime |
 | `ScopeWidget` | `notifyDependents` and why it skips the subtree |
 | `base` | `of`, `select`, `listen` |
-| `AsyncScope` | a family built on `ScopeStateWithErrorNotifier` |
+| `AsyncScope` | a family built on `ScopeStateNotifier`, with the failure inside the state |

@@ -376,7 +376,7 @@ final class Player extends AsyncControllerScopeBase<Player, PlayerController> {
 
   @override
   PlayerController createController(BuildContext context) =>
-      PlayerController(api: context.read<Api>());
+      PlayerController(api: ScopeModel.of<Api>(context, listen: false));
 
   @override
   Widget buildOnInitializing(BuildContext context) => const SizedBox.shrink();
@@ -561,6 +561,7 @@ things happen in, the trade-offs, and the traps.
 | [ScopeNotifier](https://pub.dev/documentation/scopo/latest/topics/ScopeNotifier-topic.html) | owning a `Listenable` |
 | [AsyncScope](https://pub.dev/documentation/scopo/latest/topics/AsyncScope-topic.html) | the asynchronous lifecycle, `scopeKey`, the coordinator |
 | [AsyncDataScope](https://pub.dev/documentation/scopo/latest/topics/AsyncDataScope-topic.html) | the same, producing a value |
+| [AsyncControllerScope](https://pub.dev/documentation/scopo/latest/topics/AsyncControllerScope-topic.html) | the same, where that value is a controller with a lifecycle of its own |
 | [LiteScope](https://pub.dev/documentation/scopo/latest/topics/LiteScope-topic.html) | a state class with that lifecycle, and `close()` |
 | [Scope](https://pub.dev/documentation/scopo/latest/topics/Scope-topic.html) | the full family: dependencies, state, four branches |
 | [debug](https://pub.dev/documentation/scopo/latest/topics/debug-topic.html) | logging, timeouts, and the test setup |

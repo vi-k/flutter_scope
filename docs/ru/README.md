@@ -1,6 +1,6 @@
 # scopo
 
-> Перевод `README.md` (blob `33aaacc909fda820072adc3645f617425bb0aeba`).
+> Перевод `README.md` (blob `d70b5a2337cd0b6eaef8d629225db2195233a0ce`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 [![pub version](https://img.shields.io/pub/v/scopo)](https://pub.dev/packages/scopo)
@@ -382,7 +382,7 @@ final class Player extends AsyncControllerScopeBase<Player, PlayerController> {
 
   @override
   PlayerController createController(BuildContext context) =>
-      PlayerController(api: context.read<Api>());
+      PlayerController(api: ScopeModel.of<Api>(context, listen: false));
 
   @override
   Widget buildOnInitializing(BuildContext context) => const SizedBox.shrink();
@@ -569,6 +569,7 @@ void main() {
 | [ScopeNotifier](https://pub.dev/documentation/scopo/latest/topics/ScopeNotifier-topic.html) | владения `Listenable` |
 | [AsyncScope](https://pub.dev/documentation/scopo/latest/topics/AsyncScope-topic.html) | асинхронного жизненного цикла, `scopeKey`, координатора |
 | [AsyncDataScope](https://pub.dev/documentation/scopo/latest/topics/AsyncDataScope-topic.html) | того же, но с производимым значением |
+| [AsyncControllerScope](https://pub.dev/documentation/scopo/latest/topics/AsyncControllerScope-topic.html) | то же, где это значение — контроллер с собственным жизненным циклом |
 | [LiteScope](https://pub.dev/documentation/scopo/latest/topics/LiteScope-topic.html) | класса состояния с этим циклом и `close()` |
 | [Scope](https://pub.dev/documentation/scopo/latest/topics/Scope-topic.html) | полного семейства: зависимости, состояние, четыре ветки |
 | [debug](https://pub.dev/documentation/scopo/latest/topics/debug-topic.html) | журнала, таймаутов и настройки для тестов |

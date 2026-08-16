@@ -17,7 +17,8 @@ One scope is three types:
    `initState`.
 
 The lighter families (`ScopeWidgetBase`, `ScopeModel`, `ScopeNotifier`,
-`AsyncScope`, `AsyncDataScope`, `LiteScope`) drop one part or another. `Scope` is
+`AsyncScope`, `AsyncDataScope`, `AsyncControllerScope`, `LiteScope`) drop one
+part or another. `Scope` is
 the full set.
 
 ## The initialization branch

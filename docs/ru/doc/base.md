@@ -1,11 +1,11 @@
 # base
 
-> Перевод `doc/base.md` (blob `0f067a2052db554c86357fc4387c4ad8ba468f06`).
+> Перевод `doc/base.md` (blob `a0e523ad1de2ee4a9855726205186057a8962ba5`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 Каждое семейство скоупов этого пакета — `ScopeWidgetBase`, `ScopeModel`,
-`ScopeNotifier`, `AsyncScope`, `AsyncDataScope`, `LiteScope` и `Scope` — стоит
-на одних и тех же трёх типах. Вместе они говорят, что такое скоуп для дерева
+`ScopeNotifier`, `AsyncScope`, `AsyncDataScope`, `AsyncControllerScope`,
+`LiteScope` и `Scope` — стоит на одних и тех же трёх типах. Вместе они говорят, что такое скоуп для дерева
 виджетов: `InheritedWidget`, который можно найти снизу, элемент, владеющий тем,
 что скоуп держит, и один протокол поиска, общий для всех.
 
@@ -206,6 +206,7 @@ Exception: The element of ScopeModel<Counter> is not ScopeModelContext<ScopeMode
 | `ScopeWidget` | базовый элемент всех семейств: подписки, перестроение-уведомление |
 | `ScopeModel`, `ScopeNotifier` | скоупы, владеющие обычным объектом или `Listenable` |
 | `AsyncScope`, `AsyncDataScope` | асинхронные инициализация и утилизация |
+| `AsyncControllerScope` | скоуп, всё содержимое которого — контроллер с собственным жизненным циклом |
 | `LiteScope` | скоуп без контейнера зависимостей |
 | `Scope` | полное семейство: зависимости, состояние и четыре ветки сборки |
 | `debug` | журнал, таймауты и как выглядит `tag` в выводе |
