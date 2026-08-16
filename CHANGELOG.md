@@ -43,6 +43,10 @@
   and an empty stack — which is why the node kept the first one and the new key
   simply never resolved. An assertion says so, and points at `Widget.key` and
   at the `GlobalKey()` written inside `build` that usually causes it.
+* `ScopeNotifier.value` takes a `tag`. It was the one constructor in the family
+  without one, so a scope over a listenable somebody else owns had no name in
+  the log — and that is exactly where two scopes of the same type stand side by
+  side over two different models.
 * [breaking changes] `State.dispose` is sealed on `LiteScopeState` and
   `ScopeState`. It belongs to Flutter and lands on either side of a scope's
   teardown depending on how the scope went, so nothing a scope has to let go of

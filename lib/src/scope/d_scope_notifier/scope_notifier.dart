@@ -21,6 +21,7 @@ final class ScopeNotifier<M extends Listenable>
   /// it.
   const ScopeNotifier.value({
     super.key,
+    super.tag,
     required super.value,
     required this.builder,
   }) : super.value();

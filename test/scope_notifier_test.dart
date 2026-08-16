@@ -201,6 +201,32 @@ void main() {
       expect(created.disposeCount, 1);
     });
 
+    // A scope over somebody else's model needs a name in the log as much as
+    // one that owns it: `.value` is exactly where two scopes of the same type
+    // stand side by side over two different models.
+    test('names a .value scope in diagnostics instead of its hash', () {
+      final model = ValueNotifier<int>(0);
+      addTearDown(model.dispose);
+
+      final tagged = ScopeNotifier<ValueNotifier<int>>.value(
+        tag: 'auth',
+        value: model,
+        builder: (context) => const SizedBox.shrink(),
+      );
+      final plain = ScopeNotifier<ValueNotifier<int>>.value(
+        value: model,
+        builder: (context) => const SizedBox.shrink(),
+      );
+
+      expect(tagged.toStringShort(), 'ScopeNotifier<ValueNotifier<int>>(auth)');
+      expect(plain.toStringShort(), 'ScopeNotifier<ValueNotifier<int>>');
+      expect(
+        tagged.toStringShort(showHashCode: true),
+        'ScopeNotifier<ValueNotifier<int>>(auth)',
+        reason: 'a tag is more use than a hash, so it wins',
+      );
+    });
+
     testWidgets(
       'stops listening to a model it was given once it leaves the tree',
       (tester) async {
