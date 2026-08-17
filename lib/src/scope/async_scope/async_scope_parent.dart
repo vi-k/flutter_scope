@@ -7,6 +7,16 @@ part of '../scope.dart';
 /// registers with. A scope with neither above it registers nowhere and nobody
 /// waits for it.
 ///
+/// The mixin sits on the element, and the elements of the built-in families
+/// are private, so [hasChildren], [childrenCount] and [waitForChildren] are
+/// reachable from a scope of your own — a family built on [AsyncScopeCore],
+/// reading them on `this` — rather than from a subtree looking upwards.
+/// [AsyncScope.of] and its siblings hand back an [AsyncScopeContext], which
+/// carries the state of the scope and none of these. From a subtree, the wait
+/// to ask for is [AsyncScopeCoordinator.waitForChildren], which awaits the
+/// scopes registered with the nearest coordinator rather than the children of
+/// one particular scope.
+///
 /// {@category AsyncScope}
 mixin AsyncScopeParent on Diagnosticable {
   final _childRegistry = ChildRegistry();

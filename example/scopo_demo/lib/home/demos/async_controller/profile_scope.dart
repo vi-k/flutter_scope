@@ -40,7 +40,9 @@ final class ProfileController extends ScopeController {
     // The scope may have gone while this was suspended: `onUnmount` has then
     // already run, and nothing here should reach the outside world any more.
     if (!mounted) {
-      console.log(debugSource, '$debugName: init returned to a scope that is '
+      console.log(
+          debugSource,
+          '$debugName: init returned to a scope that is '
           'gone; taking nothing');
 
       return;

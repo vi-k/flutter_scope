@@ -304,10 +304,28 @@ it — a parent scope if there is one, an `AsyncScopeCoordinator` otherwise —
 and that is what step 5 above waits for. The mixin exposes what it knows:
 
 ```dart
-scope.hasChildren;    // bool
-scope.childrenCount;  // int
-await scope.waitForChildren(timeout: …, onTimeout: …);
+hasChildren;    // bool
+childrenCount;  // int
+await waitForChildren(timeout: …, onTimeout: …);
 ```
+
+Written without a receiver on purpose: **the mixin sits on the element**, and
+the elements of the five built-in families are private. So those three are for
+a scope of your own — a family built on `AsyncScopeCore`, reading them on
+`this` — and not for a subtree looking upwards. `AsyncScope.of(context, listen:
+false)` and its siblings hand back an `AsyncScopeContext`, which carries the
+state of the scope and none of this.
+
+From a subtree, the wait to ask for is the coordinator's:
+
+```dart
+await AsyncScopeCoordinator.waitForChildren(context);
+```
+
+It waits for the scopes registered with the nearest coordinator — the ones with
+no parent scope above them — and not for the children of one particular scope.
+Waiting for those, from outside the scope that has them, is not something the
+built-in families offer.
 
 `waitForChildren` awaits the children registered **at the moment of the call**.
 A child that registers while the wait is running is not awaited by it, and is

@@ -12,8 +12,6 @@ dependencies:
   equatable: ^2.0.7
   flutter:
     sdk: flutter
-  flutter_markdown_plus: ^1.0.5
-  flutter_syntax_view: ^4.1.7
   scopo:
     path: ../..
   shared_preferences: ^2.5.3

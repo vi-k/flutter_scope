@@ -274,6 +274,15 @@
   teardown is, and giving up is reported rather than passed over; a release that
   fails after it was abandoned is reported too. The `AsyncScope` topic now says
   what an `await` in a hand-written guard costs when it cannot finish.
+* The `AsyncScope` topic showed `hasChildren`, `childrenCount` and
+  `waitForChildren` on a `scope` a reader has no way of getting hold of: the
+  mixin that carries them sits on the element, and the elements of the five
+  built-in families are private, while `AsyncScope.of` hands back an
+  `AsyncScopeContext` that has none of them. The topic and the dartdoc of
+  `AsyncScopeParent` now say who those three are for — a family of your own,
+  reading them on `this` — and what a subtree asks instead:
+  `AsyncScopeCoordinator.waitForChildren`, which awaits the scopes registered
+  with the nearest coordinator rather than the children of one scope.
 * **Behaviour change:** `ScopeStateWithErrorNotifier.update` now puts down a
   failure the model was holding. `_error` used to be set once and never
   cleared, while the inherited `update` went through as usual: it replaced the

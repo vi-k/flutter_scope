@@ -175,7 +175,9 @@ the scope guarantees is the `onUnmount()`/`disposeAsync()` pair rather than
 
 A `LiteScope` is an `AsyncScopeParent` like every asynchronous scope: the
 scopes below it register with it, and it waits for them before disposing of
-itself.
+itself. Asking for that wait from a subtree is
+`AsyncScopeCoordinator.waitForChildren` — the mixin itself sits on the element,
+which is private here; see the `AsyncScope` topic.
 
 ## Where to go next
 

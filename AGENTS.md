@@ -147,8 +147,9 @@ fvm flutter clean && fvm flutter pub get
 `example/navigation_node` свои `pubspec`, при
 обновлении зависимостей их обновляют отдельно; корневой `pubspec.lock` в
 `.gitignore`, локи примеров закоммичены и пересозданы закреплённым тулчейном.
-`dart format` на 6 файлах `example/scopo_demo` расходится с форматтером — это
-известная проблема, см. `docs/handoff.md`.
+Форматирование примеров в гейт §6 не входит, но `example/scopo_demo` с
+форматтером сходится: `fvm dart format --set-exit-if-changed lib test` из его
+папки даёт 0 changed.
 
 ## 7. Язык и терминология
 
