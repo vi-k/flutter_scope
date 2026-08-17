@@ -14,6 +14,16 @@
 /AGENTS.md
 /CLAUDE.md
 
+# The repository's own process, not the package: editor settings and CI.
+/.vscode/
+/.github/
+
+# Platform folders of the examples: 88 files and ~690 KB of `flutter create`
+# output, the largest block of the archive once `docs/` is out. A reader of an
+# example needs its Dart; `flutter create .` regenerates the rest.
+/example/*/macos/
+/example/scopo_demo/web/
+
 # Miscellaneous
 *.class
 *.log

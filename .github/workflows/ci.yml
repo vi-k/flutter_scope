@@ -1,0 +1,83 @@
+# The gate of `AGENTS.md` §6, run by a machine instead of by a person.
+#
+# Every step below is one of the commands the regimen requires before a merge,
+# in the regimen's order, on the toolchain the package declares as its floor:
+# Flutter 3.29.0, which carries Dart 3.7.0. Locally that version comes from
+# `fvm`; here the action pins the same number directly, so `flutter` and `dart`
+# on the PATH are already the right ones and no `fvm` prefix is needed.
+name: gate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# A newer push to the same ref makes this run pointless.
+concurrency:
+  group: gate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.29.0
+          channel: stable
+          cache: true
+
+      - name: Toolchain
+        run: flutter --version
+
+      - name: Dependencies
+        run: flutter pub get
+
+      # First, while nothing has written to the tree yet: the dry run counts an
+      # uncommitted change as a warning, and one warning is a non-zero exit.
+      - name: Publish dry run
+        run: dart pub publish --dry-run
+
+      - name: Translations answer their originals
+        run: sh docs/ru/check.sh
+
+      - name: Formatting
+        run: dart format --set-exit-if-changed lib test
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Dartdoc
+        run: dart doc --dry-run
+
+      # Tests run with the leak tracker enabled — see
+      # `test/flutter_test_config.dart`.
+      - name: Tests
+        run: flutter test
+
+      # The examples carry their own `pubspec`, so each needs its own `pub get`
+      # before it can be analyzed.
+      - name: Examples, analyzed
+        run: |
+          for example in example/*/; do
+            echo "== $example"
+            (cd "$example" && flutter pub get && flutter analyze)
+          done
+
+      # Two of the three have suites of their own. They are outside the local
+      # gate, which is exactly why a machine should run them.
+      - name: Examples, tested
+        run: |
+          for example in example/scopo_demo example/navigation_node; do
+            echo "== $example"
+            (cd "$example" && flutter test)
+          done
+
+      # The examples' lockfiles are committed and are supposed to be the ones
+      # this toolchain resolves. The `pub get` calls above rewrite them if they
+      # are not, and then this step says so.
+      - name: Nothing drifted
+        run: git diff --exit-code
