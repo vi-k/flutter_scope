@@ -759,7 +759,7 @@ release `AsyncScope`, упавший на первом кадре до перв�
 правды — обычный (не в `assert`) флаг в `performRebuild`. Уверенность high.
 
 **Вердикт: исправлено как предложено, с оговоркой об охвате.** Волна 14, тем же
-блоком. В `is_building.dart` появился счётчик `_scopeRebuildDepth` — обычное
+блоком, `2c615ef`. В `is_building.dart` появился счётчик `_scopeRebuildDepth` — обычное
 поле, не в `assert`, — который `ScopeWidgetElementBase.performRebuild` поднимает
 на время сборки и опускает в `finally`; `isBuilding` теперь спрашивает и его.
 Счётчик, а не флаг: скоупы вкладываются. Служебные символы из публичного API
