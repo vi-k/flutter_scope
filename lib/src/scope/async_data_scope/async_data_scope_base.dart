@@ -7,27 +7,39 @@ abstract base class AsyncDataScopeBase<W extends AsyncDataScopeBase<W, T>,
   /// Serializes this scope with the others that share the key.
   final Object? scopeKey;
 
-  /// How long to wait for [scopeKey]; `null` waits indefinitely.
+  /// How long to wait for [scopeKey]; `null` takes the default.
+  ///
+  /// Defaults to [ScopeConfig.defaultScopeKeysTimeout]. Removing the limit
+  /// altogether is done there, not here.
   final Duration? scopeKeyTimeout;
 
   /// Called when the wait for [scopeKey] expires.
   final void Function()? onScopeKeyTimeout;
 
   /// How long the teardown waits for the initialization to be cancelled;
-  /// `null` waits indefinitely.
+  /// `null` takes the default.
+  ///
+  /// Defaults to [ScopeConfig.defaultInitCancellationTimeout]. Removing the
+  /// limit altogether is done there, not here.
   final Duration? initCancellationTimeout;
 
   /// Called when the wait for the cancellation expires.
   final void Function()? onInitCancellationTimeout;
 
-  /// How long to wait for the asynchronous teardown; `null` waits
-  /// indefinitely.
+  /// How long to wait for the asynchronous teardown; `null` takes the
+  /// default.
+  ///
+  /// Defaults to [ScopeConfig.defaultDisposeAsyncTimeout]. Removing the limit
+  /// altogether is done there, not here.
   final Duration? disposeAsyncTimeout;
 
   /// Called when the wait for the asynchronous teardown expires.
   final void Function()? onDisposeAsyncTimeout;
 
-  /// How long to wait for the child scopes; `null` waits indefinitely.
+  /// How long to wait for the child scopes; `null` takes the default.
+  ///
+  /// Defaults to [ScopeConfig.defaultWaitForChildrenTimeout]. Removing the
+  /// limit altogether is done there, not here.
   final Duration? waitForChildrenTimeout;
 
   /// Called when the wait for the child scopes expires.

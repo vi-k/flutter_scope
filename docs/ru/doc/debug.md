@@ -1,6 +1,6 @@
 # debug
 
-> Перевод `doc/debug.md` (blob `2229b860a8cfa841b9c7d138f5c15c1563cd0356`).
+> Перевод `doc/debug.md` (blob `e8f8d0f0a387a9672fdd9bbea4ea90edfcb756e6`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 Журнал и глобальные настройки пакета. Всё на этой странице статическое и живёт в
@@ -178,7 +178,10 @@ void main() {
 `scopeKeyTimeout`, `initCancellationTimeout`, `disposeAsyncTimeout` и
 `waitForChildrenTimeout` и заметить истечение через колбэки
 `onScopeKeyTimeout`, `onInitCancellationTimeout`, `onDisposeAsyncTimeout` и
-`onWaitForChildrenTimeout`.
+`onWaitForChildrenTimeout`. Чего скоуп не может для себя — снять ограничение:
+`null` там означает «взять значение по умолчанию», а не «ждать сколько
+понадобится». Снимают ограничение значениями `ScopeConfig` выше, и сразу для
+всех скоупов.
 
 ## pauseAfterInitializationEnabled
 

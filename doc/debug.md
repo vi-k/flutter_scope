@@ -178,7 +178,10 @@ Every scope can override all four defaults for itself with the
 `scopeKeyTimeout`, `initCancellationTimeout`, `disposeAsyncTimeout` and
 `waitForChildrenTimeout` parameters, and observe an expiry through the
 `onScopeKeyTimeout`, `onInitCancellationTimeout`, `onDisposeAsyncTimeout` and
-`onWaitForChildrenTimeout` callbacks.
+`onWaitForChildrenTimeout` callbacks. What a scope cannot do for itself is
+remove the limit: `null` there means "take the default", not "wait as long as it
+takes". Removing a limit is what the `ScopeConfig` values above are for, and it
+applies to every scope at once.
 
 ## pauseAfterInitializationEnabled
 

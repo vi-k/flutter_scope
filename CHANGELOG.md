@@ -225,6 +225,17 @@
   overriding `NavigatorState.canPop()`: with no marker of the node's own in the
   way, the base answer is the true one, and it used to answer `false` while a
   drawer was open.
+* The dartdoc of the twelve timeout parameters said the opposite of what they
+  do. `scopeKeyTimeout`, `initCancellationTimeout`, `disposeAsyncTimeout` and
+  `waitForChildrenTimeout`, in all three asynchronous families, each promised
+  that `null` "waits indefinitely" — and each is read as
+  `value ?? ScopeConfig.defaultX`, which is three seconds. A teardown that was
+  meant to wait as long as it took gave up after three seconds and went on
+  without its children, and the report of the expiry sent the reader looking
+  somewhere else. They now say what the element layer had always said, that
+  `null` takes the default, and that a limit is removed through `ScopeConfig`,
+  which is the only place a limit can be removed at all. The `debug` topic says
+  the same.
 * **Breaking:** the first type argument of `ScopeAutoDependencies` is now bound
   to the container itself — `ScopeAutoDependencies<T extends
   ScopeAutoDependencies<T, C>, C>`. It had been bound to `ScopeDependencies`

@@ -10,35 +10,39 @@ abstract base class AsyncControllerScopeBase<
   /// disposing of itself. Needs an [AsyncScopeCoordinator] above it.
   final Object? scopeKey;
 
-  /// How long to wait for [scopeKey]; `null` waits indefinitely.
+  /// How long to wait for [scopeKey]; `null` takes the default.
   ///
-  /// Defaults to [ScopeConfig.defaultScopeKeysTimeout].
+  /// Defaults to [ScopeConfig.defaultScopeKeysTimeout]. Removing the limit
+  /// altogether is done there, not here.
   final Duration? scopeKeyTimeout;
 
   /// Called when the wait for [scopeKey] expires.
   final void Function()? onScopeKeyTimeout;
 
   /// How long the teardown waits for the initialization of the controller to
-  /// be cancelled; `null` waits indefinitely.
+  /// be cancelled; `null` takes the default.
   ///
-  /// Defaults to [ScopeConfig.defaultInitCancellationTimeout].
+  /// Defaults to [ScopeConfig.defaultInitCancellationTimeout]. Removing the
+  /// limit altogether is done there, not here.
   final Duration? initCancellationTimeout;
 
   /// Called when the wait for the cancellation expires.
   final void Function()? onInitCancellationTimeout;
 
-  /// How long to wait for the teardown of the controller; `null` waits
-  /// indefinitely.
+  /// How long to wait for the teardown of the controller; `null` takes the
+  /// default.
   ///
-  /// Defaults to [ScopeConfig.defaultDisposeAsyncTimeout].
+  /// Defaults to [ScopeConfig.defaultDisposeAsyncTimeout]. Removing the limit
+  /// altogether is done there, not here.
   final Duration? disposeAsyncTimeout;
 
   /// Called when the wait for the teardown expires.
   final void Function()? onDisposeAsyncTimeout;
 
-  /// How long to wait for the child scopes; `null` waits indefinitely.
+  /// How long to wait for the child scopes; `null` takes the default.
   ///
-  /// Defaults to [ScopeConfig.defaultWaitForChildrenTimeout].
+  /// Defaults to [ScopeConfig.defaultWaitForChildrenTimeout]. Removing the
+  /// limit altogether is done there, not here.
   final Duration? waitForChildrenTimeout;
 
   /// Called when the wait for the child scopes expires.
