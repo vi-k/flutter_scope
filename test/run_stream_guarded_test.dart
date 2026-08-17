@@ -31,6 +31,23 @@ void main() {
       expect(streams, hasLength(5));
     });
 
+    // A factory that throws before there is a stream at all has nowhere to
+    // raise: the caller is holding a `Stream`, not a future. So the failure
+    // is handed back as the stream, and a caller that subscribes hears it
+    // through `onError` like any other. Without the guard it is thrown at
+    // whoever called `runStreamGuarded` — one line up from where a scope
+    // would have caught it.
+    test('hands back a failing factory as a stream, not a throw', () async {
+      final failure = StateError('the factory fell over');
+      final Stream<int> stream;
+
+      // Deliberately outside `expect`: the point is that this line does not
+      // throw at all.
+      stream = runStreamGuarded<int>(() => throw failure, _ignore);
+
+      await expectLater(stream, emitsError(same(failure)));
+    });
+
     test('tells its callers apart in the message', () async {
       final lines = <String>[];
       final logger = ScopeConfig.logger;

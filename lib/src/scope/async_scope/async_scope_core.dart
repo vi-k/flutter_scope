@@ -583,6 +583,15 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
                 when ScopeConfig.pauseAfterInitializationEnabled) {
               _pauseTimer = Timer(pauseAfterInitialization, () {
                 _pauseTimer = null;
+                // The `_isDisposing` half is unreachable, and kept anyway:
+                // `_performAsyncDispose` sets that flag and cancels this
+                // timer in the next statement, with nothing in between, and
+                // the only code that can arm a new one is the subscription
+                // that the same teardown cancels before its first `await`.
+                // Left in as the guard of the callback beside it, which is a
+                // post-frame one and cannot be cancelled at all -- a mutation
+                // that removes this half is therefore not caught by any test,
+                // and cannot be.
                 if (mounted && !_isDisposing) {
                   _model.update(state);
                 }

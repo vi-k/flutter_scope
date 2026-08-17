@@ -314,6 +314,48 @@ void main() {
       },
     );
 
+    // And what the failure costs the subscription it belongs to: a selector
+    // that could not answer counts as *changed*, so its dependent is rebuilt
+    // and asks it again from inside its own build — where the framework's
+    // error boundary turns a second failure into an `ErrorWidget` for that
+    // one widget. Counting it as unchanged instead would be the quiet
+    // opposite: the dependent keeps a value nobody could confirm.
+    testWidgets(
+      'a selector that could not answer counts as changed',
+      (tester) async {
+        await tester.pumpWidget(const _Host(param: 'a'));
+        await tester.pumpAndSettle();
+
+        final scope =
+            tester.element(find.byType(_CounterScope)) as _CounterScopeElement;
+        final before = _CounterScopeElement.buildChildCount;
+
+        // Control: the scope's own selector reads a value that never changes,
+        // so an ordinary notification leaves its subtree alone.
+        scope.bump();
+        await tester.pump();
+
+        expect(
+          _CounterScopeElement.buildChildCount,
+          before,
+          reason: 'the selector answered, and answered the same as before',
+        );
+
+        scope
+          ..explodeOnce = true
+          ..bump();
+        await tester.pump();
+
+        expect(tester.takeException(), isA<StateError>());
+        expect(
+          _CounterScopeElement.buildChildCount,
+          before + 1,
+          reason: 'the selector could not answer, so the subtree is rebuilt '
+              'rather than left standing on an answer nobody gave',
+        );
+      },
+    );
+
     // "Skips rebuilding the whole subtree" was true of the elements and not
     // of the widgets: `ComponentElement.performRebuild` calls `build()`
     // whatever else happens, and only `updateChild` was overridden -- so
