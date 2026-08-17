@@ -34,9 +34,22 @@ final class _ScopeDependencyImpl with ScopeDependencyMixin {
     yield name;
   }
 
+  /// Runs the registered `unmount` hook, and only ever the first time.
+  ///
+  /// The hook is taken off the helper before it is called, so "exactly once"
+  /// holds by construction rather than by which paths happen to reach here.
+  /// There is more than one: a scope removed from the tree unmounts its
+  /// container through the element, a scope whose initialization failed never
+  /// gets that far and is unmounted from inside `ScopeAutoDependencies.init`,
+  /// and a container held by hand can be unmounted by its owner. Clearing the
+  /// hook after `dispose` would not be enough either — a dependency that
+  /// registered `unmount` and no `dispose` keeps its helper through the
+  /// disposal.
   @override
   void onUnmount() {
-    _helper?.unmount?.call();
+    final unmount = _helper?.unmount;
+    _helper?.unmount = null;
+    unmount?.call();
   }
 
   @override

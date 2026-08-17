@@ -26,6 +26,20 @@
   is now released either way, once. A dependency in that position therefore
   reports `disposed` rather than `cancelled` when it carried no errors of its
   own.
+* Fix `unmount` being skipped for a dependency whose scope failed to
+  initialize, while `dispose` ran. The hook is documented to run exactly once
+  and always before `dispose`, whichever way the scope goes, but the container
+  reached the element only once initialization had succeeded — so on the
+  failing path nothing unmounted, and a dependency that had registered
+  `unmount = subscription.cancel` alongside `dispose = sink.close` closed the
+  sink and kept writing into it. The container now unmounts itself from inside
+  its own initialization when that initialization did not finish, whether or
+  not `autoDisposeOnError` is set: a container kept for inspection still holds
+  the subscriptions it took. A hook that throws there is reported rather than
+  re-thrown, so it cannot replace the failure the initialization is already
+  carrying. `unmount` is also exactly-once by construction now — each hook is
+  taken off as it runs — so the passes that can reach a container cannot
+  double up on it.
 * Fix one failing disposer taking the rest of a sequential group with it. The
   walk stopped at the first dependency that could not let go, leaving everything
   below it — already initialized, still holding resources — untouched. Each

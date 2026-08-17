@@ -227,6 +227,16 @@ void main() {
           reason: 'nothing was initialized asynchronously, so nothing is '
               'disposed of asynchronously',
         );
+        expect(
+          element.unmountCount,
+          1,
+          reason: 'the synchronous half is not the asynchronous one: '
+              '`onUnmount` is promised to run whether the scope was removed '
+              'from the tree or closed, and a scope whose initialization '
+              'failed is a scope that may still have taken something before '
+              'it failed. The dependency layer had this the wrong way round '
+              'until P1-1 of the third review',
+        );
       },
     );
 
@@ -1250,9 +1260,16 @@ final class _SyncInitAsyncScopeElement extends AsyncScopeElementBase<
     _SyncInitAsyncScope, _SyncInitAsyncScopeElement> {
   int syncInitAttempts = 0;
   int asyncInitStarts = 0;
+  int unmountCount = 0;
   int disposeCount = 0;
 
   _SyncInitAsyncScopeElement(super.widget);
+
+  @override
+  void onUnmount() {
+    unmountCount++;
+    super.onUnmount();
+  }
 
   @override
   void init() {

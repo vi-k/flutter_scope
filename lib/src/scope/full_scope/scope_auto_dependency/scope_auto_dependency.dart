@@ -80,6 +80,39 @@ abstract base class ScopeAutoDependencies<T extends ScopeDependencies,
     } finally {
       if (!dependencies.isInitialized) {
         _log.d('not initialized');
+
+        // `unmount` is promised to run exactly once and always before
+        // `dispose`, whichever way the scope goes -- and this is one of the
+        // ways it goes. An initialization that failed never reaches
+        // `ScopeReady`, so the element is never handed the container and its
+        // own `onUnmount()` has nothing to call: this is the only pass left.
+        // Without it a dependency that took a subscription before the failure
+        // kept it forever, while its `dispose` closed the sink underneath.
+        //
+        // Unconditionally, not only under `autoDisposeOnError`: a container
+        // kept for inspection is still a container holding subscriptions, and
+        // its owner disposing of it by hand later does not make them wait.
+        // A second `onUnmount()` from that owner is a no-op -- the hooks are
+        // taken off as they run.
+        try {
+          dependencies.onUnmount();
+          // ignore: avoid_catching_errors
+        } on Object catch (error, stackTrace) {
+          // Reported, never re-thrown: this `finally` guards the failure the
+          // initialization is already carrying, and a hook that throws here
+          // would replace it with itself. The disposal below reports its own
+          // failures the same way and for the same reason.
+          _log.e('unmount error', error: error, stackTrace: stackTrace);
+          FlutterError.reportError(
+            FlutterErrorDetails(
+              exception: error,
+              stack: stackTrace,
+              library: 'scopo',
+              context: ErrorDescription('while unmounting $T'),
+            ),
+          );
+        }
+
         if (autoDisposeOnError) {
           await dispose();
         }

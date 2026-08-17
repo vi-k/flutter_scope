@@ -742,6 +742,14 @@ void main() {
       }
 
       expect(closed, isTrue);
+      expect(
+        element.unmountCount,
+        1,
+        reason: 'the synchronous half of the teardown runs whether the '
+            'initialization got anywhere or not, and `close()` is the only '
+            'path that can show it: a scope taken off the tree has already '
+            'been unmounted by the framework by the time the teardown starts',
+      );
     });
 
     // The four stages of a teardown are guarded apart so that a failure in
@@ -1302,10 +1310,19 @@ final class _CloseScopeElement extends LiteScopeElementBase<_CloseScope,
   /// owns it is private to the package and cannot be found by type.
   _CloseScopeState? createdState;
 
+  /// How many times the element's own `onUnmount` ran.
+  int unmountCount = 0;
+
   _CloseScopeElement(super.widget);
 
   @override
   Object? get scopeKey => widget.testKey;
+
+  @override
+  void onUnmount() {
+    unmountCount++;
+    super.onUnmount();
+  }
 
   @override
   Duration? get waitForChildrenTimeout => widget.waitForChildren;
