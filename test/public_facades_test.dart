@@ -201,6 +201,168 @@ void main() {
     });
   });
 
+  // The largest topic in the documentation, and the one surface the suite
+  // never called: `of`, `maybeOf`, `select`, `paramsOf` and `selectParam` on
+  // `Scope` had zero callers in the whole run. Two of the review's unnoticed
+  // mutations lived right here.
+  group('Scope', () {
+    testWidgets('is found from below, by state, dependencies and parameters',
+        (tester) async {
+      final seen = <String, Object?>{};
+      final log = <String>[];
+
+      await tester.pumpWidget(
+        _wrap(
+          _Full(
+            log: log,
+            label: 'named',
+            body: Builder(
+              builder: (context) {
+                seen['of'] = Scope.of<_Full, _FullDeps, _FullState>(
+                  context,
+                ).answer;
+                seen['maybeOf'] = Scope.maybeOf<_Full, _FullDeps, _FullState>(
+                  context,
+                )?.answer;
+                seen['dependencies'] =
+                    Scope.of<_Full, _FullDeps, _FullState>(context)
+                        .dependencies
+                        .value;
+                seen['paramsOf'] = Scope.paramsOf<_Full, _FullDeps, _FullState>(
+                  context,
+                  listen: false,
+                ).label;
+                seen['select'] =
+                    Scope.select<_Full, _FullDeps, _FullState, String>(
+                  context,
+                  (state) => state.answer,
+                );
+                seen['selectParam'] =
+                    Scope.selectParam<_Full, _FullDeps, _FullState, String>(
+                  context,
+                  (widget) => widget.label,
+                );
+
+                return const SizedBox.shrink();
+              },
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(seen, {
+        'of': 'answer',
+        'maybeOf': 'answer',
+        'dependencies': 'built',
+        'paramsOf': 'named',
+        'select': 'answer',
+        'selectParam': 'named',
+      });
+
+      await tester.pumpWidget(_wrap(const SizedBox.shrink()));
+      await settle(tester, until: () => log.contains('state.disposeAsync'));
+    });
+
+    // `listen: true` is the whole difference between the two branches of
+    // `paramsOf`, and a branch that ignores it reads like the other one. The
+    // readers below are `const`, so they are the same widget on every pump:
+    // anything that rebuilds one came from the scope rather than from a
+    // parent handing it a new instance. Written the other way -- a `Builder`
+    // rebuilt by its parent along with everything else -- the test passes
+    // whether the subscription exists or not, which was checked by running it
+    // against a `paramsOf` that ignores `listen`.
+    testWidgets('paramsOf with listen: true hears a scope rebuilt above it',
+        (tester) async {
+      final log = <String>[];
+      _ParamsReader.builds = 0;
+
+      Widget build(String label, String other) => _wrap(
+            _Full(
+              log: log,
+              label: label,
+              other: other,
+              body: const _ParamsReader(),
+            ),
+          );
+
+      await tester.pumpWidget(build('first', 'x'));
+      await tester.pumpAndSettle();
+      expect(_ParamsReader.builds, 1);
+
+      await tester.pumpWidget(build('second', 'x'));
+      await tester.pumpAndSettle();
+
+      expect(
+        _ParamsReader.builds,
+        2,
+        reason: 'the reader asked to listen, so a scope rebuilt with other '
+            'parameters has to reach it',
+      );
+
+      await tester.pumpWidget(_wrap(const SizedBox.shrink()));
+      await settle(tester, until: () => log.contains('state.disposeAsync'));
+    });
+
+    // `selectParam` is the narrow form: it subscribes to one parameter, and a
+    // change to any other is none of its business.
+    testWidgets('selectParam hears the parameter it selected, and no other',
+        (tester) async {
+      final log = <String>[];
+      _SelectParamReader.builds = 0;
+
+      Widget build(String label, String other) => _wrap(
+            _Full(
+              log: log,
+              label: label,
+              other: other,
+              body: const _SelectParamReader(),
+            ),
+          );
+
+      await tester.pumpWidget(build('first', 'x'));
+      await tester.pumpAndSettle();
+      expect(_SelectParamReader.builds, 1);
+
+      await tester.pumpWidget(build('first', 'y'));
+      await tester.pumpAndSettle();
+      expect(
+        _SelectParamReader.builds,
+        1,
+        reason: 'the parameter it selected did not change',
+      );
+
+      await tester.pumpWidget(build('second', 'y'));
+      await tester.pumpAndSettle();
+      expect(_SelectParamReader.builds, 2, reason: 'and this one did');
+
+      await tester.pumpWidget(_wrap(const SizedBox.shrink()));
+      await settle(tester, until: () => log.contains('state.disposeAsync'));
+    });
+
+    testWidgets('answers null from maybeOf where there is no such scope',
+        (tester) async {
+      _FullState? seen;
+      var asked = false;
+
+      await tester.pumpWidget(
+        _wrap(
+          Builder(
+            builder: (context) {
+              asked = true;
+              seen = Scope.maybeOf<_Full, _FullDeps, _FullState>(context);
+
+              return const SizedBox.shrink();
+            },
+          ),
+        ),
+      );
+
+      expect(asked, isTrue, reason: 'the builder did run');
+      expect(seen, isNull);
+    });
+  });
+
   group('ScopeWidgetBase', () {
     testWidgets('hands its own parameters down', (tester) async {
       String? seen;
@@ -369,6 +531,70 @@ final class _HalfWrittenState
   Widget build(BuildContext context) => const Text('ready');
 }
 
+/// The `Scope` facade: a container in front of a state, and the five lookups
+/// that reach them from below.
+final class _Full extends Scope<_Full, _FullDeps, _FullState> {
+  final List<String> log;
+  final String label;
+
+  /// A second parameter, so that "heard the one it selected" can be told from
+  /// "heard everything".
+  final String other;
+  final Widget body;
+
+  const _Full({
+    required this.log,
+    this.label = 'full',
+    this.other = 'other',
+    this.body = const SizedBox.shrink(),
+  }) : super(child: const SizedBox.shrink());
+
+  @override
+  Stream<ScopeInitState<Object, _FullDeps>> initDependencies(
+    BuildContext context,
+  ) =>
+      _FullDeps().asStream();
+
+  @override
+  Widget buildOnInitializing(BuildContext context, Object? progress) =>
+      const SizedBox.shrink();
+
+  @override
+  Widget buildOnError(
+    BuildContext context,
+    Object error,
+    StackTrace stackTrace,
+    Object? progress,
+  ) =>
+      Text('$error');
+
+  @override
+  _FullState createState() => _FullState();
+}
+
+final class _FullDeps implements ScopeDependencies {
+  final String value = 'built';
+
+  @override
+  void onUnmount() {}
+
+  @override
+  FutureOr<void> dispose() {}
+}
+
+final class _FullState extends ScopeState<_Full, _FullDeps, _FullState> {
+  /// What a lookup from below reads off the state.
+  String get answer => 'answer';
+
+  @override
+  FutureOr<void> disposeAsync() {
+    params.log.add('state.disposeAsync');
+  }
+
+  @override
+  Widget build(BuildContext context) => params.body;
+}
+
 /// Marks what [_Lite.wrapState] put around the ready branch.
 final class _Wrapper extends StatelessWidget {
   final Widget child;
@@ -377,6 +603,39 @@ final class _Wrapper extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => child;
+}
+
+/// Subscribes to the whole scope widget through `paramsOf`, and counts.
+final class _ParamsReader extends StatelessWidget {
+  static int builds = 0;
+
+  const _ParamsReader();
+
+  @override
+  Widget build(BuildContext context) {
+    builds++;
+    Scope.paramsOf<_Full, _FullDeps, _FullState>(context, listen: true);
+
+    return const SizedBox.shrink();
+  }
+}
+
+/// Subscribes to one parameter of [_Full] through `selectParam`, and counts.
+final class _SelectParamReader extends StatelessWidget {
+  static int builds = 0;
+
+  const _SelectParamReader();
+
+  @override
+  Widget build(BuildContext context) {
+    builds++;
+    Scope.selectParam<_Full, _FullDeps, _FullState, String>(
+      context,
+      (widget) => widget.label,
+    );
+
+    return const SizedBox.shrink();
+  }
 }
 
 /// Subscribes to one parameter of [_Params] and counts what it cost.
