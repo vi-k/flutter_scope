@@ -444,15 +444,23 @@ abstract base class ScopeWidgetElementBase<W extends ScopeWidgetCore<W, E>,
     // into a notify-only one -- `updateChild` then kept a child from an
     // earlier real build, and on a first build there is none.
     _isRebuilding = true;
-    if (_notifyPending) {
-      _notifyPending = false;
-      notifyClients(widget);
-      _isNotifyOnlyRebuild = !autoSelfDependence && !_forceRebuild;
-    }
+    // Counted for the whole package, not just this element: it is what
+    // `SchedulerBinding.isBuilding` has left to go by in a release build,
+    // where the build owner's own flag lives inside an assert and a build
+    // driven outside a frame is therefore invisible. Everything below is
+    // inside the `try`, so a rebuild that throws leaves no count standing.
+    beginScopeRebuild();
 
     try {
+      if (_notifyPending) {
+        _notifyPending = false;
+        notifyClients(widget);
+        _isNotifyOnlyRebuild = !autoSelfDependence && !_forceRebuild;
+      }
+
       super.performRebuild();
     } finally {
+      endScopeRebuild();
       _isRebuilding = false;
       _forceRebuild = false;
       _isNotifyOnlyRebuild = false;

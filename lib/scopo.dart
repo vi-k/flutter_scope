@@ -5,7 +5,10 @@ library;
 export 'src/environment/scope_config.dart' hide log;
 export 'src/scope/scope.dart';
 export 'src/utils/compare_utils.dart';
-export 'src/utils/is_building.dart';
+// The rebuild counter beside it is the package's own bookkeeping: written by
+// `ScopeWidgetElementBase`, read by `isBuilding`, and no business of a
+// consumer.
+export 'src/utils/is_building.dart' show IsBuildingExtension;
 export 'src/utils/listenable/listen.dart';
 export 'src/utils/listenable/listenable_selector.dart';
 export 'src/utils/listenable/listenable_view.dart';

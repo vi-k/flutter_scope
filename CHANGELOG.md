@@ -110,6 +110,18 @@
   `runOutsideFrame` now holds the action back there too. The build owner keeps
   that flag behind an assertion, so in a release build the scheduler phase is
   still all there is to go by.
+* Fix `SchedulerBinding.isBuilding` answering differently in release, and
+  `runOutsideFrame` running an action inside the build it was keeping it out
+  of. The build owner's flag exists only inside an `assert`, so a release build
+  had the frame phase alone to go by, and a build driven with no frame in
+  progress — the way `runApp` builds the first tree — looked there like no
+  build at all. Marking an element dirty from inside a build is refused in
+  silence, so an `AsyncScope` whose initialization failed before its first
+  `await` showed an empty subtree in release where debug showed `buildOnError`.
+  The scopes of this package now count their own rebuilds in a plain field,
+  which release builds keep, and `isBuilding` reads it. What remains beyond
+  reach is a build that belongs neither to a frame nor to this package; the
+  `utils` topic says so.
 * A `NavigationNode.onPop` that returns a failing `Future` — a confirmation
   dialog that raised, usually — is reported through `FlutterError.reportError`
   instead of surfacing as an unhandled zone error far from the widget that

@@ -15,7 +15,7 @@ tends to want the same tools; nothing here needs a scope above it.
 | `ProgressIterator`, `Progress` | step counting for an initialization |
 | `ScreenshotReplacer` | freezes a subtree into the image it last painted |
 | `CompareUtils` | four comparison functions with names |
-| `IsBuildingExtension` | is a frame being built, and how to wait for the end of it |
+| `IsBuildingExtension` | is a build running, and how to wait for the end of it |
 
 ## Listening to a Listenable
 
@@ -185,9 +185,17 @@ functions, for the places that take a comparison as a parameter — `compare:`
 above, among others — where a tear-off reads better than a lambda.
 
 `IsBuildingExtension` extends `SchedulerBinding`. `isBuilding` says whether a
-frame is currently being built, and `runOutsideFrame(action)` runs the action
-now if it is safe, or in a post-frame callback if a frame is in progress. This
-is what a scope uses to keep a notification out of the middle of a build.
+build is running, and `runOutsideFrame(action)` runs the action now if it is
+safe, or in a post-frame callback if one is. This is what a scope uses to keep
+a notification out of the middle of a build.
+
+A build is not only what a frame runs: `runApp` builds the first tree with no
+frame in progress, and marking an element dirty from inside *that* is refused
+just the same. `isBuilding` therefore adds two sources to the frame phase — the
+rebuilds of this package's own scopes, which it counts itself, and the build
+owner's flag, which it can only ask behind an assertion because that is the
+only place the flag exists. So the one case left unanswered is a build that
+neither belongs to a frame nor to this package, in a release build.
 
 ## Where to go next
 
