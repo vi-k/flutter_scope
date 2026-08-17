@@ -7,6 +7,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:scopo/scopo.dart';
 
+import 'utils/leaks.dart';
+
 void main() {
   group('listen', () {
     test('calls the listener until the subscription is cancelled', () {
@@ -364,6 +366,63 @@ void main() {
       await tester.pump();
       expect(find.text('value: 30'), findsOneWidget);
     });
+
+    // A selector that raises on its first read takes the update down with it,
+    // and that part is Flutter's doing rather than this widget's: the element
+    // above catches the failure of the update, puts an error widget in place of
+    // the subtree and abandons what was there. Nothing asks the state that
+    // raised anything ever again -- no second `didUpdateWidget`, no `dispose` --
+    // which is why the cancelled subscription its field still points at is
+    // never touched a second time. What is worth holding down is the recovery:
+    // the next configuration builds a fresh state, which subscribes once and
+    // listens.
+    testWidgets(
+      'a selector that raised once does not outlive itself',
+      (tester) async {
+        final model = _Model()..value = 2;
+        addTearDown(model.dispose);
+
+        Widget build(int Function(_Model model) selector) => Directionality(
+              textDirection: TextDirection.ltr,
+              child: ListenableSelector<_Model, int>(
+                listenable: model,
+                selector: selector,
+                builder: (context, listenable, value, child) =>
+                    Text('value: $value'),
+              ),
+            );
+
+        await tester.pumpWidget(build((model) => model.value));
+        expect(find.text('value: 2'), findsOneWidget);
+
+        await tester.pumpWidget(
+          build((model) => throw StateError('not this time')),
+        );
+        expect(tester.takeException(), isA<StateError>());
+
+        // The same parent, asking again with a selector that works. Nothing about
+        // the failure above is meant to outlive it.
+        await tester.pumpWidget(build((model) => model.value * 10));
+
+        expect(
+          tester.takeException(),
+          isNull,
+          reason: 'asking again is not the failure of the last attempt',
+        );
+        expect(find.text('value: 20'), findsOneWidget);
+
+        model.value = 3;
+        await tester.pump();
+        expect(
+          find.text('value: 30'),
+          findsOneWidget,
+          reason: 'and it is listening: a cancelled subscription hears nothing',
+        );
+      },
+      // The raise happens while the element is being updated, and the subtree
+      // it breaks stays unmounted -- see [unmountableTree].
+      experimentalLeakTesting: unmountableTree,
+    );
 
     testWidgets('follows a new compare on the same listenable', (tester) async {
       final model = _Model();

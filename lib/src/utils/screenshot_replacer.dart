@@ -55,13 +55,20 @@ class _ScreenshotReplacerState extends State<ScreenshotReplacer> {
 
   @override
   void dispose() {
+    // The state owns this handle: [RawImage] clones the image for its render
+    // object and never disposes of the original. Released before the
+    // application is told anything, so that what this state holds does not
+    // depend on what the callback does.
+    //
+    // The two do not meet today: a capture that produced an image reported
+    // completion in the same synchronous step, so when [dispose] is the one to
+    // report, [_image] is null. The order costs nothing and does not rely on
+    // that staying true.
+    _image?.dispose();
+    _image = null;
     // The last chance to report completion: no further capture attempt can
     // happen once the state is gone.
     _reportCompleted();
-    // The state owns this handle: [RawImage] clones the image for its render
-    // object and never disposes of the original.
-    _image?.dispose();
-    _image = null;
     super.dispose();
   }
 
@@ -73,7 +80,28 @@ class _ScreenshotReplacerState extends State<ScreenshotReplacer> {
     if (_isCompletionReported) return;
     _isCompletionReported = true;
 
-    widget.onCompleted();
+    try {
+      widget.onCompleted();
+    } on Object catch (error, stackTrace) {
+      // The callback belongs to the application, and every place that calls it
+      // is a place nobody is waiting on: the capture runs as an unawaited future
+      // in a post-frame callback, and the last resort is `dispose`. A raise left
+      // in the first surfaces as an unhandled zone error far from this widget;
+      // one left in the second comes out of `State.dispose` and takes the
+      // unmount with it. Reported instead, the way the package reports every
+      // failure it cannot re-throw -- and non-fatally, because the screenshot is
+      // an embellishment.
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: error,
+          stack: stackTrace,
+          library: 'scopo',
+          context: ErrorDescription(
+            'while reporting that a screenshot is no longer pending',
+          ),
+        ),
+      );
+    }
   }
 
   /// Schedules one more capture attempt on the next frame, or gives up once

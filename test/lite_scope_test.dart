@@ -1109,6 +1109,107 @@ void main() {
       },
     );
 
+    // `onCompleted` is the application's code, and the package calls it from
+    // places nobody is waiting on: the capture runs in a post-frame callback as
+    // an unawaited future, and the last resort is `dispose`. A raise left in the
+    // first surfaced as an unhandled zone error far from the widget; a raise
+    // left in the second came out of `State.dispose`, which the framework does
+    // not guard, and took the unmount down halfway.
+    testWidgets(
+      'a raising onCompleted is reported, not left in the frame that captured',
+      (tester) async {
+        await tester.pumpWidget(
+          _app(
+            ScreenshotReplacer(
+              onCompleted: () => throw StateError('the caller fell over'),
+              child: const SizedBox(
+                width: 20,
+                height: 20,
+                child: ColoredBox(color: Color(0xFF00FF00)),
+              ),
+            ),
+          ),
+        );
+
+        ui.Image? captured;
+        await settle(
+          tester,
+          until: () {
+            final images = find.byType(RawImage);
+            if (images.evaluate().isEmpty) return false;
+            captured = tester.widget<RawImage>(images).image;
+            return captured != null;
+          },
+        );
+
+        expect(
+          captured,
+          isNotNull,
+          reason: 'the screenshot is taken whatever the caller does with the '
+              'news of it',
+        );
+        expect(tester.takeException(), isA<StateError>());
+
+        await tester.pumpWidget(_app(const SizedBox.shrink()));
+
+        expect(
+          tester.takeException(),
+          isNull,
+          reason:
+              'and it is reported once: the report is one-shot, raise or no '
+              'raise',
+        );
+        expect(
+          captured!.debugDisposed,
+          isTrue,
+          reason: 'the handle the state owns is released with it',
+        );
+      },
+    );
+
+    // The order `dispose` does its two jobs in was a finding of the third review
+    // (P3-8): telling the application before releasing the `ui.Image` would lose
+    // the native memory of the screenshot if the callback raised. The order is
+    // the other way round now, and this is the reason it costs nothing: the two
+    // never meet. A capture that produced an image reported completion in the
+    // same synchronous step, so when `dispose` is the one to report, there is no
+    // image at all.
+    testWidgets(
+      'when disposal is the one to report, there is no image to release',
+      (tester) async {
+        // Offstage is never painted, so the capture keeps retrying and nothing
+        // has reported completion by the time the widget goes away.
+        await tester.pumpWidget(
+          _app(
+            Offstage(
+              child: ScreenshotReplacer(
+                onCompleted: () => throw StateError('the caller fell over'),
+                child: const SizedBox(width: 20, height: 20),
+              ),
+            ),
+          ),
+        );
+        await tester.pump();
+
+        expect(
+          find.byType(RawImage, skipOffstage: false),
+          findsNothing,
+          reason: 'nothing was captured, which is why the report is left to '
+              'disposal',
+        );
+
+        await tester.pumpWidget(_app(const SizedBox.shrink()));
+
+        expect(
+          tester.takeException(),
+          isA<StateError>(),
+          reason:
+              'and the raise is reported rather than carried out of dispose',
+        );
+        expect(find.byType(ScreenshotReplacer), findsNothing);
+      },
+    );
+
     testWidgets(
       'retries without reporting completion, then gives up after the retry cap',
       (tester) async {

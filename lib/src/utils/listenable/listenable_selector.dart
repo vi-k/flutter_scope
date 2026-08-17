@@ -73,6 +73,17 @@ class _ListenableSelectorState<L extends Listenable, T extends Object?>
     // asking for something else to be selected, or for a different answer to
     // "did it change?". Replacing them only together with the source left the
     // state calling the closures of a configuration nobody passes any more.
+    // The old subscription goes first, and deliberately so. Subscribing into a
+    // temporary before cancelling reads better and behaves worse: `select`
+    // reads the value at once, and a selector that raises there would leave the
+    // old listener on a listenable the widget no longer watches -- pointing
+    // into an element the framework abandons as it replaces this subtree with
+    // an error widget. Checked by probe: with the order reversed the listenable
+    // still reports a listener afterwards; with this order it reports none.
+    //
+    // What the raise does leave is a field pointing at a cancelled
+    // subscription. Nothing reaches it: the abandoned state is never updated
+    // and never disposed of, and the next configuration builds a fresh one.
     if (!identical(widget.listenable, oldWidget.listenable) ||
         !identical(widget.selector, oldWidget.selector) ||
         !identical(widget.compare, oldWidget.compare)) {

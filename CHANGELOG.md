@@ -141,6 +141,15 @@
   again — twice per rebuild, to every listener above the node — for a page that
   had not changed. While `child` and `isRoot` are the same objects, nothing is
   handed over anew.
+* A `ScreenshotReplacer.onCompleted` that raises is reported through
+  `FlutterError.reportError` instead of being left where nobody is waiting. The
+  callback is called from the capture, which runs as an unawaited future in a
+  post-frame callback, so a raise there surfaced as an unhandled zone error far
+  from the widget; called from `dispose` — the last resort, when no capture ever
+  succeeded — it came out of `State.dispose` and took the unmount with it. The
+  report stays one-shot either way. `dispose` also releases the captured
+  `ui.Image` before telling the application anything, so what the state holds no
+  longer depends on what the callback does.
 * **Breaking change:** `NodeNavigatorState` can no longer be constructed. The
   type stays public — it is what a `GlobalKey<NodeNavigatorState>()` is made of
   and what it resolves to — but one built by hand and installed under an
