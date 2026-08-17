@@ -470,6 +470,29 @@ void main() {
       );
     });
 
+    // The point of the node is that what it opens stands below the scopes the
+    // node stands under. `onPop` is where the topic sends a reader to ask a
+    // confirmation, and which navigator that confirmation lands on is decided
+    // by the context the hook is handed.
+    testWidgets('a dialog asked for by onPop belongs to the node', (
+      tester,
+    ) async {
+      await tester.pumpWidget(const _DialogOnPopHost());
+
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('asking: secret'),
+        findsOneWidget,
+        reason: 'the dialog was opened with useRootNavigator: false, so it '
+            'belongs to the node and reads the scope the node stands under',
+      );
+
+      await tester.tap(find.text('stay'));
+      await tester.pumpAndSettle();
+    });
+
     testWidgets('an ordinary node forwards a pop it cannot handle', (
       tester,
     ) async {
@@ -866,6 +889,47 @@ final class _OnPopHost extends StatelessWidget {
                 child: const Text('go'),
               ),
             ),
+          ),
+        ),
+      );
+}
+
+/// A node under a scope, whose `onPop` asks a confirmation the way the `utils`
+/// topic recommends asking one.
+final class _DialogOnPopHost extends StatelessWidget {
+  const _DialogOnPopHost();
+
+  @override
+  Widget build(BuildContext context) => MaterialApp(
+        home: ScopeModel<_Config>(
+          create: (context) => const _Config('secret'),
+          dispose: (model) {},
+          builder: (context) => NavigationNode(
+            onPop: (context, result) async {
+              await showDialog<void>(
+                context: context,
+                useRootNavigator: false,
+                builder: (context) {
+                  final config = ScopeModel.maybeOf<_Config>(
+                    context,
+                    listen: false,
+                  );
+
+                  return AlertDialog(
+                    content: Text('asking: ${config?.value ?? 'none'}'),
+                    actions: [
+                      TextButton(
+                        onPressed: Navigator.of(context).pop,
+                        child: const Text('stay'),
+                      ),
+                    ],
+                  );
+                },
+              );
+
+              return false;
+            },
+            child: const _NodeContent(),
           ),
         ),
       );

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:navigation_node/main.dart';
 import 'package:navigation_node/system_back.dart';
+import 'package:scopo/scopo.dart';
 
 /// Presses the panel's own System back, not the ones inside pages.
 Future<void> pressSystemBackButton(WidgetTester tester) async {
@@ -41,13 +42,36 @@ void main() {
       expect(find.byType(AlertDialog), findsOneWidget);
     });
 
-    testWidgets('lesson 4: the onPop dialog fits inside the node',
+    testWidgets('lesson 4: the onPop dialog belongs to the node and fits in it',
         (tester) async {
       await openLesson(tester, lessons[3].title);
 
       await pressSystemBackButton(tester);
 
-      expect(find.text('Leave this lesson?'), findsOneWidget);
+      final dialog = find.ancestor(
+        of: find.text('Leave this lesson?'),
+        matching: find.byType(AlertDialog),
+      );
+      expect(dialog, findsOneWidget);
+
+      // `useRootNavigator: false` means the node's navigator, and that is the
+      // whole reason to ask here rather than anywhere else: everything the
+      // node stands under is above the dialog too. Asked from a context
+      // outside the node the same call lands on the application's navigator,
+      // and this is what tells the two apart.
+      expect(
+        find.descendant(of: find.byType(NavigationNode), matching: dialog),
+        findsOneWidget,
+      );
+
+      final nodeBox = tester.getRect(find.byType(NavigationNode));
+      expect(
+        nodeBox.expandToInclude(tester.getRect(dialog)),
+        nodeBox,
+        reason: 'and being the node\'s means being drawn in the node\'s box, '
+            'which is a slice of an already small window',
+      );
+
       await tester.tap(find.text('Stay'));
       await tester.pumpAndSettle();
     });
@@ -71,8 +95,9 @@ void main() {
 
       await pressSystemBackButton(tester);
 
-      // Whether the lesson kept the back or let it out, the app is alive.
-      expect(find.byType(NavigationNodeApp), findsOneWidget);
+      // Whether the lesson kept the back or let it out, something is on
+      // screen. An emptied navigator draws nothing at all.
+      expect(find.byType(Scaffold), findsWidgets);
     });
   }
 

@@ -34,6 +34,11 @@ final class NavigationNode extends StatefulWidget {
   /// [Future] to decide after asking — a confirmation dialog, usually. The
   /// `result` is what the popped route would have returned.
   ///
+  /// The `context` is one from inside the node, so `Navigator.of(context)` is
+  /// the nested navigator and a dialog opened with `useRootNavigator: false`
+  /// belongs to the node — which is the point of asking here rather than
+  /// anywhere else: what the node stands under is above that dialog too.
+  ///
   /// A [Future] is asked for one press at a time: a back arriving while an
   /// answer is still pending is dropped rather than starting a second
   /// question. And an answer is acted on only while it still applies — if the
@@ -93,7 +98,13 @@ final class _NavigationNodeState extends State<NavigationNode> {
   ///
   /// Refusing takes no undoing: nothing has been spent to get here, so the next
   /// press arrives exactly as this one did.
-  void _decideOutside(BuildContext context, Object? result) {
+  ///
+  /// [outerContext] is the node's own, from above the nested navigator. It is
+  /// what the route the node stands on is found from, and it is not what the
+  /// hook is given: a dialog opened from there with `useRootNavigator: false`
+  /// would land on the navigator of the application, above everything the node
+  /// exists to stay below.
+  void _decideOutside(BuildContext outerContext, Object? result) {
     // A decision already under way is the answer to this press too. Nothing
     // queues: a second back while a confirmation is on screen must not ask a
     // second time, and two answers of `true` must not take two routes.
@@ -102,10 +113,10 @@ final class _NavigationNodeState extends State<NavigationNode> {
     }
 
     // ignore: discarded_futures
-    switch (widget.onPop?.call(context, result)) {
+    switch (widget.onPop?.call(_navigator.context, result)) {
       case final Future<bool> future:
         _deciding = true;
-        final route = ModalRoute.of(context);
+        final route = ModalRoute.of(outerContext);
 
         // ignore: discarded_futures
         future.whenComplete(() => _deciding = false).then(

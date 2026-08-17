@@ -216,6 +216,15 @@
   overriding `NavigatorState.canPop()`: with no marker of the node's own in the
   way, the base answer is the true one, and it used to answer `false` while a
   drawer was open.
+* **Behaviour change:** `NavigationNode.onPop` is given a context from inside
+  the node. It used to get one from above the nested navigator, so
+  `Navigator.of(context)` there was the application's navigator — and the
+  confirmation dialog the documentation recommends asking from that hook, with
+  `useRootNavigator: false`, was pushed outside the node, above everything the
+  node exists to stay below. A scope the node stood under was unreachable from
+  the dialog asking whether to leave it. The context the route the node stands
+  on is found from is unchanged, so an answer arriving after that route has been
+  closed or buried still takes nothing.
 * A notification no longer rebuilds the widgets of the subtree it is not
   rebuilding. "Skips rebuilding the whole subtree" was true of the elements and
   not of the widgets: `ComponentElement.performRebuild` calls `build()`

@@ -92,7 +92,9 @@ Hold it in a `State` field rather than writing `GlobalKey()` inside `build`.
 `isRoot` marks a node that must not forward a pop any further. `onPop`
 intercepts the system back gesture: return `true` to let the pop through,
 `false` to keep the route, or a `Future<bool>` to decide after asking something
-— a confirmation dialog, typically.
+— a confirmation dialog, typically. The context it is given is one from inside
+the node, so `showDialog(useRootNavigator: false)` puts that dialog in the node,
+below everything the node stands under.
 
 An asynchronous `onPop` is asked once at a time: a back press arriving while an
 answer is still pending is dropped rather than starting a second question. And
