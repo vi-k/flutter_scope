@@ -178,11 +178,14 @@ final class _NavigationNodeState extends State<NavigationNode> {
   /// outermost back means, and it may act on the press itself. What a root node
   /// no longer does is leave.
   ///
-  /// A pop is handed over only when the navigator above has a route to give up.
-  /// [NavigatorState.pop] takes the last one it holds without asking whether it
-  /// is the last, so a node placed on the first route of the application used to
-  /// empty the application's own navigator: a blank screen, and an assertion of
-  /// the framework on the frame after it.
+  /// Handing over is asking, not taking. [NavigatorState.pop] takes the last
+  /// route it holds and asks nobody, so this used to walk past a [PopScope] the
+  /// application had put around the node, and to empty the application's own
+  /// navigator when the node stood on its first route — a blank screen, and an
+  /// assertion of the framework on the frame after it. Asking [route] what a
+  /// pop there would do settles both, and asking is all it does: reading
+  /// [ModalRoute.popDisposition] dispatches nothing, where a `maybePop` would
+  /// report a refusal of its own to every [PopScope] on that route.
   void _popOutside(ModalRoute<dynamic>? route, Object? result) {
     if (widget.isRoot) {
       return;
