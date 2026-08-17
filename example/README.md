@@ -1,5 +1,5 @@
 For a full tour of scopo, see
-[scopo_demo](https://github.com/vi-k/scopo/tree/main/example/scopo_demo) — 9
+[scopo_demo](https://github.com/vi-k/scopo/tree/main/example/scopo_demo) — ten
 interactive demos covering every scope family, nested scopes, `scopeKey`,
 deferred closing, and navigation nodes.
 

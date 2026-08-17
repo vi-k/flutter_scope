@@ -53,6 +53,9 @@ abstract base class AsyncScopeBase<W extends AsyncScopeBase<W>>
   final Duration? waitForChildrenTimeout;
 
   /// Called when the wait for the child scopes expires.
+  ///
+  /// The expiry is reported through [FlutterError.reportError] either way,
+  /// and the teardown goes on without the children that never finished.
   final void Function()? onWaitForChildrenTimeout;
 
   /// Holds the ready branch back for this long after the initialization.

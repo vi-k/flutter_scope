@@ -91,8 +91,11 @@ mixin ScopeDependencyMixin implements ScopeDependency {
   /// covers [ScopeDependencyFailed] — so overwriting its state threw that
   /// record away exactly where it was needed, and with the default
   /// [ScopeAutoDependencies.autoDisposeOnError] that happened before the
-  /// caller ever saw it. A failed *leaf* is never disposed of at all, so it
-  /// always kept its errors; the groups now behave the same way.
+  /// caller ever saw it. A failed *leaf* keeps its errors by the same rule, and
+  /// it is disposed of all the same: what decides that is whether the
+  /// initializer took anything, not how it ended
+  /// (`_ScopeDependencyImpl.disposalRequired`). The groups now behave the same
+  /// way.
   @override
   Stream<String> runDispose() async* {
     try {

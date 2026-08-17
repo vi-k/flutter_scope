@@ -1,10 +1,10 @@
 # example
 
-> Перевод `example/README.md` (blob `aee8243001cc1fb8a95bee45012dbc2f83f43d70`).
+> Перевод `example/README.md` (blob `68c94ddb167685bf2751000b96facef57ed58160`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 Полный обзор scopo — в
-[scopo_demo](https://github.com/vi-k/scopo/tree/main/example/scopo_demo): 9
+[scopo_demo](https://github.com/vi-k/scopo/tree/main/example/scopo_demo): десять
 интерактивных демонстраций, охватывающих все семейства скоупов, вложенные
 скоупы, `scopeKey`, отложенное закрытие и узлы навигации.
 

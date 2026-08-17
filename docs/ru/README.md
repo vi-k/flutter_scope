@@ -1,6 +1,6 @@
 # scopo
 
-> Перевод `README.md` (blob `a2342cbc29ce8a61261376176bf91faa80c74371`).
+> Перевод `README.md` (blob `973e80906211968d781818c84eb31bb2c60061cd`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 [![pub version](https://img.shields.io/pub/v/scopo)](https://pub.dev/packages/scopo)
@@ -571,7 +571,11 @@ void main() {
 - [scopo_demo](https://github.com/vi-k/scopo/tree/main/example/scopo_demo) —
   демонстрация каждого семейства скоупов с консолью, показывающей события
   жизненного цикла, плюс вложенные скоупы, `scopeKey`, отложенное закрытие и
-  узлы навигации.
+  узлы навигации: десять вкладок.
+- [navigation_node](https://github.com/vi-k/scopo/tree/main/example/navigation_node)
+  — `NavigationNode` сам по себе, шестью уроками: вложенные навигаторы, диалоги,
+  принадлежащие экрану, `onPop`, `isRoot` и системный «назад», который можно
+  нажать на десктопе, с журналом, показывающим, что ответило на каждое нажатие.
 
 ## Документация
 

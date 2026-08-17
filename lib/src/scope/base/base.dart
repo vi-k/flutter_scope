@@ -21,11 +21,26 @@ abstract base class ScopeInheritedWidget extends InheritedWidget {
   });
 }
 
+/// The default `child` of a [ScopeInheritedWidget]: a placeholder that refuses
+/// to become an element.
+///
+/// A scope builds what it shows through `buildChild()`, and the `child` it is
+/// constructed with is there for a family that wants the plain
+/// `InheritedWidget` behaviour and reads it itself. Nothing in the package does,
+/// so building this one means a family returned a `child` nobody passed --
+/// which is worth saying out loud rather than raising a bare
+/// [UnimplementedError] from somewhere inside the framework.
 final class _NullWidget extends Widget {
   const _NullWidget();
 
   @override
-  Element createElement() => throw UnimplementedError();
+  Element createElement() => throw UnimplementedError(
+        'A scope built the placeholder `child` of `ScopeInheritedWidget`. A '
+        'scope builds its own subtree through `buildChild()`; the `child` it '
+        'is constructed with is used only by a family that reads it, and this '
+        'is the default nobody passed one for. Pass a `child` to the scope, or '
+        'return the subtree from `buildChild()`.',
+      );
 }
 
 /// The element whose initialization hook is running right now.

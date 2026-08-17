@@ -110,6 +110,11 @@ abstract base class ScopeDependencyGroup with ScopeDependencyMixin {
             .where((e) => e.error is! ScopeDependencyException)
             .toList();
 
+        // One name, in practice: the stream the children run in is guarded, and
+        // a guarded stream closes on the first error, so a group keeps one
+        // failed child however many fall over at once. The join stays because a
+        // diagnostic must not be the thing that throws -- `single` would, on an
+        // empty list or on a second name that should not be there.
         return '${state.toString(showCount: false, showErrors: false)}'
             ': ${failedChildren.join(', ')}'
             '${errors.isEmpty //

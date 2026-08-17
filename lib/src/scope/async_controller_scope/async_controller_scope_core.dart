@@ -11,6 +11,45 @@ abstract base class AsyncControllerScopeCore<
     super.tag,
     super.child, // Not used by default. You can use it at your own discretion.
   });
+
+  /// The element of the nearest scope [W] above [context], or `null`.
+  ///
+  /// Statics are not inherited in Dart, so a family built on this layer needs
+  /// these three here rather than on the layer below: the same lookups exist on
+  /// [AsyncDataScopeCore] and [AsyncScopeCore], and going through one of those
+  /// with this family's type arguments works but is not something to have to
+  /// find out.
+  static E? maybeOf<
+          W extends AsyncControllerScopeCore<W, E, C>,
+          E extends AsyncControllerScopeElementBase<W, E, C>,
+          C extends ScopeController>(
+    BuildContext context, {
+    required bool listen,
+  }) =>
+      ScopeContext.maybeOf<W, E>(context, listen: listen);
+
+  /// The element of the nearest scope [W] above [context].
+  ///
+  /// Throws when there is none.
+  static E of<
+          W extends AsyncControllerScopeCore<W, E, C>,
+          E extends AsyncControllerScopeElementBase<W, E, C>,
+          C extends ScopeController>(
+    BuildContext context, {
+    required bool listen,
+  }) =>
+      ScopeContext.of<W, E>(context, listen: listen);
+
+  /// Subscribes to one value of the scope and returns it.
+  static V select<
+          W extends AsyncControllerScopeCore<W, E, C>,
+          E extends AsyncControllerScopeElementBase<W, E, C>,
+          C extends ScopeController,
+          V extends Object?>(
+    BuildContext context,
+    V Function(E element) selector,
+  ) =>
+      ScopeContext.select<W, E, V>(context, selector);
 }
 
 /// {@category AsyncControllerScope}

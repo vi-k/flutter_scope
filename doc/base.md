@@ -145,7 +145,7 @@ of every dependent is re-evaluated: the dependent is rebuilt only if
 `selector(scope) != value` for at least one of them. A widget that selected
 `userName` sleeps through a change of `cartTotal`.
 
-Four consequences are worth keeping in mind.
+Five consequences are worth keeping in mind.
 
 **The comparison is `!=`,** so the `==` of the selected value decides
 everything. Select a field, a record or an immutable value. A selector that

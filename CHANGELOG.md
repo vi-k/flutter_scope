@@ -141,6 +141,24 @@
   again — twice per rebuild, to every listener above the node — for a page that
   had not changed. While `child` and `isRoot` are the same objects, nothing is
   handed over anew.
+* `AsyncControllerScopeCore` has `maybeOf`, `of` and `select` of its own, like
+  the two `Core` layers below it. Statics are not inherited in Dart, so a family
+  built on this layer had to reach for `AsyncDataScopeCore.maybeOf` with its own
+  type arguments — which works, and is not something to have to find out.
+* The placeholder `child` every `ScopeInheritedWidget` carries says which mistake
+  it is instead of raising a bare `UnimplementedError` from inside the framework.
+  A scope builds what it shows through `buildChild()`; that placeholder is only
+  reached when a family returns a `child` nobody passed.
+* Dartdoc corrections, all of them about promises rather than behaviour:
+  `AsyncDataScope` and `AsyncControllerScope` now say what their twin
+  `AsyncScope` says about `scopeKey`, about each expiry callback, about
+  `pauseAfterInitialization` and about what the builders receive;
+  `ScopeDependency.count` no longer claims to include the group itself (it counts
+  the steps a subtree reports, and a group reports none); `AsyncScopeModel` is
+  the third type argument of `ScopeModelCore`, not of the two-parameter
+  `AsyncScopeCore`; and the `runDispose` comment no longer justifies itself with
+  "a failed leaf is never disposed of at all", which stopped being true when a
+  failed leaf started giving back what it had taken.
 * `ScopeLog.message` is declared `String` rather than `String?`. It never
   answered `null`: the message is held as a `LazyString`, which renders anything
   that is not a string — `null` included — through `toString()`, so a log written
@@ -216,10 +234,10 @@
   handed out the newcomer — and the value the scope had been given was left
   with nobody to release it. The second `ready` is refused where the value is
   caught.
-* `AsyncScopeModel` is documented rather than hidden with `@nodoc`. It is the
-  third type argument of `AsyncScopeCore` and what
-  `AsyncScopeElementBase.model` returns, so a scope written on the `Core` layer
-  has to name it.
+* `AsyncScopeModel` is documented rather than hidden with `@nodoc`. It is what
+  `AsyncScopeElementBase.model` returns, and the model type the family fixes on
+  the layer below — `ScopeModelCore<W, E, AsyncScopeModel>` — so a scope written
+  on the `Core` layer has to name it.
 * `AsyncScopeElementBase.model` is one object instead of a fresh wrapper on
   every read. `state`, `isInitialized`, `hasError`, `error`, `stackTrace`,
   `buildChild()` and every run of every selector go through it.
@@ -929,7 +947,9 @@
 * Add `repository`, `issue_tracker` and `topics` to pubspec.
 * [breaking changes] Tighten the SDK constraints to Flutter `>=3.27.0` (was
   `>=1.17.0`) and Dart `^3.6.0` (was `^3.2.0`) — the floor the package
-  actually requires, since it calls `Color.withValues`.
+  actually requires, since it calls `Color.withValues`. Superseded later in this
+  same release: the floor of 0.10.0 is Flutter `>=3.29.0`, and the entry above
+  says why `>=3.27.0` never resolved.
 * Switch analysis to flutter_lints in the package and demo.
 * Rewrite README; sync the pub.dev example; real `debug`/`Scope` doc pages.
 

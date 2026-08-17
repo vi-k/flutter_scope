@@ -17,6 +17,9 @@ abstract base class AsyncControllerScopeBase<
   final Duration? scopeKeyTimeout;
 
   /// Called when the wait for [scopeKey] expires.
+  ///
+  /// The expiry is reported through [FlutterError.reportError] either way,
+  /// and the scope proceeds as if the wait had succeeded.
   final void Function()? onScopeKeyTimeout;
 
   /// How long the teardown waits for the initialization of the controller to
@@ -27,6 +30,9 @@ abstract base class AsyncControllerScopeBase<
   final Duration? initCancellationTimeout;
 
   /// Called when the wait for the cancellation expires.
+  ///
+  /// The expiry is reported through [FlutterError.reportError] either way,
+  /// and the teardown goes on without the initialization.
   final void Function()? onInitCancellationTimeout;
 
   /// How long to wait for the teardown of the controller; `null` takes the
@@ -37,6 +43,9 @@ abstract base class AsyncControllerScopeBase<
   final Duration? disposeAsyncTimeout;
 
   /// Called when the wait for the teardown expires.
+  ///
+  /// The expiry is reported through [FlutterError.reportError] either way,
+  /// and the release goes on without waiting for the teardown to finish.
   final void Function()? onDisposeAsyncTimeout;
 
   /// How long to wait for the child scopes; `null` takes the default.
@@ -46,9 +55,16 @@ abstract base class AsyncControllerScopeBase<
   final Duration? waitForChildrenTimeout;
 
   /// Called when the wait for the child scopes expires.
+  ///
+  /// The expiry is reported through [FlutterError.reportError] either way,
+  /// and the teardown goes on without the children that never finished.
   final void Function()? onWaitForChildrenTimeout;
 
   /// Holds the ready branch back for this long after the initialization.
+  ///
+  /// Keeps a loading indicator on screen long enough to be read.
+  /// [ScopeConfig.pauseAfterInitializationEnabled] turns every such pause
+  /// off at once.
   final Duration? pauseAfterInitialization;
 
   /// Creates a scope owning a controller.

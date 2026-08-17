@@ -21,7 +21,12 @@ abstract interface class ScopeDependency {
   /// The name this dependency was declared with.
   String get name;
 
-  /// How many dependencies this subtree holds, itself included.
+  /// How many steps this subtree reports while it initializes.
+  ///
+  /// A leaf counts as one. A group counts what is under it and not itself: it
+  /// holds nothing and yields no step of its own, so counting it would promise a
+  /// step that never arrives. That is what makes this number the denominator a
+  /// progress indicator wants.
   int get count;
 
   /// Where in its lifecycle this dependency is.

@@ -140,6 +140,36 @@ final class TestDependenciesNamedNested
   String toString() => '$TestDependenciesNamedNested';
 }
 
+/// Two children of one concurrent group, failing in the same instant.
+///
+/// The question it answers: how many of them the group keeps. A guarded stream
+/// closes on the first error, so "sibling errors are all kept" was never true --
+/// which is what the `Scope` topic used to promise, and what
+/// `failedChildren.join(', ')` still reads as.
+final class TestDependenciesTwinFailures
+    extends ScopeAutoDependencies<TestDependenciesTwinFailures, void> {
+  static const step = Duration(milliseconds: 10);
+
+  @override
+  bool get autoDisposeOnError => false;
+
+  FutureOr<void> Function(DepHelper) _failAfterStep(String name) =>
+      (dep) async {
+        await Future<void>.delayed(step);
+
+        throw Exception('$name failed');
+      };
+
+  @override
+  ScopeDependency buildDependencies(_) => concurrent('twins', [
+        dep('depA', _failAfterStep('depA')),
+        dep('depB', _failAfterStep('depB')),
+      ]);
+
+  @override
+  String toString() => '$TestDependenciesTwinFailures';
+}
+
 final class TestDependenciesConcurrentNoDispose
     extends ScopeAutoDependencies<TestDependenciesConcurrentNoDispose, void> {
   static const step = Duration(milliseconds: 10);
@@ -1631,14 +1661,42 @@ void main() {
     });
   });
 
+  // The `Scope` topic used to promise that sibling errors are all kept in the
+  // state, and the group renders them with a `join(', ')` that reads the same
+  // way. Neither is true: the stream a group runs its children in is guarded,
+  // and a guarded stream closes on the first error -- so the state keeps one
+  // failed child however many fail in the same instant.
+  test('a group keeps one failed child, not every sibling that fell over', () {
+    myFakeAsync((async) {
+      final dependencies = TestDependenciesTwinFailures();
+      handleInitFor(dependencies, async);
+
+      final state = dependencies.root.state;
+      expect(state, isA<ScopeDependencyFailed>());
+      expect(
+        (state as ScopeDependencyFailed).errors(),
+        hasLength(1),
+        reason: 'two children failed at once, and the group closed on the '
+            'first of them',
+      );
+      expect(
+        dependencies.root.stateToString(),
+        anyOf('failed: depA', 'failed: depB'),
+        reason: 'so the rendered state names one child, never a pair',
+      );
+    });
+  });
+
   group('ScopeAutoDependencies failure after the automatic disposal', () {
     // A group is disposed of *because* something under it failed
     // (`ScopeDependencyGroup.disposalRequired` covers
     // `ScopeDependencyFailed`), and `runDispose` used to overwrite that state
     // with `ScopeDependencyDisposed` — so with the default
     // `autoDisposeOnError` the caller was left with a tree that said nothing
-    // about what had gone wrong. A failed *leaf* is never disposed of, so it
-    // always kept its errors; the groups now behave the same way.
+    // about what had gone wrong. A failed *leaf* keeps its errors by the same
+    // rule -- a state that carries them is not overwritten -- and it is disposed
+    // of all the same, whenever its initializer took something before it failed.
+    // The groups now behave the same way.
     test('control: a tree that succeeded ends up disposed', () {
       myFakeAsync((async) {
         final dependencies = TestAutoDisposeDependencies();

@@ -560,7 +560,11 @@ void main() {
   screens, a counter.
 - [scopo_demo](https://github.com/vi-k/scopo/tree/main/example/scopo_demo) — a
   demo of every scope family with a console showing the lifecycle events, plus
-  nested scopes, `scopeKey`, deferred closing, and navigation nodes.
+  nested scopes, `scopeKey`, deferred closing, and navigation nodes: ten tabs.
+- [navigation_node](https://github.com/vi-k/scopo/tree/main/example/navigation_node)
+  — `NavigationNode` on its own, in six lessons: nested navigators, dialogs that
+  belong to the screen, `onPop`, `isRoot`, and a system back you can press on a
+  desktop, with a journal showing what answered each press.
 
 ## Documentation
 

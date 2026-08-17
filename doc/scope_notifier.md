@@ -93,16 +93,19 @@ releases whatever the old one owned.
 
 ## State models
 
-Four types in this family exist for scopes whose state is a single immutable
-value that changes over time. `AsyncScope` is built on the first three; the
-fourth is offered for a family of your own:
+Six types in this family exist for scopes whose state is a single immutable
+value that changes over time — a trio, and the same trio with a failed state
+beside the value. `AsyncScope` is built on the first three; the second three are
+offered for a family of your own:
 
 | type | what it is |
 | --- | --- |
 | `ScopeStateModel<S>` | a `Listenable` with a `state` of type `S` — the read side |
 | `ScopeStateNotifier<S>` | a `ChangeNotifier` implementing it, with `update(S)` |
 | `ScopeStateModelView<S>` | an unmodifiable view of a notifier |
-| `ScopeStateWithErrorModel<S>` / `ScopeStateWithErrorNotifier<S>` | the same, plus a failed state |
+| `ScopeStateWithErrorModel<S>` | the read side, plus a failed state |
+| `ScopeStateWithErrorNotifier<S>` | its notifier, with `update(S)` and `setError` |
+| `ScopeStateWithErrorModelView<S>` | an unmodifiable view of that notifier |
 
 `update(S value)` notifies only when the value actually changed, and what
 "changed" means is a method you can override:

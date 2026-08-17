@@ -152,6 +152,45 @@ void main() {
     });
   });
 
+  group('the child a scope was constructed with', () {
+    // A scope builds what it shows through `buildChild()`. The `child` of the
+    // constructor is there for a family that wants the plain `InheritedWidget`
+    // behaviour and reads it itself; nothing in the package does, so the default
+    // is a placeholder that refuses to become an element. It used to refuse with
+    // a bare `UnimplementedError` raised from inside the framework, which is
+    // immediate but says nothing.
+    testWidgets('the placeholder nobody passed says which mistake it is',
+        (tester) async {
+      await tester.pumpWidget(
+        const Directionality(
+          textDirection: TextDirection.ltr,
+          child: _PlainChildScope(),
+        ),
+      );
+
+      final exception = tester.takeException();
+      expect(exception, isA<UnimplementedError>());
+      expect(
+        exception.toString(),
+        contains('buildChild()'),
+        reason: 'the message names the way a scope is meant to build what it '
+            'shows',
+      );
+    });
+
+    testWidgets('a child that was passed is built', (tester) async {
+      await tester.pumpWidget(
+        const Directionality(
+          textDirection: TextDirection.ltr,
+          child: _PlainChildScope(child: Text('passed in')),
+        ),
+      );
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('passed in'), findsOneWidget);
+    });
+  });
+
   group('where a subscription may be taken', () {
     // What a dependent asked for is remembered per build, and the boundary
     // between one build and the next is taken from the frame. A registration
@@ -408,6 +447,25 @@ final class _SubscribesTooEarlyState extends State<_SubscribesTooEarly> {
 
   @override
   Widget build(BuildContext context) => const SizedBox.shrink();
+}
+
+/// A family that builds the `child` it was constructed with, the plain
+/// `InheritedWidget` way. By default that is the placeholder every
+/// `ScopeInheritedWidget` carries.
+final class _PlainChildScope
+    extends ScopeWidgetCore<_PlainChildScope, _PlainChildScopeElement> {
+  const _PlainChildScope({super.child});
+
+  @override
+  _PlainChildScopeElement createScopeElement() => _PlainChildScopeElement(this);
+}
+
+final class _PlainChildScopeElement
+    extends ScopeWidgetElementBase<_PlainChildScope, _PlainChildScopeElement> {
+  _PlainChildScopeElement(super.widget);
+
+  @override
+  Widget buildChild() => widget.child;
 }
 
 final class _Scope extends ScopeWidgetCore<_Scope, _ScopeElement> {

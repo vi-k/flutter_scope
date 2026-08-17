@@ -7,6 +7,10 @@ final class AsyncDataScope<T extends Object?>
   final void Function(BuildContext context)? mount;
 
   /// The initialization, ending with the value.
+  ///
+  /// Yields [AsyncDataScopeProgress] any number of times and
+  /// [AsyncDataScopeReady] once, carrying the value. Cancelled if the scope
+  /// leaves the tree before it finishes.
   final Stream<AsyncDataScopeInitState<Object, T>> Function(
     BuildContext context,
   ) init;
@@ -27,12 +31,19 @@ final class AsyncDataScope<T extends Object?>
   final FutureOr<void> Function(T data) dispose;
 
   /// Built while waiting for a `scopeKey` and for the first event.
+  ///
+  /// Falls back to [initBuilder] when omitted.
   final Widget Function(BuildContext context)? waitingBuilder;
 
   /// Built while the initialization is running.
+  ///
+  /// The second argument is what the last [AsyncDataScopeProgress] carried, and
+  /// `null` before the first one.
   final Widget Function(BuildContext context, Object? progress) initBuilder;
 
   /// Built when the initialization failed.
+  ///
+  /// The last argument is the progress the scope had reached when it failed.
   final Widget Function(
     BuildContext context,
     Object error,

@@ -1,6 +1,6 @@
 # ScopeNotifier
 
-> Перевод `doc/scope_notifier.md` (blob `07070fb475af6f0dbbb798d68f1ea115148f96c5`).
+> Перевод `doc/scope_notifier.md` (blob `0aaf65df738ca5e42f36f4860f7e2aada57c5efb`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 `ScopeModel` для `Listenable`. Всё из той темы остаётся в силе — `create` и
@@ -95,16 +95,19 @@ ScopeNotifier.value(value: currentPlayer, builder: ...)
 
 ## Модели состояния
 
-Четыре типа этого семейства существуют для скоупов, чьё состояние — одно
-неизменяемое значение, меняющееся во времени. `AsyncScope` построен на первых
-трёх; четвёртый предлагается для вашего собственного семейства:
+Шесть типов этого семейства существуют для скоупов, чьё состояние — одно
+неизменяемое значение, меняющееся во времени: тройка и та же тройка с провальным
+состоянием рядом со значением. `AsyncScope` построен на первых трёх; вторая
+тройка предлагается для вашего собственного семейства:
 
 | тип | что это |
 | --- | --- |
 | `ScopeStateModel<S>` | `Listenable` со `state` типа `S` — сторона чтения |
 | `ScopeStateNotifier<S>` | `ChangeNotifier`, реализующий его, с `update(S)` |
 | `ScopeStateModelView<S>` | неизменяемое представление notifier'а |
-| `ScopeStateWithErrorModel<S>` / `ScopeStateWithErrorNotifier<S>` | то же плюс провальное состояние |
+| `ScopeStateWithErrorModel<S>` | сторона чтения плюс провальное состояние |
+| `ScopeStateWithErrorNotifier<S>` | его notifier, с `update(S)` и `setError` |
+| `ScopeStateWithErrorModelView<S>` | неизменяемое представление этого notifier'а |
 
 `update(S value)` уведомляет, только если значение действительно изменилось, а
 что считать изменением — метод, который можно переопределить:

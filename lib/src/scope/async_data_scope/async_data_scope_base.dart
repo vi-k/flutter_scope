@@ -5,6 +5,9 @@ abstract base class AsyncDataScopeBase<W extends AsyncDataScopeBase<W, T>,
         T extends Object?>
     extends AsyncDataScopeCore<W, _AsyncDataScopeElement<W, T>, T> {
   /// Serializes this scope with the others that share the key.
+  ///
+  /// A scope with a key starts only once the previous holder has finished
+  /// disposing of itself. Needs an [AsyncScopeCoordinator] above it.
   final Object? scopeKey;
 
   /// How long to wait for [scopeKey]; `null` takes the default.
@@ -14,6 +17,9 @@ abstract base class AsyncDataScopeBase<W extends AsyncDataScopeBase<W, T>,
   final Duration? scopeKeyTimeout;
 
   /// Called when the wait for [scopeKey] expires.
+  ///
+  /// The expiry is reported through [FlutterError.reportError] either way,
+  /// and the scope proceeds as if the wait had succeeded.
   final void Function()? onScopeKeyTimeout;
 
   /// How long the teardown waits for the initialization to be cancelled;
@@ -24,6 +30,9 @@ abstract base class AsyncDataScopeBase<W extends AsyncDataScopeBase<W, T>,
   final Duration? initCancellationTimeout;
 
   /// Called when the wait for the cancellation expires.
+  ///
+  /// The expiry is reported through [FlutterError.reportError] either way,
+  /// and the teardown goes on without the initialization.
   final void Function()? onInitCancellationTimeout;
 
   /// How long to wait for the asynchronous teardown; `null` takes the
@@ -34,6 +43,9 @@ abstract base class AsyncDataScopeBase<W extends AsyncDataScopeBase<W, T>,
   final Duration? disposeAsyncTimeout;
 
   /// Called when the wait for the asynchronous teardown expires.
+  ///
+  /// The expiry is reported through [FlutterError.reportError] either way,
+  /// and the release goes on without waiting for the teardown to finish.
   final void Function()? onDisposeAsyncTimeout;
 
   /// How long to wait for the child scopes; `null` takes the default.
@@ -43,9 +55,16 @@ abstract base class AsyncDataScopeBase<W extends AsyncDataScopeBase<W, T>,
   final Duration? waitForChildrenTimeout;
 
   /// Called when the wait for the child scopes expires.
+  ///
+  /// The expiry is reported through [FlutterError.reportError] either way,
+  /// and the teardown goes on without the children that never finished.
   final void Function()? onWaitForChildrenTimeout;
 
   /// Holds the ready branch back for this long after the initialization.
+  ///
+  /// Keeps a loading indicator on screen long enough to be read.
+  /// [ScopeConfig.pauseAfterInitializationEnabled] turns every such pause
+  /// off at once.
   final Duration? pauseAfterInitialization;
 
   /// Creates an asynchronous scope producing a value.

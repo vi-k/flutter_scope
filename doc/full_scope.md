@@ -350,11 +350,13 @@ concurrent1/sequential1/dep3: Exception: no network
 An empty `name` means the anonymous root dependency itself failed.
 
 The group that saw the failure stops requiring initialization and switches to
-`ScopeDependencyFailed`; its sibling errors, if a `concurrent` group produced
-several, are all kept in the state and reachable through
-`flattenDependenciesWithErrors()`. The `stateToString()` of a group summarizes
-that: the failed children by name, and any error that is not itself a
-`ScopeDependencyException` listed as unresolved.
+`ScopeDependencyFailed`, keeping the failure it saw — one of them, even when a
+`concurrent` group had several children fail in the same instant: the stream a
+group runs its children in is guarded, and a guarded stream closes on the first
+error. Every dependency keeps its own errors, and
+`flattenDependenciesWithErrors()` walks the tree for them. The `stateToString()`
+of a group summarizes what it holds: the failed child by name, and any error that
+is not itself a `ScopeDependencyException` listed as unresolved.
 
 ## Disposal, unmount and close
 
