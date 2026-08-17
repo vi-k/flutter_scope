@@ -214,6 +214,58 @@ void main() {
       expect(controller.calls, ['init', 'onUnmount', 'dispose']);
     });
 
+    // The other half of the test above, and the one the matrix of parameters
+    // walked into. An initialization parked on a future cannot be cancelled:
+    // cancelling an `async*` means resuming its body, and a body suspended
+    // for good is never resumed. So the teardown gives up on it after
+    // `initCancellationTimeout` and runs to the end — and the generator is
+    // resumed later, if that future ever completes, with its `finally` still
+    // holding the controller to release. By then the element has cleared the
+    // widget it reads its parameters from, and reading one there used to
+    // raise a `_TypeError` where a release belonged.
+    testWidgets('releases a controller whose init woke up after the teardown',
+        (tester) async {
+      final gate = Completer<void>();
+      final controller = _TestController(initGate: gate);
+
+      await tester.pumpWidget(
+        _Host(
+          controller: controller,
+          initCancellationTimeout: const Duration(milliseconds: 50),
+        ),
+      );
+      await tester.pump();
+      expect(find.text('initializing'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await settle(tester, until: () => false, rounds: 12);
+
+      expect(
+        tester.takeException(),
+        isA<TimeoutException>(),
+        reason: 'the teardown gave up on a cancellation that cannot finish, '
+            'and said so',
+      );
+
+      // Long after the teardown is over.
+      gate.complete();
+      await settle(tester, until: () => controller.calls.contains('dispose'));
+
+      expect(
+        controller.calls,
+        ['init', 'onUnmount', 'dispose'],
+        reason: 'the controller is released on every path -- which is the '
+            'whole promise of this family -- and this is the latest path '
+            'there is',
+      );
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: 'and the release is a release, not a report about a widget '
+            'the element had already let go of',
+      );
+    });
+
     testWidgets(
         'the constructor form creates the controller once and hands it to the '
         'subtree', (tester) async {
@@ -334,8 +386,13 @@ final class _Reader extends StatelessWidget {
 final class _Host extends StatelessWidget {
   final _TestController controller;
   final Duration? disposeAsyncTimeout;
+  final Duration? initCancellationTimeout;
 
-  const _Host({required this.controller, this.disposeAsyncTimeout});
+  const _Host({
+    required this.controller,
+    this.disposeAsyncTimeout,
+    this.initCancellationTimeout,
+  });
 
   @override
   Widget build(BuildContext context) => Directionality(
@@ -343,6 +400,7 @@ final class _Host extends StatelessWidget {
         child: _TestScope(
           controller: controller,
           disposeAsyncTimeout: disposeAsyncTimeout,
+          initCancellationTimeout: initCancellationTimeout,
         ),
       );
 }
@@ -352,7 +410,11 @@ final class _TestScope
     extends AsyncControllerScopeBase<_TestScope, _TestController> {
   final _TestController controller;
 
-  const _TestScope({required this.controller, super.disposeAsyncTimeout});
+  const _TestScope({
+    required this.controller,
+    super.disposeAsyncTimeout,
+    super.initCancellationTimeout,
+  });
 
   @override
   _TestController createController(BuildContext context) => controller;

@@ -274,6 +274,18 @@
   teardown is, and giving up is reported rather than passed over; a release that
   fails after it was abandoned is reported too. The `AsyncScope` topic now says
   what an `await` in a hand-written guard costs when it cannot finish.
+* Fix a controller left unreleased when its `init()` woke up after the
+  teardown was over. An initialization parked on a future cannot be cancelled
+  — cancelling an `async*` means resuming its body, and a body suspended for
+  good is never resumed — so the teardown gives up on it after
+  `initCancellationTimeout` and runs to the end. If that future ever
+  completes, the generator is resumed with its `finally` still holding the
+  controller to release; by then the element has given back everything it
+  held, the widget among it. Reading `disposeAsyncTimeout` there went through
+  that widget and raised a `_TypeError` where a release belonged, so the
+  console got a report about a null instead of the release the family
+  promises on every path. An abandoned release now runs unbounded, which is
+  what it deserves: nobody is waiting for it and it can hold nothing up.
 * `LiteScope.buildOnWaiting` is documented as the required builder it is, and
   the two optional ones say what happens when they are left out. The dartdoc
   read like that of an optional method — "may return `null`" — while the

@@ -180,6 +180,16 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
   /// callback would use the disposed notifier.
   bool _isDisposing = false;
 
+  /// Whether [_performAsyncDispose] has finished.
+  ///
+  /// Not the same question as [_isDisposing], and asked by whatever the
+  /// teardown left running behind it: an initialization it gave up on can be
+  /// resumed long afterwards, and by then the element has given back
+  /// everything it was holding -- its place with the parent, its `scopeKey`,
+  /// its model, and the widget it reads every parameter from. Code reached on
+  /// that path has to know it is on its own.
+  bool _disposalIsOver = false;
+
   /// The [pauseAfterInitialization] delay, while it is running.
   ///
   /// Kept so the teardown can put it out. A delay nobody holds outlives the
@@ -867,6 +877,7 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
       _model.dispose();
 
       _widget = null;
+      _disposalIsOver = true;
     }
 
     if (failure case final failure?) {

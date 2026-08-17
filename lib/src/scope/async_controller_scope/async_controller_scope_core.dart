@@ -87,6 +87,22 @@ abstract base class AsyncControllerScopeElementBase<
   Future<void> _releaseController(C controller) async {
     try {
       final released = controller.performDispose();
+
+      // A teardown that gave up on this initialization has since run to the
+      // end, and the release is happening on a generator it abandoned. There
+      // is nothing left for a limit to protect -- nobody is waiting for this,
+      // the model is disposed of and the `scopeKey` is back -- and there is
+      // nothing left to read a limit from either: `disposeAsyncTimeout` goes
+      // through `widget`, which the element cleared on its way out, so asking
+      // raised a `_TypeError` where a release belonged. The wait goes on
+      // unbounded, which is what an abandoned release deserves: it can hold
+      // nothing up.
+      if (_disposalIsOver) {
+        await released;
+
+        return;
+      }
+
       final limit =
           disposeAsyncTimeout ?? ScopeConfig.defaultDisposeAsyncTimeout;
 
