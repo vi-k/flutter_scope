@@ -130,6 +130,19 @@ it — and reading `state` afterwards **rethrows** that error with its original
 stack trace instead of returning a value, so a builder that reads `state`
 fails loudly on a scope that has failed rather than rendering a stale value.
 
+A failure is not terminal, though: `update` puts it down as it stores the new
+state. A state handed over is a state that can be read, so recovering is what
+an update after `setError` means, and there is nothing else it could mean. The
+listeners hear about it even when the value is the one from before the failure
+— `equals` compares two values, and this change is between a state that throws
+and one that does not.
+
+```dart
+model
+  ..setError(failure, stackTrace)   // `state` throws from here on
+  ..update(recovered);              // and stops: `hasError` is false again
+```
+
 That is not how the asynchronous families model a failure. They hold an
 ordinary `ScopeStateNotifier` and put the failure *in* the state, as an
 `AsyncScopeError` beside `AsyncScopeWaiting`, `AsyncScopeProgress` and

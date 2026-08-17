@@ -274,6 +274,17 @@
   teardown is, and giving up is reported rather than passed over; a release that
   fails after it was abandoned is reported too. The `AsyncScope` topic now says
   what an `await` in a hand-written guard costs when it cannot finish.
+* **Behaviour change:** `ScopeStateWithErrorNotifier.update` now puts down a
+  failure the model was holding. `_error` used to be set once and never
+  cleared, while the inherited `update` went through as usual: it replaced the
+  state and notified everybody, and `state` went on throwing the old failure at
+  every listener that came to read it. Under a scope that is one attempt at
+  recovery turning a whole subtree into `ErrorWidget`s — the selector throws,
+  the dependent is rebuilt, its `build` reads `state`, and so on. A state
+  handed over is a state that can be read, so the failure goes with the same
+  call; the listeners hear about it even when the value is the one from before
+  the failure, since `equals` compares two values and this change is between a
+  state that throws and one that does not. The `ScopeNotifier` topic says so.
 * The dartdoc of `of`, `maybeOf` and `select` on `Scope` and `LiteScope`
   promised one condition where there are two. Both read the state, and the
   state exists only in the ready branch — so a scope that is waiting for its

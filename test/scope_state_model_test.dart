@@ -127,6 +127,54 @@ void main() {
       );
     });
 
+    // A failure used to be terminal without saying so: `_error` was set once
+    // and never cleared, while the inherited `update` went through as usual —
+    // it replaced the state and notified everybody, and `state` went on
+    // throwing the old failure. Under a scope that is one attempt at recovery
+    // turning the whole subtree into `ErrorWidget`s.
+    test('an update puts the failure down', () {
+      final notifier = ScopeStateWithErrorNotifier<String>('a');
+      addTearDown(notifier.dispose);
+      var notifications = 0;
+
+      notifier
+        ..addListener(() => notifications++)
+        ..setError(Exception('boom'), StackTrace.current)
+        ..update('recovered');
+
+      expect(notifier.hasError, isFalse);
+      expect(notifier.state, 'recovered');
+      expect(() => notifier.error, throwsStateError);
+      expect(
+        notifications,
+        2,
+        reason: 'the failure and the recovery are one change each',
+      );
+    });
+
+    // `equals` is asked about two values, and this change is not one between
+    // values: it is between a state that throws and one that does not.
+    test('an update recovering to the value from before still notifies', () {
+      final notifier = _DeduplicatingWithError('a');
+      addTearDown(notifier.dispose);
+      var notifications = 0;
+
+      notifier
+        ..addListener(() => notifications++)
+        ..setError(Exception('boom'), StackTrace.current)
+        ..update('a');
+
+      expect(notifier.hasError, isFalse);
+      expect(notifier.state, 'a');
+      expect(
+        notifications,
+        2,
+        reason: 'the value is the one from before the failure, so `equals` '
+            'says no change — but every listener was told the state throws, '
+            'and has to be told that it no longer does',
+      );
+    });
+
     test('the view of it answers for the error too', () {
       final notifier = ScopeStateWithErrorNotifier<String>('a');
       addTearDown(notifier.dispose);
@@ -150,6 +198,15 @@ void main() {
 /// says a value type should.
 final class _Deduplicating extends ScopeStateNotifier<String> {
   _Deduplicating(super.initialState);
+
+  @override
+  bool equals(String previous, String current) => previous == current;
+}
+
+/// The same, on the notifier that can also hold a failure.
+final class _DeduplicatingWithError
+    extends ScopeStateWithErrorNotifier<String> {
+  _DeduplicatingWithError(super.initialState);
 
   @override
   bool equals(String previous, String current) => previous == current;
