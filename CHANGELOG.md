@@ -225,6 +225,20 @@
   overriding `NavigatorState.canPop()`: with no marker of the node's own in the
   way, the base answer is the true one, and it used to answer `false` while a
   drawer was open.
+* **Breaking:** the first type argument of `ScopeAutoDependencies` is now bound
+  to the container itself — `ScopeAutoDependencies<T extends
+  ScopeAutoDependencies<T, C>, C>`. It had been bound to `ScopeDependencies`
+  only, so anything at all could stand there, and what stands there is what the
+  container hands the scope when the tree is up. A container naming another
+  container — a copy-paste with the argument left behind — compiled, built its
+  whole tree, initialized it, and then failed on the cast at the very end of a
+  successful initialization: a bare `TypeError` from a line the caller never
+  wrote, with everything still running and nothing left holding a reference to
+  release it. The bound alone does not close it, since another container
+  satisfies the bound too, so the container also refuses a type argument that is
+  not itself before it builds anything, and says which two types it is looking
+  at. A container that already named itself, which is what every example and
+  every test did, is unaffected.
 * **Behaviour change:** `NavigationNode.onPop` is given a context from inside
   the node. It used to get one from above the nested navigator, so
   `Navigator.of(context)` there was the application's navigator — and the

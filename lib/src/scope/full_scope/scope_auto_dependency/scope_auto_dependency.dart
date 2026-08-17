@@ -4,8 +4,20 @@ part of '../../scope.dart';
 typedef ScopeAutoDependenciesStream<T extends ScopeDependencies>
     = Stream<ScopeInitState<ScopeAutoDependenciesProgress, T>>;
 
+/// A container that builds its dependency tree and initializes it for you.
+///
+/// [T] is the class being declared — `final class AppDeps extends
+/// ScopeAutoDependencies&lt;AppDeps, BuildContext>`. It is what [init] hands the
+/// scope on success, so it is what the subtree gets from `Scope.of`, and the
+/// bound is what keeps the two the same thing: naming another container there
+/// used to compile and then fail at the end of a successful initialization,
+/// with the whole tree already built and nothing left to release it.
+///
+/// [C] is what [buildDependencies] is given — a `BuildContext` when the tree
+/// reads scopes above it, `void` when it needs nothing.
+///
 /// {@category Scope}
-abstract base class ScopeAutoDependencies<T extends ScopeDependencies,
+abstract base class ScopeAutoDependencies<T extends ScopeAutoDependencies<T, C>,
     C extends Object?> implements ScopeDependencies {
   late final _log = log.withAddedName(() => '$T(#${shortHash(this)})');
 
@@ -62,6 +74,23 @@ abstract base class ScopeAutoDependencies<T extends ScopeDependencies,
   Stream<ScopeInitState<ScopeAutoDependenciesProgress, T>> init(
     C context,
   ) async* {
+    // Before anything is built, because the cost of finding out late is the
+    // whole tree. [T] is the container itself, and the bound on it only says
+    // that whatever stands there is *a* container -- naming a different one
+    // satisfies it and compiles. That mistake used to surface at the very end
+    // of a successful initialization, where `ScopeReady` casts: everything was
+    // built and running, the failure came out as a bare `TypeError` from a
+    // line the caller never wrote, and nothing released any of it, since the
+    // teardown below only runs for a tree that did not finish.
+    if (this is! T) {
+      throw StateError(
+        'The first type argument of ScopeAutoDependencies must be the class '
+        'being declared. $runtimeType declares $T there, so the container it '
+        'would hand the scope is not the container that built anything. Write '
+        '`$runtimeType extends ScopeAutoDependencies<$runtimeType, …>`.',
+      );
+    }
+
     final dependencies = _prepareDependencies(context);
     final progressIterator = ProgressIterator(dependencies.count);
 

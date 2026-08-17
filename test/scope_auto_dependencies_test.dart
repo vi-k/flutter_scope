@@ -1698,4 +1698,54 @@ void main() {
       });
     });
   });
+
+  group('ScopeAutoDependencies type argument', () {
+    // The first type argument is the container itself, and naming a different
+    // container there compiles: the bound only asks for *a* container. It used
+    // to be found out at the very end of a successful initialization, where
+    // `ScopeReady` casts -- the whole tree built and running, a bare
+    // `TypeError` out of a line nobody wrote, and no teardown, since the one
+    // in `init` is for a tree that did not finish.
+    test('naming another container is refused before anything is built',
+        () async {
+      final built = <String>[];
+      final dependencies = WrongTypeArgumentDependencies(built);
+
+      await expectLater(
+        dependencies.init(null).drain<void>(),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            allOf(
+              contains('$WrongTypeArgumentDependencies'),
+              contains('$TestDependencies'),
+            ),
+          ),
+        ),
+      );
+
+      expect(
+        built,
+        isEmpty,
+        reason: 'nothing was built, so there is nothing left holding anything',
+      );
+    });
+  });
+}
+
+/// A container that names another one where it should name itself -- the
+/// copy-paste the compiler cannot catch.
+final class WrongTypeArgumentDependencies
+    extends ScopeAutoDependencies<TestDependencies, void> {
+  final List<String> built;
+
+  WrongTypeArgumentDependencies(this.built);
+
+  @override
+  ScopeDependency buildDependencies(void context) {
+    built.add('built');
+
+    return dep('held', (dep) {});
+  }
 }

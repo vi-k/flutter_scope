@@ -133,11 +133,19 @@ Three builders describe the tree, and all of them return a `ScopeDependency`:
   initialized (and disposed of) in parallel, so progress arrives in completion
   order rather than declaration order.
 
-Groups nest freely and a group name may be empty (see the paths below). The
-second type parameter of `ScopeAutoDependencies` is what `buildDependencies`
-receives: `void` for the container above, which needs nothing from the outside;
-declare `BuildContext` instead when a dependency has to read something from the
-tree.
+Groups nest freely and a group name may be empty (see the paths below).
+
+The **first** type parameter of `ScopeAutoDependencies` is the class being
+declared — `HomeDependencies extends ScopeAutoDependencies<HomeDependencies,
+…>`. It is what the container hands the scope once the tree is up, so it is what
+`Scope.of` returns to the subtree. Naming another container there is the one
+mistake this parameter invites, and it is refused before anything is built: the
+type of the container that finishes cannot be the type of a container that never
+started.
+
+The **second** is what `buildDependencies` receives: `void` for the container
+above, which needs nothing from the outside; declare `BuildContext` instead when
+a dependency has to read something from the tree.
 
 Wiring the container into the scope is one call, and
 `ScopeAutoDependenciesStream` is the alias for the resulting stream type:
