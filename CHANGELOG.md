@@ -225,6 +225,24 @@
   overriding `NavigatorState.canPop()`: with no marker of the node's own in the
   way, the base answer is the true one, and it used to answer `false` while a
   drawer was open.
+* Fix a `pauseAfterInitialization` outliving the tree. The delay was a timer
+  nobody held, so a scope taken off the tree mid-pause left it running: in a
+  widget test that is `A Timer is still pending even after the widget tree was
+  disposed`, which fails a test of yours for no reason of yours, and in
+  production it is an unmounted element held for the rest of the pause. The
+  scope keeps the timer now and puts it out first thing in the teardown. It is
+  still a timer of the current zone, unlike the bounded waits below — this delay
+  is one the user sees, so a widget test must be able to drive it with
+  `pump(duration)`.
+* Fix the wait for a `scopeKey` and the wait for the child scopes taking their
+  timers from the current zone. Both used `Future.timeout`, which does, and both
+  are waits on a hang that outlives frames — a scope is usually taken down
+  between them, so the timer was still pending once the tree was gone, and that
+  is what `flutter_test` ends a test on. The other two bounded waits of the
+  teardown had already been moved to the root zone for this reason; these two
+  are the same kind of wait and had been missed. A consequence for tests: a wait
+  of any of the four is now waited out in real time, and `pump(duration)`
+  reaches none of them. The `debug` topic says so.
 * Fix an initialization stream that ends without `AsyncScopeReady` leaving the
   scope on its loading branch for good, and silently. The model stayed
   `AsyncScopeWaiting`, `disposeAsync` was never called, and the only trace was

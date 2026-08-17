@@ -60,6 +60,44 @@ void main() {
       expect(find.text('ready'), findsOneWidget);
     });
 
+    // The pause is a timer of the zone the scope was built in, and a scope
+    // taken off the tree in the middle of one used to leave it running. What
+    // asserts it is the binding: `flutter_test` ends a test on a timer that is
+    // still pending after the tree is gone, so a test that leaves one behind
+    // fails with `A Timer is still pending`. For a consumer of the package
+    // that is a widget test of their own failing for no reason of theirs; in
+    // production it is an unmounted element held for the length of the pause.
+    testWidgets('a pause interrupted by the tree going away leaves no timer', (
+      tester,
+    ) async {
+      Widget build({required bool present}) => Directionality(
+            textDirection: TextDirection.ltr,
+            child: present
+                ? AsyncScope(
+                    pauseAfterInitialization: const Duration(seconds: 5),
+                    init: (context) => Stream.value(AsyncScopeReady()),
+                    dispose: () {},
+                    initBuilder: (context, progress) => const Text('init'),
+                    errorBuilder: (context, error, stackTrace, progress) =>
+                        Text('$error'),
+                    builder: (context) => const Text('ready'),
+                  )
+                : const SizedBox.shrink(),
+          );
+
+      await tester.pumpWidget(build(present: true));
+      await tester.pump();
+      await tester.pump();
+      expect(
+        find.text('init'),
+        findsOneWidget,
+        reason: 'the pause is running, which is the state this is about',
+      );
+
+      await tester.pumpWidget(build(present: false));
+      await settle(tester, until: () => false);
+    });
+
     // Passes all nine parameters at once, so the whole surface is pinned by
     // compilation, and asserts the two that this scenario can observe.
     testWidgets('gives up on a hanging dispose after disposeAsyncTimeout', (

@@ -7,6 +7,16 @@ import 'package:test/test.dart';
 /// Lets pending microtasks and zero-duration timers run.
 Future<void> pumpEvents() => Future<void>.delayed(Duration.zero);
 
+/// How long the timeouts below are given, in real time.
+///
+/// Real, because the limits of both waits are timers of the root zone, and a
+/// fake clock cannot reach those -- which is the whole point of putting them
+/// there. Short, because every test that waits one out pays for it.
+const _limit = Duration(milliseconds: 20);
+
+/// Waits past [_limit] in real time.
+Future<void> waitOutTheLimit() => Future<void>.delayed(_limit * 5);
+
 void main() {
   group('KeyedAccessQueues', () {
     test('the first entry gets in immediately', () async {
@@ -101,45 +111,75 @@ void main() {
       expect(queues.length, 0);
     });
 
-    test('a timeout reports and lets the entry in anyway', () {
+    test('a timeout reports and lets the entry in anyway', () async {
+      final queues = KeyedAccessQueues();
+      final first = AccessEntry('first');
+      final second = AccessEntry('second');
+      TimeoutException? reported;
+
+      unawaited(queues.enter('key', first));
+      var secondIsIn = false;
+      unawaited(
+        queues
+            .enter(
+              'key',
+              second,
+              timeout: _limit,
+              onTimeout: (error, _) => reported = error,
+            )
+            .then((_) => secondIsIn = true),
+      );
+
+      await pumpEvents();
+      expect(secondIsIn, isFalse);
+
+      await waitOutTheLimit();
+      expect(secondIsIn, isTrue);
+      expect(reported, isNotNull);
+      expect(reported!.message, contains('second'));
+      expect(reported!.message, contains('key'));
+
+      expect(
+        second.isCompleted,
+        isFalse,
+        reason: 'being let in is not leaving',
+      );
+      expect(
+        queues.length,
+        1,
+        reason: 'a timed-out entry keeps its slot, so exit() is still'
+            ' required',
+      );
+    });
+
+    // The limit is a timer of the root zone, and this is what says so. A hang
+    // of the kind these limits exist for outlives frames, and a scope is
+    // usually taken down between them: a timer of the zone the wait runs in
+    // would still be pending when the tree is gone, which is what
+    // `flutter_test` ends a test on -- somebody's own widget test failing for
+    // no reason of theirs. `Future.timeout` put the timer exactly there.
+    test('the limit does not run on the clock of the zone that waits', () {
       fakeAsync((async) {
         final queues = KeyedAccessQueues();
-        final first = AccessEntry('first');
-        final second = AccessEntry('second');
-        TimeoutException? reported;
+        var expired = false;
 
-        unawaited(queues.enter('key', first));
-        var secondIsIn = false;
+        unawaited(queues.enter('key', AccessEntry('first')));
         unawaited(
-          queues
-              .enter(
-                'key',
-                second,
-                timeout: const Duration(seconds: 3),
-                onTimeout: (error, _) => reported = error,
-              )
-              .then((_) => secondIsIn = true),
+          queues.enter(
+            'key',
+            AccessEntry('second'),
+            timeout: const Duration(seconds: 3),
+            onTimeout: (_, __) => expired = true,
+          ),
         );
 
-        async.elapse(const Duration(seconds: 2));
-        expect(secondIsIn, isFalse);
-
-        async.elapse(const Duration(seconds: 2));
-        expect(secondIsIn, isTrue);
-        expect(reported, isNotNull);
-        expect(reported!.message, contains('second'));
-        expect(reported!.message, contains('key'));
+        async.elapse(const Duration(minutes: 1));
 
         expect(
-          second.isCompleted,
+          expired,
           isFalse,
-          reason: 'being let in is not leaving',
-        );
-        expect(
-          queues.length,
-          1,
-          reason: 'a timed-out entry keeps its slot, so exit() is still'
-              ' required',
+          reason: 'a fake clock reaches no timer of the root zone, and this '
+              'limit is one',
         );
       });
     });
@@ -226,118 +266,139 @@ void main() {
       expect(registry.childrenCount, 0);
     });
 
-    test('a timeout reports and gives up on the children left', () {
-      fakeAsync((async) {
-        final registry = ChildRegistry()..registerChild('slow');
-        TimeoutException? reported;
+    test('a timeout reports and gives up on the children left', () async {
+      final registry = ChildRegistry()..registerChild('slow');
+      TimeoutException? reported;
 
-        var done = false;
-        unawaited(
-          registry
-              .waitForChildren(
-                timeout: const Duration(seconds: 3),
-                onTimeout: (error, _) => reported = error,
-              )
-              .then((_) => done = true),
-        );
+      var done = false;
+      unawaited(
+        registry
+            .waitForChildren(
+              timeout: _limit,
+              onTimeout: (error, _) => reported = error,
+            )
+            .then((_) => done = true),
+      );
 
-        async.elapse(const Duration(seconds: 4));
+      await waitOutTheLimit();
 
-        expect(done, isTrue, reason: 'the wait must not hang');
-        expect(reported, isNotNull);
-        expect(reported!.message, contains('slow'));
-        expect(
-          registry.hasChildren,
-          isFalse,
-          reason: 'the children left behind are dropped',
-        );
-      });
+      expect(done, isTrue, reason: 'the wait must not hang');
+      expect(reported, isNotNull);
+      expect(reported!.message, contains('slow'));
+      expect(
+        registry.hasChildren,
+        isFalse,
+        reason: 'the children left behind are dropped',
+      );
     });
 
-    test('a timeout drops only the children the wait was awaiting', () {
+    // The same question as for the queue above, and the same answer: the limit
+    // of this wait is a timer of the root zone, so a fake clock cannot reach
+    // it. Both waits used `Future.timeout`, and both had to change.
+    test('the limit does not run on the clock of the zone that waits', () {
       fakeAsync((async) {
         final registry = ChildRegistry()..registerChild('slow');
-        TimeoutException? reported;
-
-        var done = false;
-        unawaited(
-          registry
-              .waitForChildren(
-                timeout: const Duration(seconds: 3),
-                onTimeout: (error, _) => reported = error,
-              )
-              .then((_) => done = true),
-        );
-
-        // Registered while the wait is already running, so it is excluded from
-        // that wait by design -- but it never unregistered, so the registry
-        // must still know about it once the wait has given up.
-        final laterChild = registry.registerChild('later');
-
-        async.elapse(const Duration(seconds: 4));
-
-        expect(done, isTrue, reason: 'the wait must not hang');
-        expect(reported, isNotNull);
-        expect(
-          reported!.message,
-          contains('slow'),
-          reason: 'the child that held the wait up is named',
-        );
-        expect(
-          reported!.message,
-          isNot(contains('later')),
-          reason: 'a child this wait never awaited did not hold it up',
-        );
-        expect(
-          registry.childrenCount,
-          1,
-          reason: 'only the children of the expired wait are dropped',
-        );
-
-        var secondDone = false;
-        unawaited(registry.waitForChildren().then((_) => secondDone = true));
-        async.elapse(Duration.zero);
-
-        expect(
-          secondDone,
-          isFalse,
-          reason: 'a later wait must still await the child that is live',
-        );
-
-        laterChild.unregister();
-        async.elapse(Duration.zero);
-
-        expect(secondDone, isTrue);
-        expect(registry.hasChildren, isFalse);
-      });
-    });
-
-    test('an onTimeout that throws still gives up on the children left', () {
-      fakeAsync((async) {
-        final registry = ChildRegistry()..registerChild('slow');
-        Object? escaped;
+        var expired = false;
 
         unawaited(
-          registry
-              .waitForChildren(
+          registry.waitForChildren(
             timeout: const Duration(seconds: 3),
-            onTimeout: (_, __) => throw StateError('reporting failed'),
-          )
-              .catchError((Object error) {
-            escaped = error;
-          }),
+            onTimeout: (_, __) => expired = true,
+          ),
         );
 
-        async.elapse(const Duration(seconds: 4));
+        async.elapse(const Duration(minutes: 1));
 
-        expect(escaped, isA<StateError>(), reason: 'the failure is not hidden');
         expect(
-          registry.hasChildren,
+          expired,
           isFalse,
-          reason: 'a reporter that throws must not leave the registry holding '
-              'entries the expired wait already gave up on',
+          reason: 'a fake clock reaches no timer of the root zone, and this '
+              'limit is one',
         );
       });
+    });
+
+    test('a timeout drops only the children the wait was awaiting', () async {
+      final registry = ChildRegistry()..registerChild('slow');
+      TimeoutException? reported;
+
+      var done = false;
+      unawaited(
+        registry
+            .waitForChildren(
+              timeout: _limit,
+              onTimeout: (error, _) => reported = error,
+            )
+            .then((_) => done = true),
+      );
+
+      // Registered while the wait is already running, so it is excluded from
+      // that wait by design -- but it never unregistered, so the registry
+      // must still know about it once the wait has given up.
+      final laterChild = registry.registerChild('later');
+
+      await waitOutTheLimit();
+
+      expect(done, isTrue, reason: 'the wait must not hang');
+      expect(reported, isNotNull);
+      expect(
+        reported!.message,
+        contains('slow'),
+        reason: 'the child that held the wait up is named',
+      );
+      expect(
+        reported!.message,
+        isNot(contains('later')),
+        reason: 'a child this wait never awaited did not hold it up',
+      );
+      expect(
+        registry.childrenCount,
+        1,
+        reason: 'only the children of the expired wait are dropped',
+      );
+
+      var secondDone = false;
+      unawaited(registry.waitForChildren().then((_) => secondDone = true));
+      await pumpEvents();
+
+      expect(
+        secondDone,
+        isFalse,
+        reason: 'a later wait must still await the child that is live',
+      );
+
+      laterChild.unregister();
+      await pumpEvents();
+
+      expect(secondDone, isTrue);
+      expect(registry.hasChildren, isFalse);
+    });
+
+    test('an onTimeout that throws still gives up on the children left',
+        () async {
+      final registry = ChildRegistry()..registerChild('slow');
+      Object? escaped;
+
+      unawaited(
+        registry
+            .waitForChildren(
+          timeout: _limit,
+          onTimeout: (_, __) => throw StateError('reporting failed'),
+        )
+            .catchError((Object error) {
+          escaped = error;
+        }),
+      );
+
+      await waitOutTheLimit();
+
+      expect(escaped, isA<StateError>(), reason: 'the failure is not hidden');
+      expect(
+        registry.hasChildren,
+        isFalse,
+        reason: 'a reporter that throws must not leave the registry holding '
+            'entries the expired wait already gave up on',
+      );
     });
   });
 }

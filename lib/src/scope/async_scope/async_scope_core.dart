@@ -180,6 +180,19 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
   /// callback would use the disposed notifier.
   bool _isDisposing = false;
 
+  /// The [pauseAfterInitialization] delay, while it is running.
+  ///
+  /// Kept so the teardown can put it out. A delay nobody holds outlives the
+  /// tree: `flutter_test` ends a test on a timer that is still pending once
+  /// the tree is gone, so a scope taken off the tree mid-pause failed the
+  /// consumer's own widget test for no reason of theirs, and in production
+  /// held an unmounted element for the rest of the pause.
+  ///
+  /// It is a timer of the current zone on purpose, unlike the bounded waits of
+  /// the teardown: this delay is one the user sees, and a widget test has to be
+  /// able to drive it with its own clock.
+  Timer? _pauseTimer;
+
   AccessEntry? _asyncScopeEntry;
 
   /// Whether [_performAsyncInit] has read [scopeKey] yet.
@@ -568,7 +581,8 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
           case AsyncScopeReady():
             if (pauseAfterInitialization case final pauseAfterInitialization?
                 when ScopeConfig.pauseAfterInitializationEnabled) {
-              Future<void>.delayed(pauseAfterInitialization, () {
+              _pauseTimer = Timer(pauseAfterInitialization, () {
+                _pauseTimer = null;
                 if (mounted && !_isDisposing) {
                   _model.update(state);
                 }
@@ -732,6 +746,11 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
 
   Future<void> _performAsyncDispose() async {
     _isDisposing = true;
+
+    // First, and synchronously: everything below may take a while, and until
+    // this is out the pause is a timer with nobody left to fire for.
+    _pauseTimer?.cancel();
+    _pauseTimer = null;
 
     // Four stages, each guarded on its own rather than chained: every one of
     // them reaches user code, and a failure in one is never a reason to skip

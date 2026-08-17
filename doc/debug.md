@@ -168,11 +168,17 @@ waits indefinitely. An expired timeout is not fatal: it is reported through
 succeeded — so a dependency that never completes its disposal degrades into a
 delay plus an error report instead of a deadlock.
 
-The two middle ones are measured on real time rather than on the clock of the
-zone the teardown runs in, which is what a widget test replaces with a fake
-one. A hang like the ones they exist for outlives frames, and a scope is
-usually taken down between them: a timer belonging to that zone would still be
-pending when the tree is gone, and `flutter_test` ends a test on exactly that.
+All four are measured on real time rather than on the clock of the zone the
+teardown runs in, which is what a widget test replaces with a fake one. A hang
+like the ones they exist for outlives frames, and a scope is usually taken down
+between them: a timer belonging to that zone would still be pending when the
+tree is gone, and `flutter_test` ends a test on exactly that. So a test of your
+own that has to wait one of these out waits in real time — `pump(duration)`
+moves the fake clock and reaches none of them.
+
+`pauseAfterInitialization` is the exception, and deliberately: that delay is one
+the user sees, so a widget test drives it with `pump(duration)` like any other
+animation. The scope puts it out when it is taken down mid-pause.
 
 Every scope can override all four defaults for itself with the
 `scopeKeyTimeout`, `initCancellationTimeout`, `disposeAsyncTimeout` and

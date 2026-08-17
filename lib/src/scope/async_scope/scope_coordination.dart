@@ -115,7 +115,7 @@ final class _AccessQueue {
       entry._cancelCompleter.future,
     ]);
     if (timeout != null) {
-      future = future.timeout(timeout);
+      future = _boundedByRootZone(future, timeout);
     }
 
     try {
@@ -198,9 +198,11 @@ final class ChildRegistry {
     // to this one -- neither to await, nor to give up on.
     final awaited = List.of(_children);
 
-    var future = awaited.map((e) => e._completer.future).wait;
+    // Typed rather than inferred: `wait` gives a `Future<List<void>>`, and the
+    // bounded form below is about completion, not about what it completes with.
+    Future<void> future = awaited.map((e) => e._completer.future).wait;
     if (timeout != null) {
-      future = future.timeout(timeout);
+      future = _boundedByRootZone(future, timeout);
     }
 
     try {
@@ -258,4 +260,41 @@ final class ChildEntry {
   @override
   String toString() => '$_debugName'
       ' ${_completer.isCompleted ? 'completed' : 'not completed'}';
+}
+
+/// [work], bounded by [limit], on a timer of the root zone.
+///
+/// `Future.timeout` does the same thing with a timer of the *current* zone,
+/// and that is what these two waits used to use. A hang of the kind they exist
+/// for outlives frames, and a scope is usually taken down between them, so the
+/// timer was still pending when the tree was gone -- which is what
+/// `flutter_test` ends a test on. For somebody using the package that is their
+/// own widget test failing for no reason of theirs. The bounded waits of the
+/// scope element take the root zone for exactly this reason.
+///
+/// The behaviour is otherwise what `Future.timeout` gives: the error of [work]
+/// if it fails first, a [TimeoutException] if the limit wins. [work] here is
+/// always made of completers this library owns, and those complete with a
+/// value or not at all.
+Future<void> _boundedByRootZone(Future<void> work, Duration limit) async {
+  var finished = false;
+  final expired = Completer<void>();
+  final timer = Zone.root.createTimer(limit, () {
+    if (!expired.isCompleted) {
+      expired.complete();
+    }
+  });
+
+  try {
+    await Future.any([
+      work.whenComplete(() => finished = true),
+      expired.future,
+    ]);
+  } finally {
+    timer.cancel();
+  }
+
+  if (!finished) {
+    throw TimeoutException(null, limit);
+  }
 }

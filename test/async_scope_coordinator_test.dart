@@ -657,7 +657,9 @@ void main() {
         ),
       ),
     );
-    await tester.pump(const Duration(milliseconds: 100));
+    // Real time, not the fake clock: the limit of this wait is a timer of the
+    // root zone, and a fake clock reaches no such timer. `_settle` moves both.
+    await _settle(tester, until: () => _TestScopeElement.initialized == 2);
     await tester.pumpAndSettle();
 
     final exception = tester.takeException();
@@ -736,7 +738,9 @@ void main() {
         // throws.
         await tester
             .pumpWidget(build(holder: true, waiter: true, successor: false));
-        await tester.pump(const Duration(milliseconds: 100));
+        // Real time, not the fake clock: the limit is a timer of the root
+        // zone, and only `_settle` moves both.
+        await _settle(tester, until: () => errors.isNotEmpty);
       },
       (error, stackTrace) => errors.add(error),
     );
