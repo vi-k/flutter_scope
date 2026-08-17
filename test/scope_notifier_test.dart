@@ -7,6 +7,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:scopo/scopo.dart';
 
+import 'utils/leaks.dart';
+
 void main() {
   setUp(() {
     _CounterValueView.buildCount = 0;
@@ -142,43 +144,48 @@ void main() {
 
     // The same rule as for `ScopeModel`, with one more thing to get wrong: the
     // listener. The assert fires before any subscription is moved.
-    testWidgets('cannot change between the owning constructor and .value',
-        (tester) async {
-      final external = _NamedCounter('given');
+    testWidgets(
+      'cannot change between the owning constructor and .value',
+      (tester) async {
+        final external = _NamedCounter('given');
 
-      Widget build({required bool owning}) => Directionality(
-            textDirection: TextDirection.ltr,
-            child: owning
-                ? ScopeNotifier<_NamedCounter>(
-                    create: (context) => _NamedCounter('owned'),
-                    dispose: (model) => model.dispose(),
-                    builder: (context) => const _NamedCounterView(),
-                  )
-                : ScopeNotifier<_NamedCounter>.value(
-                    value: external,
-                    builder: (context) => const _NamedCounterView(),
-                  ),
-          );
+        Widget build({required bool owning}) => Directionality(
+              textDirection: TextDirection.ltr,
+              child: owning
+                  ? ScopeNotifier<_NamedCounter>(
+                      create: (context) => _NamedCounter('owned'),
+                      dispose: (model) => model.dispose(),
+                      builder: (context) => const _NamedCounterView(),
+                    )
+                  : ScopeNotifier<_NamedCounter>.value(
+                      value: external,
+                      builder: (context) => const _NamedCounterView(),
+                    ),
+            );
 
-      await tester.pumpWidget(build(owning: true));
-      await tester.pumpAndSettle();
+        await tester.pumpWidget(build(owning: true));
+        await tester.pumpAndSettle();
 
-      await tester.pumpWidget(build(owning: false));
+        await tester.pumpWidget(build(owning: false));
 
-      expect(
-        tester.takeException(),
-        isA<AssertionError>().having(
-          (error) => error.message.toString(),
-          'message',
-          contains('`Widget.key`'),
-        ),
-      );
-      expect(
-        external.hasAnyListener,
-        isFalse,
-        reason: 'nothing was subscribed to the model the scope refused',
-      );
-    });
+        expect(
+          tester.takeException(),
+          isA<AssertionError>().having(
+            (error) => error.message.toString(),
+            'message',
+            contains('`Widget.key`'),
+          ),
+        );
+        expect(
+          external.hasAnyListener,
+          isFalse,
+          reason: 'nothing was subscribed to the model the scope refused',
+        );
+      },
+      // The assert fires while the scope is being updated, so the subtree
+      // it breaks stays unmounted -- see [unmountableTree].
+      experimentalLeakTesting: unmountableTree,
+    );
 
     testWidgets('disposes of the model it created', (tester) async {
       late _Counter created;

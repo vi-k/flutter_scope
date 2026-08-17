@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:scopo/scopo.dart';
 
+import 'utils/leaks.dart';
+
 void main() {
   setUp(() {
     _NameText.buildCount = 0;
@@ -251,43 +253,52 @@ void main() {
     // absent `value` one way, and keep the owned model -- disposer and all --
     // the other way, with nothing ever releasing it.
     group('the constructor mode of a live scope', () {
-      testWidgets('cannot go from .value to the owning constructor',
-          (tester) async {
-        final model = _Model('alice');
+      testWidgets(
+        'cannot go from .value to the owning constructor',
+        (tester) async {
+          final model = _Model('alice');
 
-        await tester.pumpWidget(_ModeHost(external: model));
-        await tester.pumpAndSettle();
+          await tester.pumpWidget(_ModeHost(external: model));
+          await tester.pumpAndSettle();
 
-        await tester.pumpWidget(const _ModeHost(external: null));
+          await tester.pumpWidget(const _ModeHost(external: null));
 
-        expect(
-          tester.takeException(),
-          isA<AssertionError>().having(
-            (error) => error.message.toString(),
-            'message',
-            contains('`Widget.key`'),
-          ),
-        );
-      });
+          expect(
+            tester.takeException(),
+            isA<AssertionError>().having(
+              (error) => error.message.toString(),
+              'message',
+              contains('`Widget.key`'),
+            ),
+          );
+        },
+        // The assert fires while the scope is being updated, so the subtree
+        // it breaks stays unmounted -- see [unmountableTree].
+        experimentalLeakTesting: unmountableTree,
+      );
 
-      testWidgets('cannot go from the owning constructor to .value',
-          (tester) async {
-        final external = _Model('bob');
+      testWidgets(
+        'cannot go from the owning constructor to .value',
+        (tester) async {
+          final external = _Model('bob');
 
-        await tester.pumpWidget(const _ModeHost(external: null));
-        await tester.pumpAndSettle();
+          await tester.pumpWidget(const _ModeHost(external: null));
+          await tester.pumpAndSettle();
 
-        await tester.pumpWidget(_ModeHost(external: external));
+          await tester.pumpWidget(_ModeHost(external: external));
 
-        expect(
-          tester.takeException(),
-          isA<AssertionError>().having(
-            (error) => error.message.toString(),
-            'message',
-            contains('`Widget.key`'),
-          ),
-        );
-      });
+          expect(
+            tester.takeException(),
+            isA<AssertionError>().having(
+              (error) => error.message.toString(),
+              'message',
+              contains('`Widget.key`'),
+            ),
+          );
+        },
+        // Same broken update, the other way round -- see [unmountableTree].
+        experimentalLeakTesting: unmountableTree,
+      );
 
       testWidgets('a different key builds a new scope instead', (tester) async {
         final external = _Model('bob');

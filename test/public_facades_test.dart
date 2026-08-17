@@ -68,6 +68,9 @@ void main() {
         findsOneWidget,
         reason: 'and what it wraps is the state, not something beside it',
       );
+
+      await tester.pumpWidget(_wrap(const SizedBox.shrink()));
+      await settle(tester, until: () => log.contains('state.disposeAsync'));
     });
 
     testWidgets('is found from below, by state and by parameters',
@@ -114,6 +117,9 @@ void main() {
         'select': 'answer',
         'selectParam': 'named',
       });
+
+      await tester.pumpWidget(_wrap(const SizedBox.shrink()));
+      await settle(tester, until: () => log.contains('state.disposeAsync'));
     });
 
     testWidgets('answers null from maybeOf where there is no such scope',

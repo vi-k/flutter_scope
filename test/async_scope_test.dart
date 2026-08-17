@@ -784,6 +784,14 @@ void main() {
           findsOneWidget,
           reason: 'the scope itself survived the move',
         );
+
+        await tester.pumpWidget(
+          const Directionality(
+            textDirection: TextDirection.ltr,
+            child: SizedBox.shrink(),
+          ),
+        );
+        await _settle(tester, until: () => first.disposed && second.disposed);
       },
     );
 

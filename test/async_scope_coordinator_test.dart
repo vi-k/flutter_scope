@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:scopo/scopo.dart';
 
+import 'utils/leaks.dart';
+
 void main() {
   setUp(_TestScopeElement.reset);
 
@@ -31,6 +33,8 @@ void main() {
       isNull,
       reason: 'neither scope waited for the one in the other coordinator',
     );
+
+    await _tearDownTree(tester, scopes: 2);
   });
 
   testWidgets('the nearest coordinator serves the key', (tester) async {
@@ -51,6 +55,8 @@ void main() {
 
     expect(_TestScopeElement.initialized, 2);
     expect(tester.takeException(), isNull);
+
+    await _tearDownTree(tester, scopes: 2);
   });
 
   testWidgets('a scopeKey without a coordinator is an error', (tester) async {
@@ -100,6 +106,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(_coordinatorOf(tester).childrenCount, 1);
+
+    await _tearDownTree(tester, scopes: 1);
   });
 
   testWidgets(
@@ -130,6 +138,8 @@ void main() {
       0,
       reason: 'the outer coordinator never sees a child of the inner one',
     );
+
+    await _tearDownTree(tester, scopes: 1);
   });
 
   testWidgets(
@@ -661,6 +671,8 @@ void main() {
       2,
       reason: 'the scope that timed out was let in anyway',
     );
+
+    await _tearDownTree(tester, scopes: 2);
   });
 
   // An expired `scopeKey` wait lets the scope in anyway and reports the
@@ -765,6 +777,8 @@ void main() {
       reason: 'it got the key, it was not let in on an expired wait',
     );
     expect(tester.takeException(), isNull);
+
+    await _tearDownTree(tester, scopes: 1);
   });
 
   // A generator parked on a future that never completes cannot be cancelled:
@@ -850,6 +864,10 @@ void main() {
       isFalse,
       reason: 'it got the key, it was not let in on an expired wait',
     );
+
+    // Only the successor: the scope this test hangs on purpose never finishes
+    // its own teardown, which is the whole point of it.
+    await _tearDownTree(tester, scopes: 1);
   });
 
   // The same hole one step further down the teardown. `disposeAsync()` is the
@@ -921,6 +939,10 @@ void main() {
       isFalse,
       reason: 'it got the key, it was not let in on an expired wait',
     );
+
+    // Only the successor: the scope this test hangs on purpose never finishes
+    // its own teardown, which is the whole point of it.
+    await _tearDownTree(tester, scopes: 1);
   });
 
   // A place in a queue is taken once and cannot be moved, so the pair
@@ -931,31 +953,37 @@ void main() {
   // key exists for simply stopped working. The violation is now loud in debug
   // builds.
   group('the scopeKey of a live scope', () {
-    testWidgets('cannot change', (tester) async {
-      Widget build(Object key) => Directionality(
-            textDirection: TextDirection.ltr,
-            child: AsyncScopeCoordinator(child: _TestScope(testKey: key)),
-          );
+    testWidgets(
+      'cannot change',
+      (tester) async {
+        Widget build(Object key) => Directionality(
+              textDirection: TextDirection.ltr,
+              child: AsyncScopeCoordinator(child: _TestScope(testKey: key)),
+            );
 
-      await tester.pumpWidget(build('first'));
-      await tester.pumpAndSettle();
-      expect(tester.takeException(), isNull);
+        await tester.pumpWidget(build('first'));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
 
-      await tester.pumpWidget(build('second'));
+        await tester.pumpWidget(build('second'));
 
-      final exception = tester.takeException();
-      expect(exception, isA<FlutterError>());
-      expect(
-        exception.toString(),
-        contains('`scopeKey`'),
-        reason: 'the report says what happened',
-      );
-      expect(
-        exception.toString(),
-        contains('different `key`'),
-        reason: 'and what to do instead',
-      );
-    });
+        final exception = tester.takeException();
+        expect(exception, isA<FlutterError>());
+        expect(
+          exception.toString(),
+          contains('`scopeKey`'),
+          reason: 'the report says what happened',
+        );
+        expect(
+          exception.toString(),
+          contains('different `key`'),
+          reason: 'and what to do instead',
+        );
+      },
+      // The violation is raised while the element is being updated, and the
+      // subtree it breaks stays unmounted -- see [unmountableTree].
+      experimentalLeakTesting: unmountableTree,
+    );
 
     // `null` is a value this getter may legitimately return, and a scope that
     // reads it as `null` decides just as irrevocably that it needs no key:
@@ -963,158 +991,176 @@ void main() {
     // `userId` that is null until an async load finishes is ordinary usage, so
     // a key that turns up late is not exotic -- and it used to be completely
     // silent, because the check only ran once an entry existed.
-    testWidgets('cannot appear after the scope has mounted', (tester) async {
-      Widget build(Object? lateKey) => Directionality(
-            textDirection: TextDirection.ltr,
-            child: AsyncScopeCoordinator(
+    testWidgets(
+      'cannot appear after the scope has mounted',
+      (tester) async {
+        Widget build(Object? lateKey) => Directionality(
+              textDirection: TextDirection.ltr,
+              child: AsyncScopeCoordinator(
+                child: Column(
+                  children: [
+                    const _TestScope(testKey: 'shared'),
+                    _TestScope(testKey: lateKey),
+                  ],
+                ),
+              ),
+            );
+
+        await tester.pumpWidget(build(null));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(
+          _TestScopeElement.initialized,
+          2,
+          reason: 'the second scope read no key, so it never queued for one',
+        );
+
+        await tester.pumpWidget(build('shared'));
+
+        final exception = tester.takeException();
+        expect(exception, isA<FlutterError>());
+        expect(
+          exception.toString(),
+          contains('appeared'),
+          reason:
+              'the report says the key was never taken at all, which is not '
+              'the same as an entry left on the wrong queue',
+        );
+        expect(
+          exception.toString(),
+          contains('different `key`'),
+          reason: 'and says what to do instead',
+        );
+      },
+      // The violation is raised while the element is being updated, and the
+      // subtree it breaks stays unmounted -- see [unmountableTree].
+      experimentalLeakTesting: unmountableTree,
+    );
+
+    testWidgets(
+      'cannot be given up while the scope is holding it',
+      (tester) async {
+        Widget build(Object? key) => Directionality(
+              textDirection: TextDirection.ltr,
+              child: AsyncScopeCoordinator(child: _TestScope(testKey: key)),
+            );
+
+        await tester.pumpWidget(build('shared'));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+
+        await tester.pumpWidget(build(null));
+
+        final exception = tester.takeException();
+        expect(exception, isA<FlutterError>());
+        expect(
+          exception.toString(),
+          contains('given up'),
+          reason: 'a key let go is not a key that changed: the entry is still '
+              'held, by a scope that no longer claims to need it',
+        );
+        expect(
+          exception.toString(),
+          contains('different `key`'),
+          reason: 'and says what to do instead',
+        );
+      },
+      // The violation is raised while the element is being updated, and the
+      // subtree it breaks stays unmounted -- see [unmountableTree].
+      experimentalLeakTesting: unmountableTree,
+    );
+
+    testWidgets(
+      'cannot move under another coordinator',
+      (tester) async {
+        // The very same widget instance on both sides of the move, so the
+        // framework takes the `child.widget == newWidget` shortcut in
+        // `updateChild` and never rebuilds the element it just reactivated:
+        // `activate()` is then the only place left to notice the new
+        // coordinator.
+        final scope = _TestScope(key: GlobalKey(), testKey: 'shared');
+        // `Expanded`, so the `ErrorWidget` the framework substitutes for the
+        // failed build has bounded constraints: an unbounded one overflows the
+        // `Column` and buries the report under a second, unrelated exception.
+        Widget build({required bool moved}) => Directionality(
+              textDirection: TextDirection.ltr,
               child: Column(
                 children: [
-                  const _TestScope(testKey: 'shared'),
-                  _TestScope(testKey: lateKey),
+                  Expanded(
+                    child: AsyncScopeCoordinator(
+                      child: moved ? const SizedBox.shrink() : scope,
+                    ),
+                  ),
+                  Expanded(
+                    child: AsyncScopeCoordinator(
+                      child: moved ? scope : const SizedBox.shrink(),
+                    ),
+                  ),
                 ],
               ),
-            ),
-          );
+            );
 
-      await tester.pumpWidget(build(null));
-      await tester.pumpAndSettle();
+        await tester.pumpWidget(build(moved: false));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
 
-      expect(tester.takeException(), isNull);
-      expect(
-        _TestScopeElement.initialized,
-        2,
-        reason: 'the second scope read no key, so it never queued for one',
-      );
+        final [oldParent, newParent] = tester
+            .elementList(find.byType(AsyncScopeCoordinator))
+            .cast<AsyncScopeParent>()
+            .toList();
+        expect(oldParent.childrenCount, 1);
 
-      await tester.pumpWidget(build('shared'));
+        await tester.pumpWidget(build(moved: true));
 
-      final exception = tester.takeException();
-      expect(exception, isA<FlutterError>());
-      expect(
-        exception.toString(),
-        contains('appeared'),
-        reason: 'the report says the key was never taken at all, which is not '
-            'the same as an entry left on the wrong queue',
-      );
-      expect(
-        exception.toString(),
-        contains('different `key`'),
-        reason: 'and says what to do instead',
-      );
-    });
+        final exception = tester.takeException();
+        expect(exception, isA<FlutterError>());
+        expect(
+          exception.toString(),
+          contains('$AsyncScopeCoordinator'),
+          reason: 'the report names the coordinator the entry is parked on',
+        );
+        expect(
+          exception.toString(),
+          contains('different `key`'),
+          reason: 'and says what to do instead',
+        );
 
-    testWidgets('cannot be given up while the scope is holding it',
-        (tester) async {
-      Widget build(Object? key) => Directionality(
-            textDirection: TextDirection.ltr,
-            child: AsyncScopeCoordinator(child: _TestScope(testKey: key)),
-          );
+        // Reporting the violation must not cost the parent handoff the move
+        // itself needs. The scope has left the first coordinator's subtree, and
+        // it is alive and well under the second one: a diagnostic that unwound
+        // `activate()` before `_registerWithParent()` would leave the first
+        // coordinator waiting for it forever.
+        expect(
+          oldParent.childrenCount,
+          0,
+          reason: 'the coordinator the scope left must not keep waiting for it',
+        );
+        expect(
+          newParent.childrenCount,
+          1,
+          reason: 'the coordinator it moved under is what waits for it now',
+        );
 
-      await tester.pumpWidget(build('shared'));
-      await tester.pumpAndSettle();
-      expect(tester.takeException(), isNull);
+        var waited = false;
+        unawaited(
+          oldParent
+              .waitForChildren(timeout: const Duration(days: 1))
+              .then((_) => waited = true),
+        );
+        await _settle(tester, until: () => waited);
 
-      await tester.pumpWidget(build(null));
-
-      final exception = tester.takeException();
-      expect(exception, isA<FlutterError>());
-      expect(
-        exception.toString(),
-        contains('given up'),
-        reason: 'a key let go is not a key that changed: the entry is still '
-            'held, by a scope that no longer claims to need it',
-      );
-      expect(
-        exception.toString(),
-        contains('different `key`'),
-        reason: 'and says what to do instead',
-      );
-    });
-
-    testWidgets('cannot move under another coordinator', (tester) async {
-      // The very same widget instance on both sides of the move, so the
-      // framework takes the `child.widget == newWidget` shortcut in
-      // `updateChild` and never rebuilds the element it just reactivated:
-      // `activate()` is then the only place left to notice the new
-      // coordinator.
-      final scope = _TestScope(key: GlobalKey(), testKey: 'shared');
-      // `Expanded`, so the `ErrorWidget` the framework substitutes for the
-      // failed build has bounded constraints: an unbounded one overflows the
-      // `Column` and buries the report under a second, unrelated exception.
-      Widget build({required bool moved}) => Directionality(
-            textDirection: TextDirection.ltr,
-            child: Column(
-              children: [
-                Expanded(
-                  child: AsyncScopeCoordinator(
-                    child: moved ? const SizedBox.shrink() : scope,
-                  ),
-                ),
-                Expanded(
-                  child: AsyncScopeCoordinator(
-                    child: moved ? scope : const SizedBox.shrink(),
-                  ),
-                ),
-              ],
-            ),
-          );
-
-      await tester.pumpWidget(build(moved: false));
-      await tester.pumpAndSettle();
-      expect(tester.takeException(), isNull);
-
-      final [oldParent, newParent] = tester
-          .elementList(find.byType(AsyncScopeCoordinator))
-          .cast<AsyncScopeParent>()
-          .toList();
-      expect(oldParent.childrenCount, 1);
-
-      await tester.pumpWidget(build(moved: true));
-
-      final exception = tester.takeException();
-      expect(exception, isA<FlutterError>());
-      expect(
-        exception.toString(),
-        contains('$AsyncScopeCoordinator'),
-        reason: 'the report names the coordinator the entry is parked on',
-      );
-      expect(
-        exception.toString(),
-        contains('different `key`'),
-        reason: 'and says what to do instead',
-      );
-
-      // Reporting the violation must not cost the parent handoff the move
-      // itself needs. The scope has left the first coordinator's subtree, and
-      // it is alive and well under the second one: a diagnostic that unwound
-      // `activate()` before `_registerWithParent()` would leave the first
-      // coordinator waiting for it forever.
-      expect(
-        oldParent.childrenCount,
-        0,
-        reason: 'the coordinator the scope left must not keep waiting for it',
-      );
-      expect(
-        newParent.childrenCount,
-        1,
-        reason: 'the coordinator it moved under is what waits for it now',
-      );
-
-      var waited = false;
-      unawaited(
-        oldParent
-            .waitForChildren(timeout: const Duration(days: 1))
-            .then((_) => waited = true),
-      );
-      await _settle(tester, until: () => waited);
-
-      expect(
-        waited,
-        isTrue,
-        reason: 'the limit is far beyond what this test can advance, so only '
-            'an empty registry can have released the wait',
-      );
-    });
+        expect(
+          waited,
+          isTrue,
+          reason: 'the limit is far beyond what this test can advance, so only '
+              'an empty registry can have released the wait',
+        );
+      },
+      // The violation is raised while the element is being updated, and the
+      // subtree it breaks stays unmounted -- see [unmountableTree].
+      experimentalLeakTesting: unmountableTree,
+    );
   });
 
   testWidgets('an expired wait for children is reported', (tester) async {
@@ -1195,6 +1241,23 @@ Widget _coordinatorTree({
 AsyncScopeParent _coordinatorOf(WidgetTester tester) =>
     tester.element(find.byType(AsyncScopeCoordinator)) as AsyncScopeParent;
 
+/// Removes the tree and lets the [scopes] still standing tear themselves down.
+///
+/// A test that ends while a scope is still in the middle of its asynchronous
+/// teardown leaves the model of that scope undisposed, and the leak tracker
+/// says so: `_model.dispose()` is the last thing the teardown does, and
+/// `pumpAndSettle` never reaches it -- it moves the fake clock only, while the
+/// teardown is a chain of real futures.
+Future<void> _tearDownTree(WidgetTester tester, {required int scopes}) async {
+  final before = _TestScopeElement.disposed;
+
+  await tester.pumpWidget(const SizedBox.shrink());
+  await _settle(
+    tester,
+    until: () => _TestScopeElement.disposed >= before + scopes,
+  );
+}
+
 /// Pumps frames interleaved with slices of *real* time, until [until] holds or
 /// the budget runs out.
 ///
@@ -1268,10 +1331,18 @@ final class _TestScopeElement
   _TestScopeElement(super.widget);
 
   static int initialized = 0;
+
+  /// How many scopes have finished their `disposeAsync()`.
+  ///
+  /// The teardown is asynchronous and its last act is disposing of the model,
+  /// so a test that ends before this counter moves ends on a scope that is
+  /// still tearing down -- which the leak tracker reports.
+  static int disposed = 0;
   static final disposalOrder = <String>[];
 
   static void reset() {
     initialized = 0;
+    disposed = 0;
     disposalOrder.clear();
   }
 
@@ -1309,6 +1380,7 @@ final class _TestScopeElement
     if (widget.disposeLabel case final label?) {
       disposalOrder.add(label);
     }
+    disposed++;
   }
 
   @override

@@ -216,6 +216,7 @@ void main() {
         'the constructor form creates the controller once and hands it to the '
         'subtree', (tester) async {
       var created = 0;
+      late _TestController controller;
 
       await tester.pumpWidget(
         Directionality(
@@ -224,7 +225,7 @@ void main() {
             create: (context) {
               created++;
 
-              return _TestController();
+              return controller = _TestController();
             },
             initBuilder: (context) => const Text('initializing'),
             errorBuilder: (context, error, stackTrace) => const Text('error'),
@@ -236,6 +237,9 @@ void main() {
 
       expect(created, 1);
       expect(find.text('reader: init'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await settle(tester, until: () => controller.calls.contains('dispose'));
     });
   });
 

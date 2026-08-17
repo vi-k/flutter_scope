@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:scopo/scopo.dart';
 
+import 'utils/leaks.dart';
 import 'utils/settle.dart';
 
 void main() {
@@ -638,6 +639,10 @@ void main() {
           await _settle(tester, until: () => isClosed);
           expect(isClosed, isTrue);
         },
+        // The violation this test is written for is raised while the element
+        // is being updated, and the subtree it breaks stays unmounted --
+        // see [unmountableTree].
+        experimentalLeakTesting: unmountableTree,
       );
     });
 
@@ -752,7 +757,9 @@ void main() {
     testWidgets('reports the first failure of a teardown, not the last',
         (tester) async {
       final childGate = Completer<void>();
-      addTearDown(childGate.complete);
+      addTearDown(() {
+        if (!childGate.isCompleted) childGate.complete();
+      });
 
       await tester.pumpWidget(
         _app(
@@ -809,6 +816,13 @@ void main() {
 
       // The expiry of the wait is reported on its own, as it always is.
       expect(tester.takeException(), isA<TimeoutException>());
+
+      // The child was held open on purpose, and while it is held its own half
+      // of the teardown cannot finish. Let it go and give it the rounds to
+      // finish in, or the test ends on a scope that is still tearing down.
+      childGate.complete();
+      await tester.pumpWidget(_app(const SizedBox(width: 1, height: 1)));
+      await settle(tester, until: () => false);
     });
 
     // `LiteScopeCoreState.close()` used to look its own scope up through
@@ -838,6 +852,9 @@ void main() {
           ),
         ),
       );
+
+      await tester.pumpWidget(_app(const SizedBox(width: 1, height: 1)));
+      await settle(tester, until: () => false);
     });
 
     // once the state has been unmounted, and it finds the *nearest* scope of

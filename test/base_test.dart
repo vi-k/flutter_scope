@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:scopo/scopo.dart';
 
+import 'utils/leaks.dart';
+
 void main() {
   group('looking a scope up', () {
     testWidgets('maybeOf returns null when there is no such scope above', (
@@ -159,21 +161,26 @@ void main() {
     // dropped by the first build that does not share it, which is any rebuild
     // coming from the parent rather than from a change. Nothing could honour
     // it, so it is refused instead of quietly forgotten.
-    testWidgets('subscribing from didChangeDependencies is rejected',
-        (tester) async {
-      await tester.pumpWidget(
-        _Host(builder: (context) => const _SubscribesTooEarly()),
-      );
+    testWidgets(
+      'subscribing from didChangeDependencies is rejected',
+      (tester) async {
+        await tester.pumpWidget(
+          _Host(builder: (context) => const _SubscribesTooEarly()),
+        );
 
-      expect(
-        tester.takeException(),
-        isA<AssertionError>().having(
-          (error) => error.message.toString(),
-          'message',
-          contains('only be subscribed to from a build'),
-        ),
-      );
-    });
+        expect(
+          tester.takeException(),
+          isA<AssertionError>().having(
+            (error) => error.message.toString(),
+            'message',
+            contains('only be subscribed to from a build'),
+          ),
+        );
+      },
+      // The rejection is an assert raised from `didChangeDependencies`, so
+      // the subtree it breaks stays unmounted -- see [unmountableTree].
+      experimentalLeakTesting: unmountableTree,
+    );
   });
 
   group('what a dependent subscribes to', () {
