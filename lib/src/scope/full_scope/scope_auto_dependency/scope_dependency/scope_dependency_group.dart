@@ -35,7 +35,14 @@ abstract base class ScopeDependencyGroup with ScopeDependencyMixin {
           state is ScopeDependencyFailed ||
           state is ScopeDependencyCancelled);
 
-  /// Unmounts every child, whatever any one of them makes of it.
+  /// Unmounts every child, in reverse, whatever any one of them makes of it.
+  ///
+  /// Reverse for the reason the disposal below is reverse: a later child is
+  /// built on top of an earlier one, so it has to stop reaching the world
+  /// before the one it was built on lets go of anything. Both halves of one
+  /// teardown go the same way. Forward, `sequential('', [dep('bus'),
+  /// dep('repo')])` unmounted the bus first and left the repository listening
+  /// to a source that had already been told to stop.
   ///
   /// The hooks are user code, and one that fails is no reason to leave the
   /// siblings mounted -- each of them has its own subscription to drop. The
@@ -44,7 +51,7 @@ abstract base class ScopeDependencyGroup with ScopeDependencyMixin {
   void onUnmount() {
     AsyncError? failure;
 
-    for (final dependency in _dependencies) {
+    for (final dependency in _dependencies.reversed) {
       try {
         dependency.onUnmount();
         // ignore: avoid_catching_errors

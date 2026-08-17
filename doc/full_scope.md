@@ -127,7 +127,8 @@ Three builders describe the tree, and all of them return a `ScopeDependency`:
   Setting neither is fine — a dependency that owns nothing needs no teardown.
   The name must not be empty.
 - `sequential(name, [...])` — a `ScopeDependencyGroup` whose children are
-  initialized one after another, and disposed of in reverse order.
+  initialized one after another, and torn down in reverse order — both
+  `dep.unmount` and `dep.dispose`.
 - `concurrent(name, [...])` — the same, except that the children are
   initialized (and disposed of) in parallel, so progress arrives in completion
   order rather than declaration order.
@@ -357,9 +358,9 @@ it is awaited:
    widget tree, or closed with `close()` while it stays on screen. The scope
    runs `ScopeState.onUnmount` and then forwards to
    `ScopeDependencies.onUnmount`, which `ScopeAutoDependencies` forwards further
-   to every `dep.unmount`. This is the place for whatever has to happen
-   immediately and cannot wait for the asynchronous teardown — unsubscribing,
-   for instance.
+   to every `dep.unmount`, in reverse declaration order. This is the place for
+   whatever has to happen immediately and cannot wait for the asynchronous
+   teardown — unsubscribing, for instance.
 
    Flutter's own `State.dispose` is not part of this order and cannot be: the
    framework calls it before the whole teardown when the tree takes the scope
@@ -422,7 +423,10 @@ fails:
 
 On the ordinary path the four run interleaved, state before dependencies in
 each half: `ScopeState.onUnmount`, then `dep.unmount`, then
-`ScopeState.disposeAsync`, then `dep.dispose`.
+`ScopeState.disposeAsync`, then `dep.dispose`. Both halves walk a group the
+same way, in reverse of the declaration order: a later dependency is built on
+top of an earlier one, so it stops reaching the world before that one lets go
+of anything.
 
 **When `initDependencies` failed, the state is the part that never existed.**
 `createState()` runs when the ready branch is built, and a scope that failed

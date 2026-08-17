@@ -90,8 +90,12 @@ void main() {
 
       expect(
         log,
-        ['unmount a', 'unmount b', 'dispose b', 'dispose a'],
-        reason: 'the control: unmounts go down the tree, disposals back up',
+        ['unmount b', 'unmount a', 'dispose b', 'dispose a'],
+        reason: 'both halves of one teardown go the same way, and that way is '
+            'the reverse of the construction: `b` was built on top of `a`, so '
+            '`b` has to stop reaching the world before `a` lets go of what it '
+            'holds. A forward `unmount` left `repo` subscribed to a `bus` '
+            'that had already been told to stop',
       );
       _expectUnmountBeforeDispose(log);
     });
@@ -138,7 +142,7 @@ void main() {
 
       expect(
         log.where((entry) => entry.startsWith('unmount')),
-        ['unmount a', 'unmount b'],
+        ['unmount b', 'unmount a'],
         reason: 'the hook lets go of something -- a subscription, a listener '
             '-- and letting go of it twice is not the same as once',
       );

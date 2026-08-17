@@ -172,8 +172,9 @@ abstract base class ScopeAutoDependencies<T extends ScopeDependencies,
 
   /// A group whose children are initialized one after another.
   ///
-  /// They are disposed of in reverse order. An empty [name] adds no segment
-  /// to the paths of the children.
+  /// They are unmounted and disposed of in reverse order — both halves of the
+  /// teardown run the reverse of the construction. An empty [name] adds no
+  /// segment to the paths of the children.
   ScopeDependency sequential(
     String name,
     Iterable<ScopeDependency> dependencies,
@@ -183,7 +184,9 @@ abstract base class ScopeAutoDependencies<T extends ScopeDependencies,
   /// A group whose children are initialized in parallel.
   ///
   /// Progress therefore arrives in completion order rather than declaration
-  /// order.
+  /// order. They are disposed of in parallel too; the synchronous `unmount`
+  /// half has to run in some order and runs in reverse declaration order, as
+  /// it does in a [sequential] group.
   ScopeDependency concurrent(
     String name,
     Iterable<ScopeDependency> dependencies,

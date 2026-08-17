@@ -39,6 +39,15 @@
   is already building as needing a build does nothing, so the rebuild is asked
   for once the frame is over, and the dependents hear about the change a frame
   later instead of never.
+* **Behaviour change:** `dep.unmount` now runs in reverse declaration order
+  within a group, the way `dep.dispose` already did. The two are halves of one
+  teardown, and reverse order exists because a later dependency is built on top
+  of an earlier one — so having the synchronous half walk forward released the
+  foundation first. In `sequential('', [dep('bus'), dep('repo')])`, where
+  `repo` listens to `bus`, the bus was unmounted first and the repository was
+  left listening to a source that had already been told to stop. The order was
+  not documented before and is now, in the dartdoc of `sequential`,
+  `concurrent` and `DepHelper.unmount`, and in the `Scope` topic.
 * Fix `unmount` being skipped for a dependency whose scope failed to
   initialize, while `dispose` ran. The hook is documented to run exactly once
   and always before `dispose`, whichever way the scope goes, but the container
