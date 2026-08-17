@@ -1,0 +1,1164 @@
+# Третье полное независимое ревью перед публикацией 0.10.0
+
+> **Состояние на 2026-08-17:** ревью проведено, код не менялся. Подтверждено
+> 44 находки: 0 P0, 7 P1, 16 P2, 21 P3. Гейт при этом зелёный целиком —
+> ни одна находка им не ловится.
+> **Что это:** полное ревью кодовой базы глазами внешнего инженера, третье
+> по счёту. Первые два — `2026-08-14[10]` (18 находок) и `2026-08-16[12]`
+> (43 находки), оба списка закрыты волнами 1–12.
+> **Связанные записи:** `2026-08-14[10]-project-review.md`,
+> `2026-08-16[12]-project-review.md`, `2026-08-17[2]-coverage-gaps-report.md`.
+
+## Executive summary
+
+Пакет в хорошем состоянии по всем формальным признакам и содержит несколько
+дефектов, которые формальными признаками не ловятся вовсе.
+
+**Что проверено машиной, а не глазами.** Гейт из восьми команд `AGENTS.md` §6
+пройден целиком на закреплённом тулчейне (Flutter 3.29.0 / Dart 3.7.0 через
+fvm) на коммите `72bd596`: 293 теста зелёные, `analyze` чист в корне и во всех
+трёх примерах, формат сходится, `dart doc` и `pub publish --dry-run` без
+предупреждений, зеркала актуальны (16). Тесты примеров, в гейт не входящие,
+прогнаны отдельно: `scopo_demo` — 2, `navigation_node` — 17, все зелёные.
+Рабочее дерево чистое, ревью не внесло в проект ни одной правки.
+
+**Метод.** Помимо чтения, ревью проверяло утверждения запуском. В копии
+репозитория, вынесенной за пределы проекта, прогнаны **19 мутаций** кода
+(«сломать одну строку и посмотреть, покраснеет ли сьюта») и **двенадцать
+адресных проб** на сценарии, которые обсуждались как гипотетические. Десять
+проб подтвердились, одна не воспроизвелась, одна оказалась дефектной пробой.
+Из девятнадцати мутаций **пятнадцать прошли незамеченными**. Все P1 ниже, кроме
+шестого, подтверждены выполнением кода, а не рассуждением; таблицы
+доказательств — в разделах «Testing review» и «Проверка и ограничения».
+
+**Главный вывод.** Два прошлых ревью вывели правило: «закрыл находку — найди
+её же в соседней реализации». Правило верное, но применялось выборочно, и
+**шесть из семи P1 этого ревью — именно такие пропущенные соседи**:
+
+* `dep.unmount` не выполняется при провале инициализации — а
+  `AsyncControllerScope`, где ровно эта проблема была решена, стоит рядом и
+  показывает готовый образец решения;
+* обычный `NavigationNode` опустошает навигатор ровно так, как это делал
+  корневой до волны 13, — починили один, второй не посмотрели;
+* `this as T` — та самая находка P2-14 второго ревью, закрытая в `asStream` и
+  оставленная в соседнем `ScopeAutoDependencies`;
+* дартдок «`null` waits indefinitely» — та самая правка, сделанная для
+  `ScopeConfig` (`CHANGELOG.md:451-453`) и не доехавшая до слоя виджетов, где
+  её читают.
+
+Второй сквозной вывод: **гейт систематически не видит того класса дефектов,
+который здесь опасен.** Все 43 находки прошлого ревью получены на зелёном
+гейте, и все 44 находки этого — тоже. Пятнадцать незамеченных мутаций
+показывают, почему: сьюта отлично проверяет то, ради чего написана
+(жизненный цикл `AsyncScope`, координатор, дерево зависимостей), и почти не
+проверяет проводку параметров, публичные фасады семейств и ветки конфигурации.
+
+**Готовность к публикации.** По совокупности: **публиковать 0.10.0 сейчас не
+стоит.** Не из-за количества находок — их меньше, чем в прошлый раз, и хвост
+явно сходится, — а из-за состава верхушки. Четыре из семи P1 (№1, №3, №4, №7)
+ломают обещания, записанные в публичной документации, причём два из них
+(`NavigationNode`) — в сценариях, которые есть в любом Flutter-приложении:
+`Drawer` и первый маршрут. Их починка не требует переделки архитектуры; это
+работа на одну-две волны.
+
+## Project overview
+
+`scopo` — инфраструктурный Flutter-пакет: управление скоупами в дереве
+виджетов, внедрение зависимостей, асинхронная инициализация и разбор с
+гарантированным освобождением ресурсов. 8 735 строк в `lib/`, 13 925 в
+`test/`, 119 публичных типов, три примера, 11 тем документации плюс 16 русских
+зеркал. Внешних зависимостей у `lib/` ровно две: `flutter` и `logger_builder`.
+
+**Устройство.** Весь скоуп-слой — **одна библиотека Dart, собранная из 43
+`part`-файлов** (`lib/src/scope/scope.dart`). Утилиты (`lib/src/utils/`) и
+окружение (`lib/src/environment/`) — отдельные библиотеки, подключаемые
+импортом.
+
+**Слои, снизу вверх.**
+
+1. `base/base.dart` — `ScopeInheritedWidget` и `ScopeContext` со статикой
+   `of`/`maybeOf`/`select`; здесь же живёт механика подписки через
+   `dependOnInheritedElement` с аспектом `(значение, селектор)`.
+2. `scope_widget/scope_widget_core.dart` — сердце пакета. `InheritedElement` с
+   двумя нестандартными свойствами: самоподписка (Flutter её запрещает
+   ассертом в `notifyClients`) и «уведомить, не пересобирая поддерево»
+   (`_shouldOnlyNotify` + перехват `updateChild`). Набор селекторов зависимого
+   ограничен **кадром**: у Flutter нет хука «зависимый начинает сборку», и
+   граница взята из `addPostFrameCallback` через два библиотечных глобала
+   `_buildPass`/`_buildPassEnding`.
+3. `scope_model/`, `scope_notifier/` — владение значением и подписка на
+   `Listenable`; `ScopeStateNotifier`/`ScopeStateWithErrorNotifier` и их
+   read-only представления.
+4. `async_scope/` — асинхронный жизненный цикл: `initAsync()` как поток
+   состояний (`Waiting → Progress* → Ready | Error`), `disposeAsync()`,
+   четыре ограниченных ожидания разбора, координатор взаимного исключения по
+   `scopeKey` (`scope_coordination.dart` — FIFO-мьютекс по ключу плюс реестр
+   детей), регистрация у родителя.
+5. `async_data_scope/`, `async_controller_scope/` — надстройки: скоуп,
+   владеющий значением, и скоуп, владеющий контроллером с собственным
+   жизненным циклом.
+6. `full_scope/` — `Scope` с деревом зависимостей
+   (`ScopeAutoDependencies`, последовательные и параллельные группы, прогресс,
+   восемь состояний зависимости) и `lite_scope/` — скоуп с обычным `State` и
+   умением закрыться, оставшись на экране (`close()` + `ScreenshotReplacer`).
+
+**Потоки данных.** Инициализация: `performRebuild` → `init()` внутри build
+error boundary → `_performAsyncInit` (ожидание `scopeKey` → подписка на
+`initAsync()` → применение состояний в модель через пост-кадровый колбэк) →
+`buildOnState`. Разбор: `unmount()`/`close()` → `unmountScope()` (синхронная
+половина) → `_prepareForDisposal` (отмена очереди, отмена инициализации,
+ожидание детей) → `disposeAsync()` → `finally` (снятие с учёта у родителя,
+освобождение ключа, `dispose` модели). Уведомление: модель → `notifyDependents`
+→ `markNeedsBuild` → `performRebuild` → `notifyClients` → селекторы каждого
+зависимого → `didChangeDependencies` только тем, у кого значение изменилось.
+
+---
+
+## Critical and high-severity findings
+
+P0 нет.
+
+### P1-1. `dep.unmount` не выполняется, когда инициализация провалилась, — а `dep.dispose` выполняется
+
+**severity:** High · **уверенность:** high (подтверждено запуском)
+
+**файл:строки:** `lib/src/scope/full_scope/scope_core.dart:160-171` и `:192`;
+`lib/src/scope/full_scope/scope_auto_dependency/scope_auto_dependency.dart:80-93`
+
+Элемент получает контейнер зависимостей только вместе с `ScopeReady`:
+
+```dart
+// scope_core.dart:160-171
+case ScopeReady(:final dependencies):
+  _dependencies = dependencies;      // единственное присваивание
+```
+
+а синхронный сброс ходит через это же поле — `_dependencies?.onUnmount()`
+(`:192`). Инициализация, упавшая до `ScopeReady`, оставляет `_dependencies`
+равным `null`, поэтому `onUnmount` не вызывается **вообще**. Асинхронный
+разбор при этом идёт своим путём, изнутри генератора
+(`scope_auto_dependency.dart:80-87`: `if (!dependencies.isInitialized)` →
+`await dispose()`), и выполняется.
+
+**Проверено запуском.** Дерево `sequential('', [dep('a'), dep('b')])`, у обеих
+зависимостей заданы и `unmount`, и `dispose`:
+
+```
+провалившаяся инициализация: [dispose b, dispose a]
+успешная инициализация:      [unmount a, unmount b, dispose b, dispose a]
+```
+
+**Сценарий.** `dep('a')` заводит подписку и регистрирует
+`dep..unmount = sub.cancel..dispose = sink.close`; соседняя `dep('b')` падает.
+`sink.close()` выполняется, `sub.cancel()` — никогда. То же на отмене: скоуп
+сняли с дерева на середине сборки зависимостей.
+
+**Последствия.** Подписка живёт вечно и продолжает писать в закрытый sink.
+Нарушено обещание, записанное **четырежды** одними и теми же словами:
+`scope_dependency.dart:39-43`, `scope_dependency_impl.dart:78-84`,
+`scope_dependencies.dart:8-13` — «Runs exactly once, **always before
+[dispose]**, whether the scope was removed from the tree or closed with
+`close()`»; и `doc/full_scope.md:355-362` — «It runs exactly once, **whichever
+way the scope goes**».
+
+**Направление.** Образец лежит в соседнем семействе и написан ровно для этой
+задачи: `async_controller_scope_core.dart:24-26` держит контроллер с момента
+создания («so the synchronous half of the teardown can reach it even when the
+initialization never finished»), а `scope_controller.dart:85-88` делает
+`performUnmount()` перед `dispose()`. Здесь нужно то же: держать контейнер с
+момента, когда его вернул `initDependencies`, а не с `ScopeReady`, и/или звать
+`_root?.onUnmount()` из `finally` генератора — с однократной защитой, чтобы
+обещание «ровно один раз» уцелело.
+
+### P1-2. Уведомление зависимых изнутри собственной сборки скоупа оставляет поддерево несмонтированным
+
+**severity:** High · **уверенность:** high (подтверждено запуском)
+
+**файл:строки:** `lib/src/scope/scope_widget/scope_widget_core.dart:372-376`,
+`:398-411`, `:462-468`
+
+`notifyDependents()` — флаг **следующей** пересборки, но защиты от установки
+посреди **текущей** нет:
+
+```dart
+void notifyDependents() {
+  _shouldOnlyNotify = true;
+  markNeedsBuild();
+}
+```
+
+Читает флаг не только `performRebuild`, но и `updateChild`, который фреймворк
+зовёт уже после `build()`. Обычный ассерт Flutter «markNeedsBuild called during
+build» здесь **не срабатывает**: `_debugIsDescendantOf` для самого себя
+возвращает `true`, а эта ветка в `markNeedsBuild` (`framework.dart`) —
+разрешающая (`return true`), не бросающая. Дальше `if (dirty) return;`
+проглатывает вызов, а `_shouldOnlyNotify` остаётся взведённым до `updateChild`.
+
+**Проверено запуском.** `ScopeNotifier`, чей `builder` синхронно дёргает модель:
+
+```
+subtree mounted = 0
+errors = ['_child != null': is not true. (framework.dart:5757),
+          '_child != null': is not true. (framework.dart:5710)]
+```
+
+Поддерево не смонтировано; в debug наружу выходят два производных ассерта
+фреймворка, не называющих причину. В release обоих ассертов нет — остаётся
+молча пустое поддерево.
+
+**Сценарий.** `builder` синхронно зовёт метод модели, который завершает
+`notifyListeners()` (ленивая догрузка, установка значения по умолчанию).
+Подписчик, поставленный `ScopeNotifierElementBase.init()`
+(`scope_notifier_core.dart:63`), — это `notifyDependents`.
+
+**Последствия.** Скоуп не показывает ничего, уведомление теряется, диагностика
+не указывает на причину. Что это не теория, видно по самому пакету: он обходит
+эту механику на трёх внутренних площадках —
+`lite_scope_core.dart:283-296` (прямо описывает отказ и лечит
+`_forceRebuild = true`), `async_scope_core.dart:665-677` и
+`lite_scope_core.dart:456` (через `runOutsideFrame`). Три обхода, ноль защиты в
+самом механизме.
+
+**Направление.** Разделить «флаг текущей пересборки» и «накопитель для
+следующей»: снимок в начале `performRebuild` в отдельное поле, которое читают
+`build()` и `updateChild()`, тогда как `notifyDependents()` пишет только в
+накопитель. Вторым шагом — откладывать уведомление, сделанное во время сборки,
+на пост-кадровый колбэк, иначе оно всё равно потеряется.
+
+### P1-3. Обычный `NavigationNode` на первом маршруте опустошает навигатор приложения
+
+**severity:** High · **уверенность:** high (подтверждено запуском)
+
+**файл:строки:** `lib/src/utils/navigation_node/navigation_node.dart:150-156`
+
+```dart
+void _popOutside(Object? result) {
+  if (widget.isRoot) return;
+  _navigatorKey.currentState?.previous?.pop(result);   // :155
+}
+```
+
+Здесь `pop`, а в императивном пути десятью строками выше — `maybePop`
+(`:301`). `NavigatorState.pop` снимает последний присутствующий маршрут **без
+проверки `isFirst`**; `maybePop` в том же случае получил бы `bubble` и не
+сделал бы ничего.
+
+**Проверено запуском.** `MaterialApp(home: NavigationNode(onPop: … => true,
+…))`, системный back: `home still there = 0` — корневой навигатор пуст.
+В debug следующий кадр падает на `assert(_history.isNotEmpty)`, в release —
+пустой оверлей.
+
+**Последствия.** Это ровно тот дефект, который волна 13 описала как «корневой
+`NavigationNode` с `onPop` всё-таки ронял маршрут снаружи» и вылечила через
+`if (widget.isRoot) return;`. Закрыт был только корневой узел; обычный узел на
+первом маршруте приложения падает так же. Тестами не покрыто: `_OnPopHost`
+(`test/navigation_node_test.dart:724-753`) всегда пушит узел вторым маршрутом,
+а тест `:332` идёт императивным путём через `maybePop` и потому зелёный.
+
+**Направление.** `previous?.maybePop(result)`. Одной правкой закрывается и это,
+и известная незакрытая проблема про обход внешнего `PopScope(canPop: false)`
+(она из того же `previous.pop()`). Если асимметрия была намеренной («хук уже
+спросили, второй раз нельзя»), нужна хотя бы проверка `previous.canPop()`.
+
+### P1-4. `Drawer` и `showBottomSheet` внутри узла не закрываются системным «назад» — вместо этого уходит весь маршрут
+
+**severity:** High · **уверенность:** high (подтверждено запуском)
+
+**файл:строки:** `lib/src/utils/navigation_node/navigation_node.dart:201-241`
+и `:271-284`
+
+Узел решает «есть ли внутри что закрывать» по кешу `_innerCanPop`, который
+обновляется только из `NavigationNotification`. Flutter шлёт это уведомление
+из `NavigatorState._handleHistoryChanged` и из
+`ModalRoute._maybeDispatchNavigationNotification` — но **изменение локальной
+истории маршрута не шлёт ничего**: `LocalHistoryRoute.addLocalHistoryEntry`
+вызывает `changedInternalState()`, а тот делает только `setState`.
+
+Вторая половина — переопределение `canPop()` (`:279-281`): `_HookEntry` стоит
+на первой странице узла всегда, поэтому `willHandlePopInternally` там всегда
+`true`, и код безусловно отвечает `false`, не пытаясь отличить свою метку от
+чужой записи.
+
+**Проверено запуском.** `NavigationNode` вокруг `Scaffold` с `drawer:`,
+ящик открыт, системный back:
+
+```
+после back: drawer=0  inner=0  home=1
+```
+
+Ушёл весь маршрут вместе с узлом; без узла тот же экран закрыл бы ящик.
+
+**Последствия.** Нарушено обещание `doc/utils.md`: «System back first asks the
+node's nested navigator to close its top route. Only when that navigator has
+nothing left to pop do `onPop` and `isRoot` decide what happens outside».
+`Drawer` (`drawer.dart:530-541`), `ScaffoldState.showBottomSheet`
+(`scaffold.dart:2521`) и любой пользовательский `addLocalHistoryEntry` —
+приём, который документация Flutter рекомендует прямо. Побочно тем же ломается
+кнопка `AppBar` для нижней шторки. **Узел ломает то, что без него работает.**
+
+**Направление.** Две части. Первая: в `pop()` при `super.canPop() == true`
+звать `super.pop()` и смотреть, сработал ли `_HookEntry.onRemove` — локальная
+история LIFO, а метка добавляется первой, значит чужая запись всегда снимается
+раньше. Вторая: решение о системном back принимать по живому состоянию
+вложенного навигатора, а не по кешу `_innerCanPop`.
+
+### P1-5. `this as T` в `ScopeAutoDependencies`: ошибка в типовом аргументе роняет скоуп и утекает всё дерево
+
+**severity:** High · **уверенность:** high (подтверждено запуском)
+
+**файл:строки:**
+`lib/src/scope/full_scope/scope_auto_dependency/scope_auto_dependency.dart:8-9`
+и `:77`
+
+```dart
+abstract base class ScopeAutoDependencies<T extends ScopeDependencies,
+    C extends Object?> implements ScopeDependencies {
+  ...
+  yield ScopeReady(this as T);   // :77
+```
+
+`T` ничем не связан с типом получателя. `SettingsDeps extends
+ScopeAutoDependencies<HomeDeps, void>` — копипаста с непоправленным аргументом
+— компилируется.
+
+**Проверено запуском.**
+
+```
+error = _TypeError: type '_Wrong' is not a subtype of type '_Right' in type cast
+released after the failure = []
+```
+
+Второе — важнее первого. Бросок из `:77` происходит **после** того, как дерево
+полностью инициализировалось, поэтому `finally` видит `isInitialized == true` и
+ничего не освобождает; `_dependencies` элементу не передан, `_initSucceeded`
+остался `false`, значит и `disposeAsync()` не будет. Всё построенное дерево
+утекает целиком, а на экране — `buildOnError` с `TypeError`.
+
+**Последствия.** Это находка P2-14 второго ревью («`asStream` содержит
+непроверяемое приведение»), закрытая волной 11 дженериком по получателю.
+Соседнюю реализацию с тем же `this as T` тогда не посмотрели.
+
+**Направление.** Самотипный параметр, как во всём остальном пакете:
+`ScopeAutoDependencies<T extends ScopeAutoDependencies<T, C>, C>`. Изменение
+ломающее — строка в `CHANGELOG.md`. Заодно в `doc/full_scope.md` первый
+параметр типа нигде не объяснён — это и есть причина, по которой ошибиться
+легко.
+
+### P1-6. Двенадцать параметров таймаутов документированы как «`null` ждёт бесконечно», а означают «взять дефолт в три секунды»
+
+**severity:** High · **уверенность:** high
+
+**файл:строки:** `lib/src/scope/async_scope/async_scope_base.dart:12, 23-24,
+35, 46`; `lib/src/scope/async_data_scope/async_data_scope_base.dart:10, 16-17,
+23-24, 30`; `lib/src/scope/async_controller_scope/async_controller_scope_base.dart:13,
+21-22, 30-31, 39`
+
+Дартдок сам себе противоречит в двух соседних строках:
+
+```dart
+/// How long to wait for [scopeKey]; `null` waits indefinitely.
+///
+/// Defaults to [ScopeConfig.defaultScopeKeysTimeout].
+final Duration? scopeKeyTimeout;
+```
+
+Код (`async_scope_core.dart:515`): `scopeKeyTimeout ?? ScopeConfig.defaultScopeKeysTimeout`,
+а дефолт — `Duration(seconds: 3)` (`scope_config.dart:67`). Слой элемента
+формулирует правильно — `async_scope_core.dart:99, 105-107, 112, 118`: «`null`
+takes the default». То есть два слоя одного параметра описаны
+взаимоисключающе, и неправ тот, которым пользуются.
+
+**Сценарий.** Разработчик хочет, чтобы скоуп ждал разбор детей столько,
+сколько нужно; читает дартдок, пишет `waitForChildrenTimeout: null` (или
+ничего не пишет — это то же самое). Через три секунды ожидание обрывается,
+дети бросаются недоразобранными, `scopeKey` освобождается. Способа снять
+ограничение для одного скоупа не существует вовсе — только глобально через
+`ScopeConfig`.
+
+**Последствия.** Расхождение обещания и кода ровно в том, ради чего пакет
+написан, — в порядке разбора. Отчёт в консоль есть, но человек, прочитавший
+«waits indefinitely», ищет причину не там.
+
+**Направление.** Заменить во всех двенадцати местах на формулировку слоя
+элемента; «unbounded» оставить за `ScopeConfig`, где оно верно. Тот же дефект
+уже находили и чинили на соседнем слое — `CHANGELOG.md:451-453`: «The dartdoc
+of `ScopeConfig.defaultScopeKeysTimeout` and `defaultWaitForChildrenTimeout`
+was wrong… Only `null` removes the limit». Слой виджетов при этом не тронули.
+Отдельно стоит решить, нужен ли «без ограничения» для одного скоупа:
+`AsyncScopeCoordinator.waitForChildren` это честно проговаривает
+(`async_scope_coordinator.dart:66-67`), параметры виджетов — нет.
+
+### P1-7. `onPop` получает контекст **снаружи** узла, поэтому рекомендованный документацией диалог уходит мимо скоупов
+
+**severity:** High · **уверенность:** high (подтверждено запуском)
+
+**файл:строки:** `lib/src/utils/navigation_node/navigation_node.dart:174-182`,
+`:219-234`, `:90`; `doc/utils.md:93-95`
+
+Вложенный навигатор — потомок диспетчера, а `onPop` вызывается с контекстом
+диспетчера. Значит `Navigator.of(hookContext)` — навигатор приложения.
+
+**Проверено запуском.**
+
+```
+hook navigator == outer app navigator ? true
+hook navigator == node navigator      ? false
+```
+
+**Последствия.** `doc/utils.md:93-95` прямо предлагает этот путь: «or a
+`Future<bool>` to decide after asking something — a confirmation dialog,
+typically». Пользователь ставит `useRootNavigator: false`, потому что весь
+смысл узла — «routes stay inside the current scope», и получает диалог **вне**
+узла: скоупы, которые узел раздаёт поддереву, из диалога недостижимы. Пакет
+подтверждает это сам себе неверно: `example/navigation_node/lib/lesson.dart:236-241`
+утверждает «A dialog opened with `useRootNavigator: false` belongs to the node,
+so it is drawn inside the node's box», а тест
+`example/navigation_node/test/lessons_test.dart:44` («the onPop dialog fits
+inside the node») этого не проверяет и прошёл бы при любом навигаторе.
+
+**Направление.** Либо передавать в `onPop` контекст изнутри узла — тогда
+`useRootNavigator: false` начнёт значить обещанное, — либо сказать про
+принадлежность контекста в дартдоке `onPop` и в `doc/utils.md`, а в уроке 4
+показать, откуда брать контекст узла. В любом случае поправить комментарий
+урока и сделать его тест содержательным.
+
+---
+
+## Medium and low-severity findings
+
+### P2 — существенные дефекты
+
+**P2-1. Поток инициализации, закончившийся без `AsyncScopeReady`, оставляет
+скоуп на ветке загрузки навсегда и молча.** `async_scope_core.dart:634-639`.
+Единственная реакция на такой поток — `_log.i('not initialized')`, а логгер по
+умолчанию выключен (`scope_config.dart:18`). Модель остаётся `AsyncScopeWaiting`,
+`_initSucceeded` — `false`, `disposeAsync()` не позовут. **Проверено запуском:**
+`init: (context) async* {}` даёт `loading=1 error=0 ready=0`,
+`tester.takeException() == null`. Ровно этот симптом волна 10 признала дефектом
+для соседнего случая — комментарий в этом же файле, `:660-665`: «the model
+stayed [AsyncScopeWaiting] and the scope went on showing its loading branch for
+good: loud in the console… and silent on screen». Здесь нет ни громко, ни
+видно. Направление: в `onDone` различать «поток кончился, а `_initSucceeded`
+false» и переводить модель в `AsyncScopeError` со `StateError`. Уверенность
+high.
+
+**P2-2. Ожидание `dispose()` в `finally` провалившейся инициализации не
+ограничено ничем — ветка ошибки может не показаться никогда.**
+`scope_auto_dependency.dart:80-87`. При `cancelOnError: true` отмена доходит до
+генератора, его `finally` делает `await dispose()`, и пока тот не завершится,
+`_model.update(AsyncScopeError(...))` не выполняется. **Проверено запуском:**
+дерево, где `dep('a').dispose` возвращает future, который никто не завершает, а
+`dep('b')` падает, — скоуп остаётся на `INIT`, исключений нет. Соседнее
+семейство эту самую ловушку описывает словами и закрывает:
+`async_controller_scope_core.dart:81-86` («a release that never finishes never
+lets the generator finish either, so the failure of `init()` would never reach
+the model and the scope would show its loading branch for ever») и оборачивает
+разбор в `_awaitBounded`. Направление: то же ограничение здесь. Уверенность
+high.
+
+**P2-3. Таймер `pauseAfterInitialization` не отменяется и переживает дерево.**
+`async_scope_core.dart:569-575`. `Future.delayed` заводит таймер текущей зоны и
+нигде не хранится. **Проверено запуском:** скоуп с
+`pauseAfterInitialization: 5s`, снятый с дерева, даёт `A Timer is still pending
+even after the widget tree was disposed`. Это ложное падение виджет-теста у
+потребителя пакета; в проде — удержание размонтированного элемента на всю
+длительность паузы. Переносить в `Zone.root` здесь **нельзя** — это видимая
+пользователю задержка, ею тест должен уметь управлять; держать `Timer` в поле и
+гасить в `finally` разбора. Уверенность high.
+
+**P2-4. Два из четырёх ограниченных ожиданий берут таймер текущей зоны, а не
+корневой.** `scope_coordination.dart:117-119` (`_AccessQueue.enter`) и `:201-204`
+(`ChildRegistry.waitForChildren`) используют `Future.timeout`, который через
+`Timer(...)` идёт в `Zone.current.createTimer` (проверено по исходнику
+`future_impl.dart:1022` и `timer.dart:46`). `_awaitBounded`
+(`async_scope_core.dart:828`) специально берёт `Zone.root.createTimer`, и
+обоснование записано там же (`:806-817`): «a timer belonging to such a zone
+would still be pending when the tree is gone, which is what `flutter_test` ends
+a test on». **Проверено запуском:** родительский скоуп с
+`waitForChildrenTimeout: 30s` и ребёнком, чей разбор завис, даёт `A Timer is
+still pending even after the widget tree was disposed`. То есть ровно то
+падение, ради устранения которого волна 7 и вводила корневую зону —
+в соседней реализации того же ожидания. Направление: собственный таймер из
+`Zone.root` вместо `Future.timeout` в обоих местах. Уверенность high.
+
+**P2-5. Второй и третий отказы разбора теряются полностью.**
+`async_scope_core.dart:711-768, 798-800`. Четыре стадии, `failure ??=` —
+наружу уходит первый отказ, остальные попадают только в выключенный по
+умолчанию `_log.e`. Ни один из трёх `catch` не зовёт
+`FlutterError.reportError`, хотя `_prepareForDisposal` в этом же файле
+(`:936-949`) делает ровно это и сам называет правило (`:909-910`): «The failure
+is reported and the disposal goes on — **the same trade the rest of this file
+makes for the failures it cannot hand to a caller**». Пара (2, 3) достижима на
+обычном пути: `onWaitForChildrenTimeout()` бросил, следом бросил
+`disposeAsync()` — второй отказ не видит никто. Направление: `reportError` для
+случая «`failure` уже занят». Уверенность high.
+
+**P2-6. Из состояния ошибки `ScopeStateWithErrorNotifier` нет выхода, а
+`update()` в нём делает хуже, чем ничего.**
+`scope_state_with_error_model.dart:26, 47-54`. `_error` присваивается один раз
+и не сбрасывается никогда, а унаследованный `update()` при этом всегда
+проходит: подменяет `_state` и уведомляет всех, тогда как `state` продолжает
+бросать. **Проверено запуском:** после `setError` вызов `update('recovered')`
+даёт `notified = 1, hasError = true`, а `state` бросает исходное
+`Exception: boom`. Под скоупом это разворачивается так: селектор бросает,
+`_selectorSaysChanged` считает изменившимся, зависимый пересобирается, его
+`build` читает `state`, бросок → `ErrorWidget`. Одна попытка восстановления
+превращает всё поддерево в `ErrorWidget`-ы. Терминальность отказа нигде не
+заявлена. Направление — выбор владельца: сбрасывать `_error` в `update()`,
+добавить `clearError()`, или запечатать `update` для этого класса. Уверенность
+high.
+
+**P2-7. `isBuilding` в release не видит сборку вне кадра, и `runOutsideFrame`
+выполняет действие внутри неё.** `is_building.dart:17-19`. Второе слагаемое —
+`buildOwner.debugBuilding` — пишется только изнутри `assert`, то есть в release
+всегда `false`. Сборка вне кадра не экзотика: так `runApp` строит первое
+дерево. Тогда `runOutsideFrame` выполняет действие синхронно, и оно попадает
+ровно в ту сборку, от которой его отводили — то есть в P1-2. Практически: в
+release `AsyncScope`, упавший на первом кадре до первого `await`, показывает
+пустое поддерево вместо `buildOnError`, тогда как в debug тот же код
+отрабатывает правильно. Направление: дать `isBuilding` release-видимый источник
+правды — обычный (не в `assert`) флаг в `performRebuild`. Уверенность high.
+
+**P2-8. `unmount` детей группы идёт в прямом порядке, `dispose` — в
+обратном.** `scope_dependency_group.dart:43-59` против `:67-79`. Обратный
+порядок разбора существует потому, что `b` строится поверх `a`; синхронная
+половина того же разбора идёт в противоположную сторону — фундамент отпускают
+первым. **Подтверждено логом пробы P1-1:** `[unmount a, unmount b, dispose b,
+dispose a]`. Сценарий: `sequential('', [dep('bus'), dep('repo')])`, где `repo`
+слушает `bus`; сначала срабатывает `bus.unmount`, и репозиторий остаётся
+подписан на источник, который уже перестал работать. Формально ничего не
+нарушено — порядок `unmount` не назван нигде, — нарушен собственный принцип
+кода. Направление: `_dependencies.reversed` в `onUnmount` плюс явная строка в
+дартдоке `sequential`/`concurrent` и в `doc/full_scope.md`. Уверенность medium.
+
+**P2-9. Первый отказ теряется, когда падают обе половины разбора.**
+`scope_core.dart:173-197` и `:199-222`. `failure` присваивается из первой
+половины, но `_dependencies?.onUnmount()` ниже может бросить — и тогда
+`failure` пропадает бесследно. Та же форма в `disposeAsync`. Направление:
+`failure ??=` вокруг второй половины, как в `_performAsyncDispose`; второй
+отказ — в `FlutterError.reportError`. Уверенность high.
+
+**P2-10. Дартдок `of`/`maybeOf`/`select` обещает «if the scope is not found», а
+условий два.** Восемь мест: `scope_base.dart:165, 176`;
+`lite_scope_base.dart:147, 159`; `scope_core.dart:59, 73`;
+`lite_scope_core.dart:60, 75`. Само сообщение `_stateOrThrow`
+(`lite_scope_core.dart:197-205`) знает всю правду и говорит её отлично:
+состояния нет ещё и пока скоуп ждёт `scopeKey`, инициализируется, упал или уже
+закрыт. Ни один из восьми дартдоков этого не упоминает. Сценарий: виджет под
+`buildOnInitializing` зовёт `App.of(context)` и получает `StateError` вместо
+задокументированного «скоуп не найден», а `maybeOf` возвращает `null` у
+готового скоупа. Направление: дописать второе условие. Уверенность high.
+
+**P2-11. `AsyncScopeParent.hasChildren`/`childrenCount`/`waitForChildren`
+показаны в документации, но получить приёмник для встроенных семейств
+нечем.** `doc/async_scope.md:287-294`; `async_scope_parent.dart:11-68`;
+`doc/lite_scope.md:176-178`. Миксин лежит на элементе, а элементы всех пяти
+асинхронных семейств приватные; `AsyncScope.of` возвращает
+`AsyncScopeContext`, где этих членов нет. Рабочий способ (`as AsyncScopeParent`)
+нигде не назван. Направление: либо дать статический вход по образцу
+координатора, либо честно сказать в теме, что для встроенных семейств это
+`AsyncScopeCoordinator.waitForChildren`. Уверенность high.
+
+**P2-12. `buildOnWaiting` обязателен ровно в одном семействе — `LiteScope`, и
+там же необязательны `buildOnInitializing`/`buildOnError`.**
+`lite_scope_base.dart:79, 84, 90` против `scope_base.dart:106, 109, 112` и трёх
+асинхронных семейств. `LiteScope` — единственное место, где требования
+перевёрнуты, причём его прямой наследник по иерархии, `Scope`, восстанавливает
+общий порядок. Дартдок при этом читается как у необязательного метода.
+Сценарий: перенос экрана с `Scope` на `LiteScope` — путь, который документация
+предлагает прямо (`doc/lite_scope.md:9-11`), — даёт ошибку компиляции на
+методе, которого в обязательных не было. Уверенность high.
+
+**P2-13. Пятнадцать мутаций из девятнадцати сьюта не заметила.** Подробности —
+в «Testing review». Кратко: незамеченными проходят проводка `scopeKey` в
+четырёх семействах из пяти, `buildOnClosing` в обоих семействах, где он есть,
+ветка «безлимитное ожидание», охрана `_isDisposing` в паузе, вся поисковая
+поверхность семейства `Scope`, и трактовка упавшего селектора. Уверенность
+high (машинная проверка).
+
+**P2-14. Мёртвый код и лишние зависимости в витрине пакета.** 15 из 81 файла
+`example/scopo_demo/lib` недостижимы из `main.dart`; `flutter_markdown_plus` и
+`flutter_syntax_view` в `example/scopo_demo/pubspec.yaml:13-14` импортируются
+только из мёртвых файлов. Ловушка, из-за которой это не видно грепом:
+единственный `import 'child_screen.dart'` разрешается в
+`navigation_node/child_screen.dart`, а не в `deferred_closing/`. `example/` не
+исключён в `.pubignore`, так что мёртвые файлы едут в архив. Уверенность high.
+
+**P2-15. Непереведённые комментарии в русском зеркале.**
+`docs/ru/doc/lite_scope.md:79, 84` — `// must stop reaching this scope, now` и
+`// may take its time` остались по-английски. Это не директивы `// ignore:`,
+исключение `AGENTS.md` §7 не применимо, и именно эти два комментария несут
+смысл фрагмента — противопоставление «немедленно» и «может занять время».
+Коммит `9def235`, переводивший комментарии, до `lite_scope.md` не дошёл;
+`check.sh` этого не ловит, он сверяет только хеш оригинала. Уверенность high.
+
+**P2-16. `doc/scope_notifier.md:136` — код, который не компилируется.**
+«reading `AsyncScope.of(context).state` never throws»: `listen` — обязательный
+именованный параметр (`async_scope.dart:114-121`). В README (`:326`) и в
+`doc/async_scope.md:149` та же конструкция написана правильно. Уверенность
+high.
+
+### P3 — локальные несогласованности
+
+**P3-1.** Нет CI. Каталога `.github/` не существует вовсе; гейт из восьми
+команд держится целиком на дисциплине. Ни зелёность на чистом клоне, ни
+`check.sh` для зеркал не проверяются автоматически. Для пакета, идущего на
+pub.dev, это единственная сквозная дыра в процессе.
+
+**P3-2.** Тесты не включают leak-трекер Flutter. `test/flutter_test_config.dart`
+нет, `LeakTesting.enable()` не вызывается нигде, а по умолчанию
+`LeakTesting._enabled = false` (`leak_tracker_testing-3.0.1/lib/src/leak_testing.dart:42`).
+`leak_tracker_flutter_testing 3.0.9` при этом уже в дереве зависимостей, а
+`ChangeNotifier` инструментирован (`change_notifier.dart:237, 392`), то есть
+недоразобранный `ScopeStateNotifier`/`_AsyncScopeNotifier` был бы пойман сразу.
+Для пакета, чьё назначение — детерминированное освобождение ресурсов, это
+самая дешёвая непроведённая проверка.
+
+**P3-3.** `ListenableSelector` отменяет подписку до того, как получил новую.
+`listenable_selector.dart:76-94`. `_subscription.cancel(); _subscribe();` —
+если селектор бросит на первом синхронном чтении, поле останется указывать на
+отменённую подписку. Направление: подписаться во временную переменную, потом
+отменять старую. *Оговорка: механизм виден в коде, но воспроизвести вторичный
+отказ в `dispose` пробой не удалось — нужна проверка автора.*
+
+**P3-4.** `_currentBuildPass()` заказывает пост-кадровый колбэк, но не
+заказывает кадр. `scope_widget_core.dart:19-34`. Соседний `runOutsideFrame`
+(`is_building.dart:21-34`) в такой же ситуации делает `..scheduleFrame()` с
+комментарием «nothing has asked for the frame this callback needs». Если
+`_buildPassEnding` застрянет `true`, `pairs` каждого зависимого растут без
+границы. Убедительного продового сценария построить не удалось (в `runApp` за
+`attachRootWidget` идёт warm-up-кадр), поэтому Low — но асимметрия при
+одинаковом риске читается как пропуск.
+
+**P3-5.** Ошибка внутри `then`-колбэка асинхронного `onPop` уходит в незанятую
+цепочку. `navigation_node.dart:96-129`: `onError` у `then` ловит ошибки
+исходного future, но не ошибки `onValue`, где стоит `_popOutside`. Файл
+специально объясняет (`:110-116`), почему сбой хука нельзя оставлять в
+неудерживаемой цепочке, — и оставляет там сбой собственного действия.
+
+**P3-6.** `NodeNavigatorState` экспортирован с публичным конструктором, но
+работоспособен только внутри `_NodeNavigator` (`navigation_node.dart:267-269`):
+`widget as _NodeNavigator` в `_observer`. Направление: приватный конструктор
+или явный `assert` с внятным текстом.
+
+**P3-7.** Каждая перестройка `NavigationNode` заставляет вложенный `Navigator`
+заново диффить страницы и перерегистрировать наблюдателей
+(`navigation_node.dart:174-183`, `:246-251`): `pages` и `observers` — новые
+списки на каждый `build`, а `NavigatorState.didUpdateWidget` сравнивает их по
+идентичности. Отдельный `_NodeBackDispatcher` заведён именно ради того, чтобы
+этого избежать для флага `_innerCanPop`, но сам `build` узла делает эту работу
+при любой перестройке сверху.
+
+**P3-8.** `ScreenshotReplacer.dispose` зовёт пользовательский колбэк до
+освобождения `ui.Image` (`screenshot_replacer.dart:56-66`). Бросок из
+`onCompleted` оставит нативную память снимка неосвобождённой. Порядок «сначала
+своё, потом чужое» здесь ничего не стоит.
+
+**P3-9.** `ScopeLog.message` объявлен `String?`, но `null` не возвращает
+никогда (`scope_logger.dart:86-87`): `LazyString` отдаёт строку `'null'`.
+Автор своего форматтера, написавший `entry.message ?? '<no message>'`, получит
+мёртвую ветку.
+
+**P3-10.** `AsyncScopeParent.waitForChildren` называет истёкшее ожидание именем
+элемента, а два соседних вызова — именем виджета
+(`async_scope_parent.dart:47` против `async_scope_coordinator.dart:83` и
+`async_scope_core.dart:980`). `tag`, документированный как «Names this
+particular scope in the log», теряется ровно в том месте, где он и нужен.
+
+**P3-11.** Лог отмены очереди читает живой геттер `scopeKey`
+(`async_scope_core.dart:894-897`), тогда как строкой ниже
+(`:779-784`) стоит комментарий, объясняющий, почему брать надо
+`_acquiredScopeKey`. Заодно замыкание зовёт пользовательский код уже после
+`unmountScope()`.
+
+**P3-12.** Диагностика смены `scopeKey` называет очередь, которой нет
+(`async_scope_core.dart:392-398`). Дартдок поля прямо допускает
+`_acquiredCoordinator == null` при непустом ключе («when the lookup failed and
+no entry was ever created»); в этом состоянии сообщение утверждает «It is
+holding [k] in the queue of no AsyncScopeCoordinator», уводя отладку в сторону.
+
+**P3-13.** Единственное незащищённое завершение `_initCompleter`
+(`async_scope_core.dart:542-546`): шесть остальных мест проверяют
+`isCompleted`, это — нет. Сейчас безопасно, но инвариант держится на разборе
+трёх удалённых условий; цена ошибки — `Bad state: Future already completed`
+внутри разбора.
+
+**P3-14.** Дартдок `AsyncDataScope` систематически беднее двух своих
+близнецов: нет «Needs an `AsyncScopeCoordinator` above it» на `scopeKey`, нет
+«Defaults to `ScopeConfig.…`» ни у одного из четырёх таймаутов, нет
+«Returning `null` falls back to `buildOnInitializing`», нет объяснения
+`waitingBuilder`. Поведение у всех трёх общее — расходятся только обещания.
+
+**P3-15.** `AsyncControllerScopeCore` не имеет `maybeOf`/`of`/`select`, в
+отличие от двух других Core-слоёв (`async_controller_scope_core.dart:4-14`).
+Статика в Dart не наследуется; обойти можно через
+`AsyncDataScopeCore.maybeOf<…>`, но это пробел в обнаружимости.
+
+**P3-16.** Комментарий контроллерного семейства
+(`async_controller_scope_core.dart:56-68`) объявляет ложным тот приём, которому
+учат три публичных топика: «a flag set beside the `yield` above would lie»
+против `doc/async_scope.md:246-258`, `doc/async_data_scope.md:78-94`,
+`doc/full_scope.md:252-266`, где `handedOver = true` сразу после `yield`
+подаётся как правильный способ. Обе стороны верными быть не могут. Направление:
+написать тест на описанное окно и по результату исправить неверную запись.
+
+**P3-17.** `runDispose` обосновывает себя утверждением, которое перестало быть
+верным (`scope_dependency_mixin.dart:94-95`): «A failed *leaf* is never disposed
+of at all». Лист, который упал, утилизируется, если успел зарегистрировать
+диспозер, — и соседний файл говорит это прямо
+(`scope_dependency_impl.dart:19-25`). Комментарий остался от прежней
+реализации; то же утверждение уехало в комментарий теста
+(`test/scope_auto_dependencies_test.dart:1639-1641`).
+
+**P3-18.** `ScopeDependency.count` документирован как «itself included»
+(`scope_dependency.dart:24-25`), а группа себя не считает
+(`scope_dependency_group.dart:17`). Для прогресса поведение верное, ошибочна
+формулировка.
+
+**P3-19.** `doc/full_scope.md:344-348` («Sibling errors … are all kept in the
+state») читается как «в состоянии группы лежат все ошибки братьев», а их там
+всегда ровно одна: `runStreamGuarded` закрывается на первой ошибке. Отсюда же
+мёртвое множественное число `failedChildren.join(', ')`
+(`scope_dependency_group.dart:106-107`).
+
+**P3-20.** `ScopeDependencyDisposalCancelled` недостижимо через публичный путь
+(`scope_dependency_state.dart:146-167`): обход разбора никто не отменяет.
+Публичный класс состояния, перечисленный в `doc/full_scope.md:286-287` наравне
+с достижимыми, наблюдать нельзя. Решение — за владельцем: документировать
+условие или убрать (ломающее).
+
+**P3-21.** Мелочи, каждая на строку: `.pubignore` не исключает `.vscode/`,
+`example/*/macos/` (88 файлов, ~687 КБ — самый большой блок архива после
+исключённой `docs/`) и `example/scopo_demo/web/`; две мёртвые записи в
+`analysis_options.yaml:43, 46` (severity для выключенных правил, причём первая
+противоречит комментарию на `:84-86`); `sdk: ^3.6.0` недостижим, потому что
+Flutter 3.29.0 несёт Dart 3.7.0; примеры `minimal` и `navigation_node`
+анализируются одной строкой `flutter_lints` вместо строгого корневого конфига;
+четыре несовпадающих счётчика в темах («Four consequences» при пяти абзацах и
+т.п.); `example/README.md:2-3` обещает 9 демо при десяти вкладках;
+`README.md:556-563` не упоминает третий пример; `AsyncScopeModel` назван
+«третьим типовым аргументом `AsyncScopeCore`», у которого их два
+(`async_scope_model.dart:6-7`, продублировано в `CHANGELOG.md:121-124`);
+`_NullWidget` падает голым `UnimplementedError` без имени виджета
+(`base/base.dart:24-29`), хотя `doc/base.md:41-43` обещает «the failure is
+immediate rather than subtle»; `CHANGELOG.md:439-445` против `:649-651` —
+пол Flutter описан в одном разделе дважды и по-разному.
+
+---
+
+## Architecture review
+
+**Сильные стороны.**
+
+Разделение на слои сделано честно и держится: `base` → `scope_widget` →
+`scope_model`/`scope_notifier` → `async_scope` → надстройки. Каждый слой
+добавляет ровно одну вещь, и её видно по имени файла. Пять семейств получают
+общий жизненный цикл из одного места — `AsyncScopeElementBase`, — а не
+копированием.
+
+Ядро (`scope_widget_core.dart`, 478 строк) решает задачу, которую Flutter не
+поддерживает: селективная подписка на `InheritedElement` с самозависимостью и
+без пересборки поддерева. Решение аккуратное, и — что важнее — **каждое
+неочевидное место снабжено объяснением, почему сделано именно так и что
+ломалось раньше**. Это редкость и главный актив кодовой базы: комментарии здесь
+несут историю отладки, а не пересказ кода.
+
+Диагностика продумана всерьёз. `_debugCheckScopeKeyOwnership`
+(`async_scope_core.dart:345-427`) перечисляет четыре способа нарушить
+неизменность ключа, каждый со своим текстом, объяснением последствий и
+подсказкой; всё внутри `assert`, то есть бесплатно в release. Сообщение
+`_stateOrThrow` объясняет не только «что», но и «почему сейчас и что делать».
+
+**Слабые места.**
+
+*Отсутствие границ внутри библиотеки.* Скоуп-слой — одна библиотека из 43
+`part`-файлов, поэтому `private` не даёт инкапсуляции между слоями вовсе.
+Замер: из 24 приватных типов 10 используются вне своего файла; среди приватных
+членов действительно разделяются около десяти, в основном через наследование
+(`_didInit`, `_stateOrThrow`, `_globalStateKey`, `_debugInitializingElement`).
+Один случай — `AsyncControllerScopeElementBase`, читающий `_initSucceeded`
+соседнего слоя, — уже записан в `handoff.md` как осознанный. Это не дефект, но
+это причина, по которой правка в одном слое так легко ломает соседний, и
+почему «найди находку в соседней реализации» приходится делать вручную.
+
+*Пять параллельных семейств.* `LiteScope`, `Scope`, `AsyncScope`,
+`AsyncDataScope`, `AsyncControllerScope`, каждое в трёх слоях
+(`Core`/`Base`/элемент), плюс `ScopeModel`/`ScopeNotifier` — 119 публичных
+типов на 8,7 тысячи строк. Одиннадцать форвардеров параметров продублированы в
+пяти местах дословно. Именно это дублирование и породило дефект «девять
+параметров не проброшены» в 0.10.0, и оно же — источник P1-1, P1-5, P1-6,
+P2-8: одинаковая по смыслу логика, написанная по-разному в соседних файлах.
+Радикальной перестройки это не требует, но требует механической проверки
+(таблица «семейство × параметр» в тестах), которой сейчас нет.
+
+*Глобальное изменяемое состояние.* Три библиотечных глобала (`_buildPass`,
+`_buildPassEnding` в `scope_widget_core.dart:19,22`,
+`_debugInitializingElement` в `base/base.dart:36`) плюс пять статик
+`ScopeConfig`. Для `ScopeConfig` есть `reset()` и он дисциплинированно
+вызывается в тестах; для `_buildPass` — нет, и он переживает границу теста
+(см. P3-4).
+
+*Граница набора селекторов по кадру.* Известное и записанное ограничение:
+зависимый, пересобранный дважды за кадр, хранит оба набора. Цена — одна лишняя
+сборка, ошибок за пределами заявленного не нашлось. Решение обосновано:
+у Flutter действительно нет подходящего хука.
+
+**Спорные решения.**
+
+`updateShouldNotify => true` безусловно (`scope_widget_core.dart:88`) —
+фильтрация целиком перенесена на селекторы зависимых. Это описано в
+`doc/scope_widget.md` и работает, но означает, что скоуп без селекторов
+уведомляет всех подписчиков на каждое обновление виджета.
+
+`library_private_types_in_public_api` подавлен в восьми местах — везде это
+`createScopeElement()`, возвращающий приватный тип элемента. Паттерн тот же,
+что у `createState()` во Flutter, и практической проблемы не создаёт, но
+формально публичная переопределяемая сигнатура ссылается на неназываемый тип.
+
+**Архитектурные риски.** Главный — не в устройстве, а в его размере
+относительно проверки: пять семейств × три слоя × одиннадцать параметров — это
+165 комбинаций, из которых сьюта закрывает единицы. Пока это так, каждая
+следующая правка в одном семействе будет требовать ручного обхода четырёх
+соседей.
+
+---
+
+## Testing review
+
+293 теста, 13 925 строк — это много и это хорошая сьюта. Она написана людьми,
+которые понимают, что проверяют: почти каждый тест несёт `reason:`,
+объясняющий *почему*, отрицательные утверждения честно предваряются «дать шанс
+и показать, что не произошло», рядом с хрупкими проверками стоят контрольные
+(«control: …»). Приёмы работы с фейковым временем, `runAsync`, ручным
+`buildScope` и `binding.idle()` выбраны точно и объяснены.
+
+**Покрыто нагруженно:** жизненный цикл `AsyncScope` целиком (все три гонки
+отложенных колбэков против разбора, провал до и после `Ready`, провал во время
+отмены генератора); `scopeKey` и координатор (1 316 строк, почти без слабых
+мест); `close()` у `LiteScope` во всех четырёх состояниях; дерево из десяти
+зависимостей с четырнадцатью комбинациями падений и точными снимками состояний;
+уборка после ошибки пользователя — по эффекту, а не по факту вызова;
+`notifyDependents` и селекторы.
+
+**Чего сьюта не видит — измерено, а не оценено.** В копии репозитория прогнаны
+19 мутаций; пятнадцать прошли незамеченными:
+
+| мутация | результат |
+| --- | --- |
+| `LiteScope.buildOnClosing` форвардер → `null` | **не поймана** |
+| `Scope.buildOnClosing` форвардер → `null` | **не поймана** |
+| `AsyncControllerScope.scopeKey` форвардер → `null` | **не поймана** |
+| `Scope.scopeKey` форвардер → `null` | **не поймана** |
+| `LiteScope.scopeKey` форвардер → `null` | **не поймана** |
+| `AsyncDataScope.scopeKey` форвардер → `null` | **не поймана** |
+| `AsyncControllerScope.initCancellationTimeout` форвардер → `null` | **не поймана** |
+| `AsyncControllerScope.pauseAfterInitialization` форвардер → `null` | **не поймана** |
+| охрана `!_isDisposing` в ветке паузы убрана | **не поймана** |
+| «безлимитное ожидание» `disposeAsync` → не ждать вовсе | **не поймана** |
+| `runStreamGuarded`: убран `try/catch` вокруг фабрики | **не поймана** |
+| `CompareUtils.notEquals` → `a == b` | **не поймана** |
+| `Scope.paramsOf` игнорирует `listen: true` | **не поймана** |
+| `Scope.of` возвращает не то состояние | **не поймана** |
+| упавший селектор считается неизменившимся | **не поймана** |
+| `AsyncScope.waitForChildrenTimeout` форвардер → `null` | поймана (1 тест) |
+| порядок разбора `sequential` перевёрнут | поймана (3 теста) |
+| `performDispose`: второй вызвавший получает свою ошибку | поймана (2 теста) |
+| `StateAsNotifier`: убрана охрана `mounted` в `addListener` | поймана (1 тест) |
+
+**Что из этого следует.**
+
+*Приоритет 1 — таблица «семейство × параметр».* `async_scope_parameters_test.dart`
+написан ровно против дефекта «девять параметров не проброшены» и сам признаёт
+объём: «asserts the two that this scenario can observe». Он строит только
+`AsyncScope`. Одиннадцать форвардеров живут в пяти семействах; из 55 пар
+проверена горстка. Нужен параметризованный тест по семейству и по параметру, где
+у каждой пары «таймаут + колбэк» наблюдаемый эффект уже отработан в сьюте,
+а `scopeKey` наблюдается через очередь.
+
+*Приоритет 2 — публичные фасады остальных семейств.* `public_facades_test.dart`
+применяет правильный приём («a line that forwards the wrong thing reads exactly
+like its neighbours») и останавливается на `LiteScope`. Вся поисковая
+поверхность семейства `Scope` — `of`, `maybeOf`, `select`, `paramsOf`,
+`selectParam` — не вызывается из тестов ни разу, при том что это самая большая
+тема документации. Сюда же `buildOnClosing` — единственный хук пути закрытия,
+не упомянутый в сьюте ни разу; это ровно тот же дефект, что волна 13 нашла у
+`LiteScope.wrapState`, в соседней строке того же класса.
+
+*Приоритет 3 — ветки конфигурации.* `ScopeConfig.default*Timeout = null`
+устанавливается только в `scope_config_test.dart`, где следом идёт `reset()` и
+никакой скоуп не запускается. Ветка `limit == null` не исполнялась ни разу, а
+документирована в четырёх местах.
+
+**Отдельные слабые места сьюты.**
+
+* `example/scopo_demo/test/async_controller_example3_test.dart:35-39` —
+  `expect(lines.indexWhere(onUnmount), lessThan(lines.indexWhere(disposed)))`.
+  `indexWhere` возвращает `-1`, когда ничего не найдено, и `-1 < 0` истинно:
+  тест проходит, если `onUnmount` **не залогирован вовсе** — то есть ровно при
+  той регрессии, ради которой написан.
+* `example/navigation_node/test/lessons_test.dart:66-77` — шесть тестов
+  в цикле утверждают `expect(find.byType(NavigationNodeApp), findsOneWidget)`
+  после системного back. `NavigationNodeApp` — корневой виджет, переданный в
+  `pumpWidget`; он не может исчезнуть. Шесть из шестнадцати тестов файла не
+  проверяют ничего.
+* `test/async_controller_scope_test.dart:89-113` — тест называется «every
+  caller of performDispose sees **the same** failure», а утверждает
+  `isA<StateError>()` дважды. Соседний файл на том же инварианте пишет
+  правильно: `lite_scope_test.dart:265-270` — `expect(secondError, same(firstError))`.
+* `test/cleanup_after_user_error_test.dart:109-167` — подмена
+  `FlutterError.onError` держится поверх всех ассертов теста, тогда как тест
+  двумя блоками ниже (`:284-288`) сам объясняет, почему так нельзя: «a failing
+  `expect` is reported through it and collected instead of ending the test,
+  which leaves the run hanging rather than red».
+* `test/cleanup_after_user_error_test.dart:492-497, 522-528, 556-561` —
+  `containsAll` вместо точного списка: порядок не проверяется. Инвариант всё же
+  закрыт другими тестами (мутация «перевёрнутый порядок разбора» поймана), так
+  что это стилистическая слабость, а не дыра.
+* `test/utils/my_fake_async.dart` — из 197 строк реально вызываются четыре
+  элемента; около 60 % файла — обвязка и отладочные леса
+  (`printPendingTimers`), которые никто не зовёт.
+* Три копии `_settle`: две побайтово одинаковые
+  (`async_scope_test.dart:1052`, `async_scope_coordinator_test.dart:1206`) и
+  одна расходящаяся на одну строку (`lite_scope_test.dart:1135` — `pump()` без
+  длительности, часы стоят). Файл сам вынужден это обходить (`:793-797`).
+  Следующий тест, которому нужен реальный таймаут, возьмёт локальную копию по
+  привычке и молча провисит все двадцать кругов.
+* Leak-трекер выключен (P3-2).
+
+---
+
+## Performance and reliability
+
+**Производительность.** Явных узких мест нет, и два главных решения приняты
+правильно. `model` строится один раз (`async_scope_core.dart:144`) — иначе
+обёртка была бы мусором на каждую сборку каждого зависимого. `_builtChild`
+кеширует поддерево, чтобы уведомление не строило и не выбрасывало весь граф
+виджетов раз в кадр (это была находка P2-5 прошлого ревью). Логгер по
+умолчанию выключен, сообщения — замыкания, при выключенном уровне ничего не
+вычисляется; проверены все 43 вызова `_log.*` в `lib/`.
+
+Заметная точка — P3-7: каждая перестройка `NavigationNode` заставляет вложенный
+`Navigator` заново диффить страницы и перерегистрировать наблюдателей, потому
+что `pages` и `observers` — новые списки на каждый `build`, а
+`didUpdateWidget` сравнивает их по идентичности. Узел обычно живёт под скоупом,
+который перестраивает поддерево по уведомлению.
+
+Вторая — P3-4: если `_buildPass` перестанет проворачиваться, наборы селекторов
+растут без границы. Продового сценария построить не удалось.
+
+**Конкурентность.** Модель простая и от этого надёжная: один изолят, всё
+упорядочено циклом событий, разделяемого состояния между потоками нет.
+`KeyedAccessQueues` (`scope_coordination.dart`) — аккуратный FIFO-мьютекс:
+снимок предшественников берётся синхронно, отмена не вынимает запись из
+очереди, пустая очередь снимается ровно один раз. Прошёл по всем переходам —
+инварианты держатся, двойного завершения нет.
+
+`_awaitBounded` разобран отдельно: `Future.any` вешает `onError` на
+проигравший future, поэтому брошенная работа не даёт unhandled rejection;
+отдельный `work.catchError` докладывает её поздний отказ; `finished` взводится
+в `whenComplete`, то есть до резюмирования `await`. Гонок нет.
+
+**Управление ресурсами и стабильность.** Здесь и лежат находки. Четыре
+ожидания разбора ограничены по-разному (P2-4), пятое — в `finally`
+провалившейся инициализации — не ограничено вовсе (P2-2), таймер паузы не
+гасится (P2-3), `unmount` зависимостей пропускается на пути провала (P1-1),
+второй и третий отказы разбора теряются (P2-5). Каждая по отдельности —
+узкий случай; вместе они образуют один и тот же рисунок: **путь успеха разобран
+до мелочей, пути отказа — выборочно**.
+
+Два сценария заканчиваются вечным индикатором загрузки без единой строки
+диагностики (P2-1, P2-2). Это самый дорогой в отладке класс отказа: в проде он
+выглядит как «приложение не грузится».
+
+**Безопасность.** Поверхности атаки у пакета практически нет: нет сети, нет
+файлов, нет разбора недоверенного ввода, нет `dart:mirrors`, нет генерации
+кода. Единственный канал наружу — журнал; он выключен по умолчанию, а в
+сообщения попадают имена типов, теги и ключи скоупов. Ключ `scopeKey` — объект
+пользователя, и он печатается в диагностике и в отчётах об истечении; если
+приложение использует в качестве ключа идентификатор пользователя или токен,
+он попадёт в лог. Это стоит одной строки в `doc/debug.md`, а не находки.
+
+---
+
+## Maintainability
+
+**Что хорошо.** Читаемость высокая, и не за счёт краткости: код объясняет свои
+решения. Комментарии почти везде отвечают на «почему», а не на «что», и
+регулярно называют дефект, который данное место предотвращает. Для пакета с
+такой концентрацией тонких мест это правильный выбор.
+
+Дисциплина проверок и документации серьёзная: восьмикомандный гейт, русские
+зеркала с машинной сверкой хешей, история правок в `docs/records/` с вердиктом
+под каждой проработанной находкой, `CHANGELOG` на 654 строки только по 0.10.0 —
+и он сверен с кодом полностью, расхождений имён и сигнатур нет ни одного.
+Конфигурация анализатора строгая: `strict-casts`, `strict-inference`,
+`strict-raw-types`, `public_member_api_docs`, `cancel_subscriptions: error`,
+`close_sinks: error`; выключено ровно одно правило, с объяснением.
+
+**Сложность.** 119 публичных типов — много для 8,7 тысячи строк, и это плата за
+пять параллельных семейств в трёх слоях. Кривая обучения крутая: чтобы выбрать
+семейство, надо понять разницу между пятью, а темы документации на 11 файлов
+это отражают. Само по себе это не долг — пакет и правда покрывает пять разных
+задач, — но это множитель для всякой правки.
+
+**Дублирование.** Измеримое и локализованное:
+
+* одиннадцать форвардеров параметров, дословно повторённых в пяти семействах, —
+  главный источник дефектов этого и прошлого ревью;
+* `maybeOf`/`of`/`select` повторены четырежды (`scope_widget_core.dart:95-119`,
+  `scope_model_core.dart:18-45`, `scope_notifier_core.dart:15-42` плюс
+  `Base`-слой), различаясь только границами типов;
+* носители полей `ScopeModelBase`/`ScopeNotifierBase` (`:7-45` в обоих) —
+  четыре поля, оба конструктора и **дословно тот же шестнадцатистрочный
+  дартдок**, две копии, расходящиеся при первой правке одной из них.
+
+**Мёртвый код.** Мало и по мелочи: `_ScopeModelElement.tag`
+(`scope_model_base.dart:96`) не вызывается нигде; избыточный `implements`
+(`:93`); бессмысленное приведение после `is` (`base/base.dart:122-123`);
+`ScopeDependencyDisposalCancelled` недостижимо (P3-20); мёртвое множественное
+число в `join(', ')` (P3-19). В примерах — заметно больше (P2-14).
+
+**Технический долг.** Ни одного `TODO`/`FIXME` в `lib/` — редкость. Настоящий
+долг не в маркерах, а в трёх местах: (1) отсутствие CI, из-за которого весь
+гейт держится на дисциплине; (2) отсутствие механической проверки проводки
+параметров, из-за которого один и тот же класс дефектов возвращается третье
+ревью подряд; (3) расхождения дартдока и кода, накопившиеся там, где правку
+вносили в один слой из двух (P1-6, P3-14, P3-17, P2-16).
+
+---
+
+## Positive findings
+
+Что сделано хорошо и стоит сохранить:
+
+1. **Комментарии как история отладки.** Почти каждое неочевидное место
+   объясняет, что ломалось раньше и почему выбрано именно это решение
+   (`async_scope_core.dart:155-217`, `:806-817`; `scope_widget_core.dart:8-18`,
+   `:266-281`; `lite_scope_core.dart:283-296`). Это позволило провести ревью
+   быстрее и точнее, чем позволил бы «чистый» код без пояснений.
+
+2. **Диагностика уровня, которого у пакетов обычно нет.**
+   `_debugCheckScopeKeyOwnership` разбирает четыре способа нарушить контракт,
+   каждый со своим текстом, последствиями и подсказкой, — и всё это внутри
+   `assert`, то есть бесплатно в release. `_stateOrThrow` объясняет фазу, а не
+   только факт.
+
+3. **Дисциплина ошибок в разборе.** Четыре стадии разбора, каждая под своим
+   `try`, «первый отказ пробрасывается, остальные стадии всё равно
+   выполняются» — правильный выбор, и он выдержан. Замечания P2-5 и P2-9 — про
+   потерю *второго* отказа, а не про сам принцип.
+
+4. **`Zone.root.createTimer` для ожиданий разбора** — точное решение реальной
+   проблемы («таймер, заведённый на разборе, роняет чужие виджет-тесты») с
+   обоснованием на месте. Замечание P2-4 в том, что оно применено к двум
+   ожиданиям из четырёх, а не в том, что оно неверно.
+
+5. **Стиль тестов.** `reason:`, объясняющий почему; отрицательные утверждения
+   через «дать шанс и показать, что не произошло»; контрольные тесты рядом с
+   теми, которые без них бессмысленны. Это стоит сохранить как правило.
+
+6. **Проверяемость документации.** 281 идентификатор в обратных кавычках из
+   README и всех тем существует в `lib/` — устаревших имён нет вовсе. Все 294
+   упоминания из раздела 0.10.0 `CHANGELOG` сверены с кодом; не нашлись только
+   те, которые сам `CHANGELOG` объявляет удалёнными. Русские зеркала совпадают
+   с оригиналами по структуре, а код в примерах — побайтово.
+
+7. **Строгая конфигурация анализатора** и ровно одно выключенное правило с
+   объяснением.
+
+8. **Регламент вердиктов.** Правило «под каждой проработанной находкой ревью —
+   абзац с вердиктом, в самом файле ревью» работает: состояние всех 61 находки
+   двух прошлых ревью видно на месте, без сборки по отчётам волн.
+
+---
+
+## Prioritized action plan
+
+| Priority | Problem | Impact | Recommended action | Estimated effort |
+| --- | --- | --- | --- | --- |
+| P1 | `dep.unmount` пропускается при провале инициализации (P1-1) | Подписки живут вечно; нарушено обещание, записанное в четырёх дартдоках и в теме | Держать контейнер с момента `initDependencies`, по образцу `_controller` в контроллерном семействе; тест на пару «провал + unmount» | 0,5–1 день |
+| P1 | `Drawer`/`showBottomSheet` внутри узла не закрываются системным back (P1-4) | «Назад» закрывает весь экран вместо ящика; узел ломает то, что без него работает | Решать по живому состоянию навигатора, а не по кешу `_innerCanPop`; в `pop()` отличать свою метку от чужой записи через `onRemove` | 1–2 дня |
+| P1 | Обычный узел на первом маршруте опустошает навигатор (P1-3) | Пустой экран; в debug — ассерт фреймворка | `previous?.maybePop(result)` в `_popOutside`; тест на узел первым маршрутом | 1–2 часа |
+| P1 | Уведомление изнутри собственной сборки ломает поддерево (P1-2) | Скоуп не показывает ничего; в release молча | Разделить флаг текущей пересборки и накопитель; откладывать уведомление, сделанное во время сборки | 0,5–1 день |
+| P1 | `this as T` в `ScopeAutoDependencies` (P1-5) | `TypeError` + утечка всего дерева зависимостей | Самотипный параметр `T extends ScopeAutoDependencies<T, C>`; строка в `CHANGELOG` (ломающее) | 2–3 часа |
+| P1 | Двенадцать таймаутов документированы наоборот (P1-6) | Разбор обрывается там, где обещано «ждать сколько нужно» | Заменить формулировку на «`null` takes the default»; решить, нужен ли способ снять лимит для одного скоупа | 1–2 часа |
+| P1 | `onPop` получает контекст снаружи узла (P1-7) | Рекомендованный документацией диалог уходит мимо скоупов; пример утверждает обратное | Передавать контекст изнутри узла либо честно задокументировать; поправить урок 4 и его тест | 2–4 часа |
+| P2 | Два сценария вечного лоадера без диагностики (P2-1, P2-2) | «Приложение не грузится», ни строки в консоли | `onDone` без `Ready` → `AsyncScopeError`; ограничить `await dispose()` в `finally` генератора | 0,5 дня |
+| P2 | Таймеры: пауза не гасится, два ожидания в текущей зоне (P2-3, P2-4) | Ложные падения виджет-тестов у потребителя | Хранить `Timer` паузы и гасить в `finally`; `Zone.root` в `scope_coordination.dart` | 0,5 дня |
+| P2 | Проводка параметров не проверяется (P2-13) | Тот же дефект возвращается третье ревью подряд | Параметризованный тест «семейство × параметр», 5 × 11; плюс фасады `Scope` и `buildOnClosing` | 1–2 дня |
+| P2 | Потерянные отказы разбора (P2-5, P2-9) | Исключение пользовательского кода исчезает в release | `FlutterError.reportError` там, где `failure` уже занят; `failure ??=` во второй половине | 2–3 часа |
+| P2 | `ScopeStateWithErrorNotifier` без выхода из ошибки (P2-6) | Попытка восстановления превращает поддерево в `ErrorWidget`-ы | Выбрать поведение (сброс в `update`, `clearError` или запечатать), задокументировать, покрыть | 2–4 часа |
+| P2 | `isBuilding` слеп в release (P2-7) | Release-only расхождение поведения с debug | Обычный флаг в `performRebuild` вместо `debugBuilding` | 2–3 часа |
+| P2 | Дартдоки `of`/`maybeOf`/`select`, `AsyncScopeParent`, `buildOnWaiting` (P2-10…P2-12) | Диагностика уводит в сторону; документированный API недостижим | Правки формулировок + один статический вход или честная оговорка | 0,5 дня |
+| P2 | Мёртвый код и лишние зависимости в витрине (P2-14) | Мусор в архиве пакета, лишний resolve | Удалить 15 файлов и две зависимости, либо подключить их обратно | 2–3 часа |
+| P2 | Непереведённые комментарии в зеркале (P2-15), некомпилируемый пример (P2-16) | Нарушен собственный регламент §7 | Перевести два комментария, добавить `listen:`, `stamp.sh` | 15 минут |
+| P3 | Нет CI (P3-1) | Весь гейт держится на дисциплине | GitHub Actions: восемь команд §6 плюс тесты примеров, на закреплённом тулчейне | 0,5 дня |
+| P3 | Leak-трекер выключен (P3-2) | Не проверяется главное обещание пакета | `test/flutter_test_config.dart` с `LeakTesting.enable()`; разобрать то, что всплывёт | 0,5–1 день |
+| P3 | Остальные 19 находок P3 | Локальные несогласованности, диагностика, упаковка | Одной волной, по списку | 1–2 дня |
+
+**Рекомендация.** Публикацию 0.10.0 стоит отложить до закрытия семи P1 и
+шестнадцати P2 — по опыту прошлых волн это две волны работы. P3 можно закрывать
+после публикации, кроме CI и leak-трекера: их стоит завести до неё, потому что
+именно они меняют вероятность четвёртого ревью с таким же составом верхушки.
+
+---
+
+## Проверка и ограничения
+
+**Что запускалось.** Полный гейт `AGENTS.md` §6 на закреплённом тулчейне
+(Flutter 3.29.0 / Dart 3.7.0 через fvm) на коммите `72bd596`:
+
+| проверка | результат |
+| --- | --- |
+| `fvm flutter test` | 293 теста, все зелёные |
+| `fvm flutter analyze` (корень) | `No issues found!` |
+| `analyze` в трёх `example/*` | `No issues found!` в каждом |
+| `fvm dart format --set-exit-if-changed lib test` | 91 файл, 0 changed |
+| `fvm dart doc --dry-run` | 0 warnings, 0 errors |
+| `fvm dart pub publish --dry-run` | 0 warnings, архив 788 КБ |
+| `sh docs/ru/check.sh` | переводы актуальны: 16 |
+| тесты примеров (вне гейта) | `scopo_demo` 2, `navigation_node` 17 — зелёные |
+
+**Мутации и пробы** прогонялись в **копии репозитория**, вынесенной за пределы
+проекта (скретчпад сессии). Копия проверена на чистой сьюте до мутаций: 293
+зелёных. После каждой мутации файл возвращался к исходному тексту. Рабочее
+дерево проекта проверено `git status` до и после — чистое, ревью не внесло ни
+одной правки в код, тесты или документацию проекта.
+
+Двенадцать проб (P1–P12 в тексте отчёта): десять подтвердили ожидаемое
+поведение, одна (`ListenableSelector`, P3-3) не воспроизвела вторичный отказ, и
+одна содержала мою собственную ошибку в матчере, из-за которой её первая
+половина ничего не проверила.
+
+**Что не проверялось.**
+
+* **Поведение в release-сборке.** Два вывода — P2-7 и половина P1-2 — опираются
+  на то, что `assert`-код в release отсутствует. Это верно по устройству Dart,
+  но самих release-сценариев я не запускал: под `flutter_test` release-режима
+  нет.
+* **Реальные устройства и платформы.** Всё гонялось на `flutter_tester` под
+  macOS. Поведение системного «назад» на Android (предиктивный back, жесты) не
+  проверялось — а именно там живут P1-3, P1-4 и P1-7.
+* **Другие версии Flutter.** Только 3.29.0 — заявленный пол. Глобальный 3.44.9
+  не использовался намеренно, чтобы не портить `.dart_tool`.
+* **Производительность под нагрузкой.** Профилировщик не запускался; выводы
+  раздела «Performance» — из чтения кода.
+* **P3-16** (комментарий контроллерного семейства против трёх топиков) остаётся
+  открытым вопросом: чтобы сказать, какая из двух записей неверна, нужен тест на
+  описанное окно микрозадач. Я его не писал.
+
+**Предположения, которые не удалось подтвердить.**
+
+* P3-4 (`_currentBuildPass` не заказывает кадр): механизм виден, продового
+  сценария «сборка была, кадра не будет» построить не удалось.
+* P3-3 (`ListenableSelector`): путь виден в коде, вторичный отказ пробой не
+  воспроизведён.
+* P2-8 (порядок `unmount` в группе): расхождение подтверждено логом, но вред
+  зависит от того, строятся ли поздние зависимости поверх ранних, — а это
+  свойство пользовательского дерева, не пакета. Поэтому medium, а не выше.
+
+**Отношение к прошлым ревью.** Ни одна находка этого ревью не повторяет
+закрытую находку двух прошлых как таковую. Пять находок — P1-1, P1-3, P1-5,
+P1-6, P2-4 — это **тот же дефект в соседней реализации**, где прошлые ревью
+закрыли одну ветку и не посмотрели вторую. Это не претензия к качеству закрытия:
+каждая из них была закрыта правильно там, где была найдена.
