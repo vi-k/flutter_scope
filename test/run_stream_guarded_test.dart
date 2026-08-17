@@ -61,7 +61,7 @@ void main() {
 
       logger.level = ScopeLogLevel.verbose;
       logger[ScopeLogLevel.verbose].publisher = ScopeLogFormatter<String>(
-        format: (entry) => '${entry.message}',
+        format: (entry) => entry.message,
         output: lines.add,
       );
 

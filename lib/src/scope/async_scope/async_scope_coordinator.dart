@@ -106,6 +106,10 @@ final class _AsyncScopeCoordinatorElement extends ScopeWidgetElementBase<
 
   final _queues = KeyedAccessQueues();
 
+  /// The same name [AsyncScopeCoordinator.waitForChildren] builds for itself.
+  @override
+  String get reportName => widget.toStringShort(showHashCode: true);
+
   @override
   Widget buildChild() => widget.child;
 

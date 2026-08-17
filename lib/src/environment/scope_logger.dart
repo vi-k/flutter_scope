@@ -84,7 +84,12 @@ final class ScopeLog extends CustomLog {
   String get path => _lazyPath.value;
 
   /// The message, resolved from a callback if one was passed.
-  String? get message => _lazyMessage.value;
+  ///
+  /// Never `null`: the message is held as a [LazyString], which renders a `null`
+  /// -- and anything else that is not a [String] -- through `toString()`, so a
+  /// log written with no message at all reads as `'null'`. A formatter of your
+  /// own therefore has nothing to fall back to, and the declared type says so.
+  String get message => _lazyMessage.value;
 }
 
 /// The logger of one level of a [ScopeLogger], available as

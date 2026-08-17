@@ -141,6 +141,27 @@
   again — twice per rebuild, to every listener above the node — for a page that
   had not changed. While `child` and `isRoot` are the same objects, nothing is
   handed over anew.
+* `ScopeLog.message` is declared `String` rather than `String?`. It never
+  answered `null`: the message is held as a `LazyString`, which renders anything
+  that is not a string — `null` included — through `toString()`, so a log written
+  without one reads as `'null'`. A formatter of your own had a fallback branch
+  that could never run; the analyzer now says so. Two such branches were in this
+  package's own tests.
+* An expired `AsyncScopeParent.waitForChildren` names the scope after its widget,
+  which is the name carrying `tag`, instead of after its element, which is a type
+  and a hash. The two neighbouring waits —
+  `AsyncScopeCoordinator.waitForChildren` and a scope's own teardown — already
+  did. A parent of your own can say what it is called by overriding the new
+  `AsyncScopeParent.reportName`.
+* The log line about giving up a place in a `scopeKey` queue names the key the
+  initialization took rather than reading the `scopeKey` getter again. The getter
+  is your code, and a message resolved lazily would have run it from a teardown
+  that has already begun.
+* The diagnostic about a `scopeKey` that changed no longer describes a queue that
+  does not exist. A scope reads its key before it looks for a coordinator, and
+  that lookup is the one step which can fail with the key already read — such a
+  scope entered nothing, and the message said it was "holding [k] in the queue of
+  no AsyncScopeCoordinator".
 * A `ScreenshotReplacer.onCompleted` that raises is reported through
   `FlutterError.reportError` instead of being left where nobody is waiting. The
   callback is called from the capture, which runs as an unawaited future in a

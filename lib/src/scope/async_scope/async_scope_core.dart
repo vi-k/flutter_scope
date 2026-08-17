@@ -44,6 +44,12 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
     extends ScopeNotifierElementBase<W, E, AsyncScopeModel>
     with AsyncScopeParent
     implements AsyncScopeContext<W> {
+  /// The widget's name rather than the element's: it is the one that carries
+  /// `tag`, and it is the name this scope's own teardown puts in front of the
+  /// same report.
+  @override
+  String get reportName => widget.toStringShort(showHashCode: true);
+
   //
   // Overriding block
   //
@@ -393,9 +399,21 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
     final coordinator =
         currentCoordinator?.toStringShort() ?? 'no $AsyncScopeCoordinator';
 
-    final (String summary, String detail) =
-        switch ((_acquiredScopeKey, currentScopeKey)) {
-      (null, final appeared?) => (
+    // Holding a key and holding a place in a queue are two facts, not one. The
+    // key is remembered before the coordinator is looked up, and that lookup is
+    // the one step of the initialization that can fail with the key already
+    // read: a scope with a `scopeKey` and no `AsyncScopeCoordinator` above it.
+    // Such a scope entered nothing, so a message about "the queue of no
+    // AsyncScopeCoordinator" would send the reader after an entry that never
+    // existed.
+    final hasEntry = _acquiredCoordinator != null;
+
+    final (String summary, String detail) = switch ((
+      _acquiredScopeKey,
+      currentScopeKey,
+      hasEntry: hasEntry,
+    )) {
+      (null, final appeared?, hasEntry: _) => (
           'The `scopeKey` of $name appeared after the scope had already'
               ' initialized without one.',
           'The key is read once, when the initialization starts, and this'
@@ -404,7 +422,7 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
               ' holds nothing, and whoever does hold [$appeared] is not keeping it'
               ' out.',
         ),
-      (final acquired?, null) => (
+      (final acquired?, null, hasEntry: true) => (
           'The `scopeKey` of $name was given up while the scope was still'
               ' holding it.',
           'It is holding [$acquired] in the queue of $acquiredCoordinator, and'
@@ -412,12 +430,32 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
               ' until the disposal releases it, so [$acquired] goes on keeping out'
               ' the scopes this one no longer claims to exclude.',
         ),
-      (final acquired?, final asked?) when acquired != asked => (
+      (final acquired?, null, hasEntry: false) => (
+          'The `scopeKey` of $name was given up after the scope had failed to'
+              ' take it.',
+          'It read [$acquired] and never entered a queue: the lookup found no'
+              ' $AsyncScopeCoordinator above the scope, which is the failure'
+              ' already reported. Nothing is held and nothing is being kept out,'
+              ' so claiming to need no key changes nothing — the key that was'
+              ' never taken is the thing to fix.',
+        ),
+      (final acquired?, final asked?, hasEntry: true) when acquired != asked =>
+        (
           'The `scopeKey` of $name changed while the scope was holding one.',
           'It is holding [$acquired] in the queue of $acquiredCoordinator, and'
               ' is now asking for [$asked]. The entry cannot follow: it stays'
               ' where it is, so [$acquired] is never released for the scope it was'
               ' meant to keep out, and [$asked] keeps nobody out.',
+        ),
+      (final acquired?, final asked?, hasEntry: false) when acquired != asked =>
+        (
+          'The `scopeKey` of $name changed after the scope had failed to take'
+              ' it.',
+          'It read [$acquired] and never entered a queue: the lookup found no'
+              ' $AsyncScopeCoordinator above the scope, which is the failure'
+              ' already reported. [$asked] is not honoured either — the key is'
+              ' read once, when the initialization starts, and this scope will'
+              ' not read another one.',
         ),
       _ => (
           'The `$AsyncScopeCoordinator` above $name changed while the scope'
@@ -564,6 +602,19 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
         // could have cancelled anything.
         if (entry.isCancelled || !mounted || _isDisposing) {
           _log.i('initialization cancelled');
+          // The one completion of the seven that is not guarded by
+          // `isCompleted`, because here it cannot be the second: the only other
+          // hand on this completer before the subscription exists is
+          // `_performAsyncDispose`, and it completes it only for an
+          // initialization that never started (`_didStartAsyncInit`). Asserted
+          // rather than guarded -- a silent `if` would hide the day that stops
+          // being true, and the cost of being wrong is `Bad state: Future
+          // already completed` from inside a teardown.
+          assert(
+            !_initCompleter.isCompleted,
+            'The initialization completer was already settled before the '
+            'initialization was cancelled.',
+          );
           _initCompleter.complete();
           return;
         }
@@ -977,7 +1028,11 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
 
     // Cancel waiting for access if it has not finished yet.
     if (_asyncScopeEntry case final entry? when entry.isWaiting) {
-      _log.d(() => 'cancel waiting for access to [$scopeKey]');
+      // `_acquiredScopeKey`, not `scopeKey`: what is being given up is the key
+      // the initialization read, and the getter is user code -- a message
+      // resolved lazily would run it again, from a teardown that has already
+      // begun. The same reason the release below logs the field.
+      _log.d(() => 'cancel waiting for access to [$_acquiredScopeKey]');
       entry.cancel();
     }
 

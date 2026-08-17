@@ -21,6 +21,22 @@ part of '../scope.dart';
 mixin AsyncScopeParent on Diagnosticable {
   final _childRegistry = ChildRegistry();
 
+  /// The name a report about this parent's children is prefixed with.
+  ///
+  /// [toStringShort] by default, which for an element is its own type and hash.
+  /// The elements of the built-in families answer with the name of their widget
+  /// instead, because that is the name carrying `tag` — the label an application
+  /// chose for this particular scope — and because it is the name the two
+  /// neighbouring waits already use: [AsyncScopeCoordinator.waitForChildren] and
+  /// a scope's own teardown. Override it in a parent of your own if it has a
+  /// better name to give.
+  ///
+  /// Read while the parent is still mounted, never at expiry: a wait outlives
+  /// the tree in the very cases it exists for, and `Element.widget` throws once
+  /// the element is unmounted.
+  @protected
+  String get reportName => toStringShort();
+
   /// Whether any scope is registered with this parent.
   bool get hasChildren => _childRegistry.hasChildren;
 
@@ -54,7 +70,7 @@ mixin AsyncScopeParent on Diagnosticable {
     // while the parent is still mounted: the wait outlives the tree in the
     // very cases it exists for, and reading `widget` at expiry time would
     // throw on an element that has been unmounted since.
-    final name = onTimeout == null ? toStringShort() : null;
+    final name = onTimeout == null ? reportName : null;
 
     return _childRegistry.waitForChildren(
       // The default is substituted here rather than left to the registry,

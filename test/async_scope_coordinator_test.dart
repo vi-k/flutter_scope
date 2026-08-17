@@ -96,6 +96,141 @@ void main() {
     );
   });
 
+  // Giving up a place in a queue is logged with the key that was taken, not
+  // with whatever the getter answers now. `scopeKey` is user code: a message
+  // built lazily would run it again from a teardown that has already begun, and
+  // the package promises to read it once.
+  testWidgets('cancelling a pending wait logs the key without asking again',
+      (tester) async {
+    final lines = <String>[];
+    final level = ScopeConfig.logger[ScopeLogLevel.debug];
+    final publisher = level.publisher;
+    final logLevel = ScopeConfig.logger.level;
+    addTearDown(() {
+      level.publisher = publisher;
+      ScopeConfig.logger.level = logLevel;
+    });
+    level.publisher = ScopeLogFormatter<String>(
+      format: (entry) => entry.message,
+      output: lines.add,
+    );
+    ScopeConfig.logger.level = ScopeLogLevel.debug;
+
+    final gate = Completer<void>();
+    Widget build({required bool withSuccessor}) => Directionality(
+          textDirection: TextDirection.ltr,
+          child: AsyncScopeCoordinator(
+            child: Column(
+              children: [
+                _TestScope(
+                  key: const ValueKey('holder'),
+                  testKey: 'shared',
+                  disposeLabel: 'holder',
+                  disposeGate: gate,
+                ),
+                if (withSuccessor)
+                  const _TestScope(
+                    key: ValueKey('successor'),
+                    testKey: 'shared',
+                    disposeLabel: 'successor',
+                  ),
+              ],
+            ),
+          ),
+        );
+
+    await tester.pumpWidget(build(withSuccessor: true));
+    await tester.pumpAndSettle();
+
+    final successor = tester.element<_TestScopeElement>(
+      find.byKey(const ValueKey('successor')),
+    );
+
+    expect(
+      successor.isInitialized,
+      isFalse,
+      reason: 'the holder has the key, so the successor is still waiting',
+    );
+
+    final readsBefore = successor.scopeKeyReads;
+    lines.clear();
+
+    // The successor leaves while its wait is still pending.
+    await tester.pumpWidget(build(withSuccessor: false));
+    await tester.pump();
+
+    expect(
+      lines,
+      contains('cancel waiting for access to [shared]'),
+      reason: 'the line names the key the scope took',
+    );
+    expect(
+      successor.scopeKeyReads,
+      readsBefore,
+      reason: 'and it names it without asking the scope again',
+    );
+
+    gate.complete();
+    await settle(
+      tester,
+      until: () => _TestScopeElement.disposalOrder.contains('holder'),
+    );
+  });
+
+  // The same diagnostic, in the one state where the two facts it reports come
+  // apart: the key is remembered before the coordinator is looked up, and the
+  // lookup is the step that failed. Such a scope holds a key it never entered
+  // anywhere, and a message about "the queue of no AsyncScopeCoordinator" sent
+  // the reader after an entry that was never created.
+  testWidgets(
+    'a key changed after a failed lookup is not reported as held',
+    (tester) async {
+      final errors = <Object>[];
+      await runZonedGuarded(
+        () async {
+          await tester.pumpWidget(
+            const Directionality(
+              textDirection: TextDirection.ltr,
+              child: _TestScope(testKey: 'shared'),
+            ),
+          );
+          await tester.pump();
+        },
+        (error, stackTrace) => errors.add(error),
+      );
+
+      expect(
+        errors,
+        hasLength(1),
+        reason: 'the lookup failed, as it must here',
+      );
+
+      // The same element, now asking for a different key.
+      await tester.pumpWidget(
+        const Directionality(
+          textDirection: TextDirection.ltr,
+          child: _TestScope(testKey: 'another'),
+        ),
+      );
+
+      final exception = tester.takeException();
+      expect(exception, isA<FlutterError>());
+      expect(
+        exception.toString(),
+        contains('never entered a queue'),
+        reason: 'the state to explain is a key that was read and never taken',
+      );
+      expect(
+        exception.toString(),
+        isNot(contains('in the queue of no')),
+        reason: 'there is no queue, so there is nothing to name',
+      );
+    },
+    // The violation is raised while the element is being updated, and the
+    // subtree it breaks stays unmounted -- see [unmountableTree].
+    experimentalLeakTesting: unmountableTree,
+  );
+
   testWidgets('a scope with no parent scope registers with the coordinator',
       (tester) async {
     await tester.pumpWidget(
@@ -1214,6 +1349,57 @@ void main() {
       until: () => _TestScopeElement.disposalOrder.length == 2,
     );
   });
+
+  // A parent asked for its own wait, the way a family of one's own asks: no
+  // timeout, no onTimeout, so the name in the report is the one the mixin
+  // chooses. That name is the widget's, not the element's -- the widget is what
+  // carries `tag`, the label an application gives one particular scope, while an
+  // element is a type and a hash. The two neighbouring waits (the coordinator's,
+  // and a scope's own teardown) already name the widget; this one dropped the tag
+  // exactly where it is asked for.
+  testWidgets('a parent names an expired wait after its widget, tag and all',
+      (tester) async {
+    ScopeConfig.defaultWaitForChildrenTimeout =
+        const Duration(milliseconds: 50);
+    final gate = Completer<void>();
+
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: _TestScope(
+          tag: 'checkout',
+          disposeLabel: 'parent',
+          child: _TestScope(disposeLabel: 'child', disposeGate: gate),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final parent = tester.element(
+      find.byWidgetPredicate(
+        (widget) => widget is _TestScope && widget.tag == 'checkout',
+      ),
+    ) as AsyncScopeParent;
+
+    var waited = false;
+    unawaited(parent.waitForChildren().then((_) => waited = true));
+    await settle(tester, until: () => waited);
+
+    final exception = tester.takeException();
+    expect(
+      exception,
+      isA<TimeoutException>(),
+      reason: 'the child is alive, so the wait can only end by expiring',
+    );
+    expect(
+      (exception as TimeoutException).message,
+      startsWith('$_TestScope(checkout)'),
+      reason: 'the tag is the only thing that tells two scopes of one family '
+          'apart in a report',
+    );
+
+    gate.complete();
+  });
 }
 
 /// A coordinator over an optional gated scope, plus a [Builder] whose context
@@ -1299,6 +1485,7 @@ final class _TestScope extends AsyncScopeCore<_TestScope, _TestScopeElement> {
 
   const _TestScope({
     super.key,
+    super.tag,
     this.testKey,
     this.disposeLabel,
     this.disposeDelay = Duration.zero,
@@ -1338,8 +1525,20 @@ final class _TestScopeElement
     disposalOrder.clear();
   }
 
+  /// How many times the package has asked this scope for its `scopeKey`.
+  ///
+  /// The getter is user code, and the package promises to read it once, when the
+  /// initialization starts. What it says in the log about giving that key up
+  /// therefore names the key it took, rather than asking again from a teardown
+  /// that has already begun.
+  int scopeKeyReads = 0;
+
   @override
-  Object? get scopeKey => widget.testKey;
+  Object? get scopeKey {
+    scopeKeyReads++;
+
+    return widget.testKey;
+  }
 
   @override
   Duration? get scopeKeyTimeout => widget.keyTimeout ?? super.scopeKeyTimeout;

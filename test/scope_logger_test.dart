@@ -76,6 +76,32 @@ void main() {
     });
   });
 
+  // A log always has a message, whatever was passed for it: it is held as a
+  // `LazyString`, which renders anything that is not a `String` -- `null`
+  // included -- through `toString()`. `ScopeLog.message` used to be declared
+  // `String?` all the same, which left a formatter written with `?? '<none>'` a
+  // branch that never runs. Two such branches were in this very suite.
+  test('a log written with no message reads as null', () {
+    final out = <String>[];
+    final level = ScopeConfig.logger[ScopeLogLevel.debug];
+    final publisher = level.publisher;
+    addTearDown(() => level.publisher = publisher);
+    level.publisher = ScopeLogFormatter<String>(
+      format: (entry) => entry.message,
+      output: out.add,
+    );
+    ScopeConfig.logger.level = ScopeLogLevel.debug;
+
+    ScopeConfig.logger.d(null);
+
+    expect(
+      out,
+      ['null'],
+      reason: 'the fallback of a LazyString is the string, not the absence of '
+          'one',
+    );
+  });
+
   test('transformer rewrites and drops logs', () {
     final out = <String>[];
     ScopeConfig.logger.level = ScopeLogLevel.debug;
@@ -87,8 +113,7 @@ void main() {
     // Sub-logger must inherit the transformer.
     final sub = ScopeConfig.logger.withAddedName('child');
 
-    ScopeLog? drop(ScopeLog log) =>
-        (log.message ?? '').contains('noisy') ? null : log;
+    ScopeLog? drop(ScopeLog log) => log.message.contains('noisy') ? null : log;
 
     expect(drop, isA<ScopeLogTransformer>());
     ScopeConfig.logger.transformer = drop;
