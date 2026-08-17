@@ -83,6 +83,35 @@ final class _NavigationNodeState extends State<NavigationNode> {
 
   NodeNavigatorState get _navigator => _navigatorKey.currentState!;
 
+  /// The page list the nested navigator is handed, kept rather than rebuilt.
+  ///
+  /// [NavigatorState.didUpdateWidget] compares the list it was given by
+  /// identity, so a fresh one on every build makes the navigator diff its stack
+  /// and report it again for a page that has not changed. What the page is made
+  /// of is [NavigationNode.child] and [NavigationNode.isRoot]; while those stay
+  /// the same objects — a `const` subtree, or one an application holds in a
+  /// field — a rebuild of the node hands over nothing new.
+  late List<Page<void>> _pages = _buildPages();
+
+  List<Page<void>> _buildPages() => [
+        _NodePage(child: widget.child, leavesTheNode: !widget.isRoot),
+      ];
+
+  /// The node's navigator never removes the node's own page, and the pages API
+  /// asks for the callback all the same. A method rather than a closure in
+  /// `build`, for the same reason [_pages] is a field.
+  static void _onDidRemovePage(Page<Object?> page) {}
+
+  @override
+  void didUpdateWidget(NavigationNode oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    if (!identical(widget.child, oldWidget.child) ||
+        widget.isRoot != oldWidget.isRoot) {
+      _pages = _buildPages();
+    }
+  }
+
   /// Whether the nested navigator has something of its own to close.
   ///
   /// Asked, never remembered. What it answers about is the local history of the
@@ -122,40 +151,44 @@ final class _NavigationNodeState extends State<NavigationNode> {
         _deciding = true;
         final route = ModalRoute.of(outerContext);
 
-        // ignore: discarded_futures
-        future.whenComplete(() => _deciding = false).then(
-          (canPop) {
-            // The world does not wait for an answer. The route the node sits
-            // on may have been closed by something else, or buried under a
-            // newer one -- and a pop would then take whatever is on top
-            // instead of what was asked about. A node that is gone answers for
-            // itself: its key resolves to nothing, which is why the walk below
-            // is null-safe and no `mounted` check is needed on top of it.
+        // Anything in the chain below that falls over -- the question itself, a
+        // confirmation dialog raising, or the pop, which runs user code of its
+        // own as the route goes -- fails where nobody is waiting, and the
+        // failure then surfaces as an unhandled zone error far from the widget
+        // that caused it. Reported instead, the way the package reports
+        // everything it cannot re-throw. The press is simply not acted on, and
+        // `whenComplete` has already cleared the way for the next one.
+        //
+        // The handler is `onError` on the chain, not the `onError` of `then`:
+        // that one answers for the future it is chained to and not for the
+        // callback beside it, so the pop's own failures went unheld.
+        unawaited(
+          future.whenComplete(() => _deciding = false).then((canPop) {
+            // The world does not wait for an answer. The route the node
+            // sits on may have been closed by something else, or buried
+            // under a newer one -- and a pop would then take whatever is on
+            // top instead of what was asked about. A node that is gone
+            // answers for itself: its key resolves to nothing, which is why
+            // the walk below is null-safe and no `mounted` check is needed
+            // on top of it.
             if (!canPop || (route != null && !route.isCurrent)) {
               return;
             }
 
             _popOutside(route, result);
-          },
-          // A question that falls over -- a confirmation dialog raising, most
-          // likely -- fails inside a chain nobody holds, and the failure then
-          // surfaces as an unhandled zone error far from the widget that
-          // caused it. Reported instead, the way the package reports
-          // everything it cannot re-throw. The press itself is simply not
-          // acted on, and `whenComplete` above has already cleared the way for
-          // the next one.
-          onError: (Object error, StackTrace stackTrace) {
+          }).onError<Object>((error, stackTrace) {
             FlutterError.reportError(
               FlutterErrorDetails(
                 exception: error,
                 stack: stackTrace,
                 library: 'scopo',
                 context: ErrorDescription(
-                  'while deciding what a system back does in a NavigationNode',
+                  'while deciding what a system back does in a '
+                  'NavigationNode',
                 ),
               ),
             );
-          },
+          }),
         );
       case final bool? canPop:
         if (canPop ?? true) {
@@ -203,9 +236,18 @@ final class _NavigationNodeState extends State<NavigationNode> {
     // the node, and whether there is a route to give up at all. `maybePop`
     // would ask the same question by telling the route the pop was refused,
     // and the application would then hear one press as two.
+    final RoutePopDisposition disposition;
+
     _forwarding = true;
-    final disposition = route.popDisposition;
-    _forwarding = false;
+    try {
+      disposition = route.popDisposition;
+    } finally {
+      // Stepping aside lasts one read, whatever that read does. Reading a route
+      // means reading every guard on it, which is user code: one that falls over
+      // used to leave the node aside for good, and every later press then took
+      // the whole route without the node being asked at all.
+      _forwarding = false;
+    }
 
     if (disposition == RoutePopDisposition.pop) {
       previous.pop(result);
@@ -233,8 +275,8 @@ final class _NavigationNodeState extends State<NavigationNode> {
       child: _NodeNavigator(
         key: _navigatorKey,
         node: this,
-        pages: [_NodePage(child: widget.child, leavesTheNode: !widget.isRoot)],
-        onDidRemovePage: (_) {},
+        pages: _pages,
+        onDidRemovePage: _onDidRemovePage,
       ),
     );
   }
@@ -416,7 +458,7 @@ final class _NodeNavigator extends Navigator {
   });
 
   @override
-  NavigatorState createState() => NodeNavigatorState();
+  NavigatorState createState() => NodeNavigatorState._();
 }
 
 /// The state of the nested navigator a [NavigationNode] builds.
@@ -430,6 +472,16 @@ final class _NodeNavigator extends Navigator {
 ///
 /// {@category utils}
 final class NodeNavigatorState extends NavigatorState {
+  /// Made by the node, never by hand.
+  ///
+  /// The type is public because a `navigatorKey` is written with it and resolves
+  /// to it, and everything else about it is a [NavigatorState]. What it needs is
+  /// the widget a [NavigationNode] builds: that is where it reads the node from,
+  /// and installed under any other `Navigator` it would fail on the first pop
+  /// instead of at the line where the mistake was made. Nothing outside this
+  /// library can put it there.
+  NodeNavigatorState._();
+
   _NavigationNodeState get _node => (widget as _NodeNavigator).node;
 
   /// Asks this navigator and nothing else.

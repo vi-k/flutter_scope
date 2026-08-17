@@ -1,5 +1,8 @@
 import 'dart:async';
 
+// `ValueListenable` is not exported from `material.dart`; the guard below
+// implements it.
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:scopo/scopo.dart';
@@ -598,6 +601,52 @@ void main() {
       );
     });
 
+    // `NavigatorState.didUpdateWidget` compares the page list it is handed by
+    // identity. A fresh list on every build therefore makes the nested
+    // navigator diff its stack and report it again -- for a page that has not
+    // changed at all -- and every listener above the node hears about it.
+    testWidgets('a rebuild of the node hands its navigator the same pages',
+        (tester) async {
+      await tester.pumpWidget(const _RebuildableNodeHost());
+      await tester.pumpAndSettle();
+
+      final pagesBefore = _nodePages(tester);
+      final reportsBefore = _RebuildableNodeHostState.instance!.reports;
+
+      _RebuildableNodeHostState.instance!.rebuild();
+      await tester.pumpAndSettle();
+
+      expect(
+        _nodePages(tester),
+        same(pagesBefore),
+        reason: 'the child is the same object, so there is nothing new to hand '
+            'over',
+      );
+      expect(
+        _RebuildableNodeHostState.instance!.reports,
+        reportsBefore,
+        reason: 'and the navigator therefore says nothing about its stack',
+      );
+    });
+
+    testWidgets('a changed child hands its navigator a new page',
+        (tester) async {
+      await tester.pumpWidget(const _RebuildableNodeHost());
+      await tester.pumpAndSettle();
+
+      final pagesBefore = _nodePages(tester);
+
+      _RebuildableNodeHostState.instance!.showOtherChild();
+      await tester.pumpAndSettle();
+
+      expect(_nodePages(tester), isNot(same(pagesBefore)));
+      expect(
+        find.text('the other child'),
+        findsOneWidget,
+        reason: 'keeping the list must not mean keeping a stale page',
+      );
+    });
+
     // An `onPop` that asks before answering leaves a window open, and the
     // system back does not wait politely. A second press used to start a
     // second question, and two `true` answers took two outer routes.
@@ -743,6 +792,79 @@ void main() {
 
       expect(calls, 2);
       expect(tester.takeException(), isA<StateError>());
+    });
+
+    // The other half of the same chain: the question answered, and what the
+    // answer sets off falls over. `then(onValue, onError:)` hands `onError` the
+    // failures of the future it is chained to and nothing else, so a raise
+    // inside `onValue` -- where the node asks the route about a pop, and where
+    // it pops -- went to a chain nobody holds.
+    testWidgets('a guard that raises while the node stands aside is reported',
+        (tester) async {
+      final gate = Completer<bool>();
+
+      await tester.pumpWidget(
+        _RaisingGuardHost(onPop: (context, result) => gate.future.then(_arm)),
+      );
+      await tester.tap(find.text('go'));
+      await tester.pumpAndSettle();
+
+      await tester.binding.handlePopRoute();
+      await tester.pump();
+
+      gate.complete(true);
+      await tester.pumpAndSettle();
+
+      expect(
+        tester.takeException(),
+        isA<StateError>(),
+        reason: 'asking the route is user code like any other: reported, not '
+            'left in a chain nobody holds',
+      );
+    });
+
+    // And the node does not keep standing aside. It steps aside for the length
+    // of one read -- a raise in the middle of that read used to leave it aside
+    // for good, and the node then let every later press take the whole route.
+    testWidgets('a guard that raises does not leave the node stood aside',
+        (tester) async {
+      final gate = Completer<bool>();
+      var calls = 0;
+
+      await tester.pumpWidget(
+        _RaisingGuardHost(
+          onPop: (context, result) {
+            calls++;
+
+            return gate.future.then(_arm);
+          },
+        ),
+      );
+      await tester.tap(find.text('go'));
+      await tester.pumpAndSettle();
+
+      await tester.binding.handlePopRoute();
+      await tester.pump();
+
+      gate.complete(true);
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isA<StateError>());
+
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+
+      expect(
+        calls,
+        2,
+        reason: "the press is still the node's to answer -- a node left stood "
+            'aside is not asked at all, and the route simply goes',
+      );
+      expect(
+        find.text('go'),
+        findsOneWidget,
+        reason: 'and this time the route went because the node said so',
+      );
     });
 
     // The node can go without its route going: an app that swaps it out of the
@@ -1115,6 +1237,164 @@ final class _FirstRouteNodeHost extends StatelessWidget {
       );
 }
 
+/// A pushed route with a guard of its own that can be made to raise.
+///
+/// The guard is a [PopEntry], the same thing a `PopScope` registers and the same
+/// thing the node registers, and it is read at the moment the route is asked
+/// what a pop there would do. The node asks that question itself, from inside
+/// the `then` of an asynchronous `onPop` -- so an armed guard raises exactly
+/// where the failure the finding is about belongs.
+///
+/// Armed on demand rather than always: the first press reaches the same guard
+/// through the outer navigator's own `maybePop`, and raising there would be the
+/// application's callback failing on its own, with no chain of the node's in
+/// sight.
+final class _RaisingGuardHost extends StatelessWidget {
+  final FutureOr<bool> Function(BuildContext context, Object? result) onPop;
+
+  const _RaisingGuardHost({required this.onPop});
+
+  @override
+  Widget build(BuildContext context) => MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: Builder(
+              builder: (context) => TextButton(
+                onPressed: () => unawaited(
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (context) => _RaisingGuard(
+                        child: NavigationNode(
+                          onPop: onPop,
+                          child: const _OnPopNodeContent(),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                child: const Text('go'),
+              ),
+            ),
+          ),
+        ),
+      );
+}
+
+/// Arms the guard as the answer to `onPop` arrives.
+///
+/// Between this and the node's own read of the route there is nothing but a
+/// microtask, so the read that raises is the node's.
+bool _arm(bool answer) {
+  _RaisingGuardState.instance!.armOnce();
+
+  return answer;
+}
+
+/// Registers a [PopEntry] of its own on the route it is built in.
+///
+/// The same three lines the node's own dispatcher uses, so the guard is asked
+/// whenever the route is: [ModalRoute.popDisposition] reads every entry it
+/// holds.
+final class _RaisingGuard extends StatefulWidget {
+  final Widget child;
+
+  const _RaisingGuard({required this.child});
+
+  @override
+  State<_RaisingGuard> createState() => _RaisingGuardState();
+}
+
+final class _RaisingGuardState extends State<_RaisingGuard>
+    implements PopEntry<Object?> {
+  static _RaisingGuardState? instance;
+
+  ModalRoute<dynamic>? _route;
+
+  @override
+  final _RaisingCanPop canPopNotifier = _RaisingCanPop();
+
+  bool _armedOnce = false;
+
+  /// Arms the guard for the first answer only.
+  ///
+  /// A later press is answered the same way and would arm it again, and the
+  /// point of the second press is what the node does when nothing is wrong.
+  void armOnce() {
+    if (_armedOnce) {
+      return;
+    }
+
+    _armedOnce = true;
+    canPopNotifier.armed = true;
+  }
+
+  @override
+  void onPopInvoked(bool didPop) {}
+
+  @override
+  void onPopInvokedWithResult(bool didPop, Object? result) {}
+
+  @override
+  void initState() {
+    super.initState();
+    instance = this;
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+
+    final nextRoute = ModalRoute.of(context);
+    if (nextRoute != _route) {
+      _route?.unregisterPopEntry(this);
+      _route = nextRoute;
+      _route?.registerPopEntry(this);
+    }
+  }
+
+  @override
+  void dispose() {
+    _route?.unregisterPopEntry(this);
+    _route = null;
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
+}
+
+/// Answers `true`, and raises once when armed.
+///
+/// One shot on purpose: the route is asked what a pop would do from more places
+/// than the node's own chain -- the framework asks whenever a navigator's
+/// history changes -- and a guard that kept raising would report from all of
+/// them. Armed from inside the answer to `onPop`, disarmed by the read itself,
+/// it raises in exactly the read the node makes.
+///
+/// Not a `ValueNotifier`: it never changes its mind, it changes what reading it
+/// does. The framework listens to it, so the listener methods are real methods
+/// that do nothing rather than throwing ones.
+final class _RaisingCanPop implements ValueListenable<bool> {
+  bool armed = false;
+
+  @override
+  bool get value {
+    if (!armed) {
+      return true;
+    }
+
+    armed = false;
+
+    throw StateError('the guard fell over');
+  }
+
+  @override
+  void addListener(VoidCallback listener) {}
+
+  @override
+  void removeListener(VoidCallback listener) {}
+}
+
 /// A pushed route whose subtree can drop the node while the route stays.
 final class _RemovableNodeHost extends StatelessWidget {
   final FutureOr<bool> Function(BuildContext context, Object? result) onPop;
@@ -1275,6 +1555,66 @@ final class _GuardedPushed extends StatelessWidget {
         canPop: false,
         child: Scaffold(
           body: Center(child: Text('guarded route')),
+        ),
+      );
+}
+
+/// The pages the node's own navigator is holding.
+///
+/// `find.byType` matches an exact runtime type, and the node builds a private
+/// subclass of `Navigator`, so the navigators are found by predicate: the outer
+/// one is the ancestor, the node's is the last.
+List<Page<Object?>> _nodePages(WidgetTester tester) => tester
+    .stateList<NavigatorState>(
+      find.byWidgetPredicate((widget) => widget is Navigator),
+    )
+    .last
+    .widget
+    .pages;
+
+/// A node under a parent that can rebuild without changing anything.
+///
+/// The child is `const`, so it is the same object on every build -- which is
+/// what a node has to notice. Also counts what the nested navigator says about
+/// its stack: a `NavigationNotification` is dispatched whenever a navigator's
+/// history is flushed, which is what a needless page diff ends in.
+final class _RebuildableNodeHost extends StatefulWidget {
+  const _RebuildableNodeHost();
+
+  @override
+  State<_RebuildableNodeHost> createState() => _RebuildableNodeHostState();
+}
+
+final class _RebuildableNodeHostState extends State<_RebuildableNodeHost> {
+  static _RebuildableNodeHostState? instance;
+
+  bool _other = false;
+
+  int reports = 0;
+
+  void rebuild() => setState(() {});
+
+  void showOtherChild() => setState(() => _other = true);
+
+  @override
+  void initState() {
+    super.initState();
+    instance = this;
+  }
+
+  @override
+  Widget build(BuildContext context) => MaterialApp(
+        home: NotificationListener<NavigationNotification>(
+          onNotification: (notification) {
+            reports++;
+
+            return false;
+          },
+          child: NavigationNode(
+            child: _other
+                ? const Scaffold(body: Center(child: Text('the other child')))
+                : const Scaffold(body: Center(child: Text('the first child'))),
+          ),
         ),
       );
 }

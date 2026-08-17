@@ -126,7 +126,27 @@
   dialog that raised, usually — is reported through `FlutterError.reportError`
   instead of surfacing as an unhandled zone error far from the widget that
   caused it. The press is simply not acted on, and the next one is asked as
-  usual.
+  usual. **What the answer sets off is now held the same way.** Acting on a
+  `true` means asking the route what a pop there would do and then popping, and
+  both read user code — a guard of the application's own, a callback the route
+  makes as it goes. A failure in either was left in a chain nobody holds,
+  because the previous fix answered for the question and not for what followed
+  it. A node also no longer stays stood aside when that reading falls over: it
+  steps aside for the length of one read, and a raise in the middle of it used
+  to leave it aside for good, after which every later press took the whole route
+  without the node being asked at all.
+* `NavigationNode` hands its nested navigator the same page list across a
+  rebuild that changes nothing. `NavigatorState` compares the list it is given
+  by identity, so a fresh one on every build had it diff its stack and report it
+  again — twice per rebuild, to every listener above the node — for a page that
+  had not changed. While `child` and `isRoot` are the same objects, nothing is
+  handed over anew.
+* **Breaking change:** `NodeNavigatorState` can no longer be constructed. The
+  type stays public — it is what a `GlobalKey<NodeNavigatorState>()` is made of
+  and what it resolves to — but one built by hand and installed under an
+  ordinary `Navigator` would fail on its first pop rather than at the line where
+  the mistake was made: it reads the node from the widget a `NavigationNode`
+  builds. Only that widget can make one now.
 * `NodeNavigatorState` is documented rather than hidden with `@nodoc`. It is
   the type a `GlobalKey<NodeNavigatorState>()` is made of, so
   `NavigationNode.navigatorKey` could not be written without naming it.

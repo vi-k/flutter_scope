@@ -103,6 +103,13 @@ was closed by something else, or buried under a newer one, a `true` takes
 nothing, since a pop would otherwise take whatever is on top instead of what
 was asked about.
 
+Anything that falls over on the way — the question itself, or a guard the
+application put on the route, which is read when the node asks what a pop there
+would do — is reported through `FlutterError.reportError` rather than left in a
+chain nobody holds, where it would surface as an unhandled zone error far from
+the widget that caused it. The press is simply not acted on, and the next one is
+asked as usual.
+
 System back first asks the node's nested navigator to close its top route —
 and "route" includes what a `Drawer` or a `showBottomSheet` puts on the page
 without pushing anything, so a node takes none of that away. Only when that
