@@ -1,6 +1,6 @@
 # ScopeNotifier
 
-> Перевод `doc/scope_notifier.md` (blob `db65408610e315ea9e59ef21ed6c71bb8e4a7c5f`).
+> Перевод `doc/scope_notifier.md` (blob `4c11cf927f3ac4e0334d8e4923077f0b4b04b4fa`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 `ScopeModel` для `Listenable`. Всё из той темы остаётся в силе — `create` и
@@ -137,9 +137,9 @@ base class PlayerState extends ScopeStateNotifier<Player> {
 Асинхронные семейства моделируют отказ иначе. Они держат обычный
 `ScopeStateNotifier` и кладут отказ **внутрь** состояния — `AsyncScopeError`
 рядом с `AsyncScopeWaiting`, `AsyncScopeProgress` и `AsyncScopeReady`: чтение
-`AsyncScope.of(context).state` не бросает никогда, а `hasError` вычисляется из
-того, чем состояние является. Работают обе схемы; выбор зависит от того, есть
-ли упавшему скоупу что показать.
+`AsyncScope.of(context, listen: true).state` не бросает никогда, а `hasError`
+вычисляется из того, чем состояние является. Работают обе схемы; выбор зависит
+от того, есть ли упавшему скоупу что показать.
 
 ## Куда дальше
 

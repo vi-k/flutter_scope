@@ -133,9 +133,10 @@ fails loudly on a scope that has failed rather than rendering a stale value.
 That is not how the asynchronous families model a failure. They hold an
 ordinary `ScopeStateNotifier` and put the failure *in* the state, as an
 `AsyncScopeError` beside `AsyncScopeWaiting`, `AsyncScopeProgress` and
-`AsyncScopeReady`: reading `AsyncScope.of(context).state` never throws, and
-`hasError` is derived from what the state is. Both shapes work; which one to
-pick depends on whether a failed scope still has something to show.
+`AsyncScopeReady`: reading `AsyncScope.of(context, listen: true).state` never
+throws, and `hasError` is derived from what the state is. Both shapes work;
+which one to pick depends on whether a failed scope still has something to
+show.
 
 ## Where to go next
 

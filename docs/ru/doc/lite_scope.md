@@ -76,12 +76,12 @@ final class ScreenScopeState
 ```dart
 @override
 void onUnmount() {
-  _subscription.cancel();   // must stop reaching this scope, now
+  _subscription.cancel();   // должно перестать доходить до скоупа немедленно
   super.onUnmount();
 }
 
 @override
-Future<void> disposeAsync() => _connection.close();   // may take its time
+Future<void> disposeAsync() => _connection.close();   // может занять время
 ```
 
 `onUnmount()` выполняется ровно один раз и всегда до `disposeAsync()`, каким бы

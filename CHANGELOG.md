@@ -274,6 +274,14 @@
   teardown is, and giving up is reported rather than passed over; a release that
   fails after it was abandoned is reported too. The `AsyncScope` topic now says
   what an `await` in a hand-written guard costs when it cannot finish.
+* The dartdoc of `of`, `maybeOf` and `select` on `Scope` and `LiteScope`
+  promised one condition where there are two. Both read the state, and the
+  state exists only in the ready branch — so a scope that is waiting for its
+  `scopeKey`, initializing, failed or closed makes `of` throw and `maybeOf`
+  answer `null` just as an absent scope does. A caller reading the promise as
+  written looked for a scope that was there all along. The two conditions are
+  now spelled out, together with the one difference between the two lookups:
+  `of` says which of them it was, `maybeOf` cannot.
 * Fix every failure of a teardown but the first being lost. The disposal of an
   asynchronous scope runs in four stages, each guarded on its own so that a
   failure in one never skips the ones behind it, and only the first of them can

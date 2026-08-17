@@ -144,7 +144,12 @@ abstract base class LiteScope<W extends LiteScope<W, S>,
   /// Tries to find and return the state [S] of the scope [W] from the given
   /// [context].
   ///
-  /// Returns `null` if the scope is not found.
+  /// Answers `null` on two conditions, not one: there is no such scope above
+  /// [context], or there is one whose state does not exist yet. The state is
+  /// created in the ready branch, so a scope still waiting for its `scopeKey`,
+  /// still initializing, failed, or taken down by `close()` answers `null`
+  /// exactly as an absent scope does. [of] tells the two apart; this does
+  /// not.
   static S? maybeOf<W extends LiteScope<W, S>, S extends LiteScopeState<W, S>>(
     BuildContext context,
   ) =>
@@ -156,7 +161,13 @@ abstract base class LiteScope<W extends LiteScope<W, S>,
   /// Finds and returns the state [S] of the scope [W] from the given
   /// [context].
   ///
-  /// Throws an error if the scope is not found.
+  /// Throws on two conditions, not one: there is no such scope above
+  /// [context], or there is one whose state does not exist yet. The state is
+  /// created in the ready branch, so a scope still waiting for its `scopeKey`,
+  /// still initializing, failed, or taken down by `close()` has none to give.
+  /// The message says which of the two it was, and what state the scope was
+  /// in — read it from below `buildOnReady()`, or check `isInitialized`
+  /// first.
   static S of<W extends LiteScope<W, S>, S extends LiteScopeState<W, S>>(
     BuildContext context,
   ) =>
@@ -167,6 +178,9 @@ abstract base class LiteScope<W extends LiteScope<W, S>,
 
   /// Selects and returns a specific value from the state [S] of the scope [W]
   /// using the [selector] and becomes **dependent** on it.
+  ///
+  /// Reaches the state through the same door as [of], and throws on the same
+  /// two conditions.
   static V select<W extends LiteScope<W, S>, S extends LiteScopeState<W, S>,
           V extends Object?>(
     BuildContext context,
