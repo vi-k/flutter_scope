@@ -689,6 +689,54 @@ void main() {
         await _settle(tester, until: () => false);
       },
     );
+
+    // A stream that ends without ever yielding `AsyncScopeReady` is a mistake
+    // in the initialization, and it used to be a silent one: the model stayed
+    // `AsyncScopeWaiting`, the scope went on showing its loading branch for
+    // good, and the only trace of it was an `info` line in a logger that is
+    // off by default.
+    testWidgets(
+      'an initialization that ends without a ready state shows the error '
+      'branch',
+      (tester) async {
+        await tester.pumpWidget(
+          Directionality(
+            textDirection: TextDirection.ltr,
+            child: AsyncScope(
+              init: (context) => const Stream<AsyncScopeInitState>.empty(),
+              dispose: () {},
+              initBuilder: (context, progress) => const Text('init'),
+              errorBuilder: (context, error, stackTrace, progress) =>
+                  Text('error: $error'),
+              builder: (context) => const Text('ready'),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(
+          find.textContaining('error: '),
+          findsOneWidget,
+          reason: 'an initialization that will never finish is a failed one, '
+              'and the state table says a failure before the ready state '
+              'builds `buildOnError`',
+        );
+        expect(
+          find.text('init'),
+          findsNothing,
+          reason: 'the loading branch is not what a scope that will never '
+              'load should be left showing',
+        );
+
+        await tester.pumpWidget(
+          const Directionality(
+            textDirection: TextDirection.ltr,
+            child: SizedBox.shrink(),
+          ),
+        );
+        await _settle(tester, until: () => false);
+      },
+    );
   });
 
   // Both tests below cover the same defect: an event that arrives *after*

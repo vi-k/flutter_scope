@@ -225,6 +225,25 @@
   overriding `NavigatorState.canPop()`: with no marker of the node's own in the
   way, the base answer is the true one, and it used to answer `false` while a
   drawer was open.
+* Fix an initialization stream that ends without `AsyncScopeReady` leaving the
+  scope on its loading branch for good, and silently. The model stayed
+  `AsyncScopeWaiting`, `disposeAsync` was never called, and the only trace was
+  an `info` line in a logger that is off by default — nothing on screen and
+  nothing in the console, which is the hardest kind of failure to look for. The
+  scope now moves to `AsyncScopeError` with a `StateError` saying what a stream
+  is expected to end with, so `buildOnError` builds and the report is loud. This
+  reaches every family: `AsyncDataScope`, `AsyncControllerScope` and the `Scope`
+  container all initialize through the same subscription.
+* Fix the same silence coming from the other side: `ScopeAutoDependencies`
+  awaited the disposal of its half-built tree with no limit, from the `finally`
+  of its own generator. Nothing downstream sees the failure of an initialization
+  until the generator finishes, so a `dep.dispose` that never completed held not
+  only the resources but the failure itself, and the scope showed its loading
+  branch for ever. The wait is now bounded by
+  `ScopeConfig.defaultDisposeAsyncTimeout`, the way every other wait in the
+  teardown is, and giving up is reported rather than passed over; a release that
+  fails after it was abandoned is reported too. The `AsyncScope` topic now says
+  what an `await` in a hand-written guard costs when it cannot finish.
 * The dartdoc of the twelve timeout parameters said the opposite of what they
   do. `scopeKeyTimeout`, `initCancellationTimeout`, `disposeAsyncTimeout` and
   `waitForChildrenTimeout`, in all three asynchronous families, each promised

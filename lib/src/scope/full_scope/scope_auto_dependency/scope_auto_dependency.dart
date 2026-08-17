@@ -143,10 +143,94 @@ abstract base class ScopeAutoDependencies<T extends ScopeAutoDependencies<T, C>,
         }
 
         if (autoDisposeOnError) {
-          await dispose();
+          await _disposeBounded();
         }
       }
     }
+  }
+
+  /// Awaits [dispose] with a limit, and gives up rather than holding the
+  /// generator open for ever.
+  ///
+  /// This runs while the failure of the initialization is on its way out of
+  /// the generator, and nothing downstream sees that failure until the
+  /// generator finishes. So a disposer that never completes does not merely
+  /// fail to release what it holds: it holds the failure itself, and the scope
+  /// above goes on showing its loading branch for good — nothing on screen and
+  /// nothing in the console. The neighbouring family bounds the same wait for
+  /// the same reason, and says so in
+  /// `AsyncControllerScopeElementBase._releaseController`.
+  ///
+  /// The limit is [ScopeConfig.defaultDisposeAsyncTimeout] rather than the
+  /// `disposeAsyncTimeout` of the scope: a container knows nothing of the
+  /// widget that owns it, and works without one. The timer comes from
+  /// [Zone.root] because a timer of the current zone would still be pending
+  /// when a widget test ends, which is what `flutter_test` ends a test on.
+  Future<void> _disposeBounded() async {
+    final limit = ScopeConfig.defaultDisposeAsyncTimeout;
+    // ignore: discarded_futures
+    final released = dispose();
+
+    if (limit == null) {
+      await released;
+
+      return;
+    }
+
+    var finished = false;
+    final expired = Completer<void>();
+    final timer = Zone.root.createTimer(limit, () {
+      if (!expired.isCompleted) {
+        expired.complete();
+      }
+    });
+
+    try {
+      await Future.any([
+        released.whenComplete(() => finished = true),
+        expired.future,
+      ]);
+    } finally {
+      timer.cancel();
+    }
+
+    if (finished) {
+      return;
+    }
+
+    // Abandoned, not forgotten: the release may still fail long after nobody
+    // is waiting for it, and a failure nobody hears is one more thing lost in
+    // the silence this method exists to break.
+    unawaited(
+      released.catchError((Object error, StackTrace stackTrace) {
+        _log.e(
+          'an abandoned wait for the disposal ended in a failure',
+          error: error,
+          stackTrace: stackTrace,
+        );
+        FlutterError.reportError(
+          FlutterErrorDetails(
+            exception: error,
+            stack: stackTrace,
+            library: 'scopo',
+            context: ErrorDescription('while disposing of $T'),
+          ),
+        );
+      }),
+    );
+
+    _log.e('gave up waiting for the disposal');
+    FlutterError.reportError(
+      FlutterErrorDetails(
+        exception: TimeoutException(
+          "$T couldn't dispose of what it built before the initialization "
+          'failed',
+          limit,
+        ),
+        stack: StackTrace.current,
+        library: 'scopo',
+      ),
+    );
   }
 
   @override

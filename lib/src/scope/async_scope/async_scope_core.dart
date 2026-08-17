@@ -632,10 +632,43 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
           }
         },
         onDone: () {
+          if (_initSucceeded) {
+            return;
+          }
+
+          // A stream that ends without ever yielding [AsyncScopeReady] has
+          // initialized nothing and has nothing further coming, and that used
+          // to be the quietest way for a scope to fail: the model stayed
+          // [AsyncScopeWaiting], the loading branch stayed on screen for good,
+          // and the only trace was an `info` line in a logger that is off by
+          // default. It is the same silence the synchronous failure below was
+          // fixed for -- and the comment there names it in the same words.
+          final error = StateError(
+            '$W was initialized by a stream that ended without '
+            'AsyncScopeReady. That is how an `initAsync` says it is done, so '
+            'a stream ending without it leaves the scope nothing to show and '
+            'nothing to release.',
+          );
+          _log.e('not initialized', error: error);
+
+          // Before the model, and before anything that could throw:
+          // `_performAsyncDispose` parks on this completer, and a failure on
+          // the way to the model would otherwise leave the whole teardown
+          // waiting for an initialization that is long over.
           if (!_initCompleter.isCompleted) {
-            _log.i('not initialized');
             _initCompleter.complete();
           }
+
+          _model.update(
+            AsyncScopeError(
+              error,
+              StackTrace.current,
+              progress: switch (_model.state) {
+                AsyncScopeProgress(:final progress) => progress,
+                _ => null,
+              },
+            ),
+          );
         },
         cancelOnError: true,
       );

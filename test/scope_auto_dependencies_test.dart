@@ -1699,6 +1699,41 @@ void main() {
     });
   });
 
+  group('ScopeAutoDependencies failed initialization that cannot let go', () {
+    // The `finally` of the generator runs while the failure is on its way out
+    // of it, and nothing downstream sees that failure until the generator
+    // finishes. An `await dispose()` with no limit therefore does not merely
+    // leak a disposer: it holds the failure itself, and the scope above shows
+    // its loading branch for good -- nothing on screen and nothing in the
+    // console. The neighbouring family bounds the same wait for the same
+    // reason, in `AsyncControllerScopeElementBase`.
+    test(
+      'a disposer that never finishes does not hold the failure back',
+      () async {
+        ScopeConfig.defaultDisposeAsyncTimeout =
+            const Duration(milliseconds: 50);
+        addTearDown(ScopeConfig.reset);
+
+        final dependencies = HangingDisposeDependencies();
+
+        await expectLater(
+          dependencies.init(null).drain<void>(),
+          throwsA(
+            isA<Exception>().having(
+              (error) => error.toString(),
+              'toString',
+              contains('the second one failed'),
+            ),
+          ),
+          reason: 'the failure of the initialization is what the scope above '
+              'is waiting for, and giving up on the disposer is what lets it '
+              'through',
+        );
+      },
+      timeout: const Timeout(Duration(seconds: 10)),
+    );
+  });
+
   group('ScopeAutoDependencies type argument', () {
     // The first type argument is the container itself, and naming a different
     // container there compiles: the bound only asks for *a* container. It used
@@ -1732,6 +1767,19 @@ void main() {
       );
     });
   });
+}
+
+/// A tree whose first dependency can never be released and whose second one
+/// fails, so the teardown of the failure runs into a disposer that hangs.
+final class HangingDisposeDependencies
+    extends ScopeAutoDependencies<HangingDisposeDependencies, void> {
+  final hang = Completer<void>();
+
+  @override
+  ScopeDependency buildDependencies(void context) => sequential('', [
+        dep('holds', (dep) => dep.dispose = () => hang.future),
+        dep('fails', (dep) => throw Exception('the second one failed')),
+      ]);
 }
 
 /// A container that names another one where it should name itself -- the

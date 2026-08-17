@@ -276,6 +276,14 @@ never took the connection over and `dispose` will not be called for it. Once the
 flag is set, releasing it is the scope's job and the guard must not do it a
 second time.
 
+Keep what the guard awaits able to finish. Nothing downstream sees the failure
+until the generator does, so an `await` in the guard holds the failure as well
+as the resource: a `close()` that never completes leaves the scope showing its
+loading branch for good, with nothing on screen and nothing in the console. The
+scope's own waits are all bounded for this reason, and so is the one the
+dependency container of the `Scope` family makes on your behalf — a guard you
+write yourself is the one place left where a hang is unbounded.
+
 An initialization with several steps like that turns into a pile of nested
 `try`s, and that is what the dependency container of the `Scope` family exists
 for — see the `Scope` topic. `AsyncControllerScope` closes the same hole from
