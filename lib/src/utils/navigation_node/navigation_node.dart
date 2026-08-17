@@ -39,6 +39,12 @@ final class NavigationNode extends StatefulWidget {
   /// route the node sits on has been closed by something else, or buried under
   /// a newer one, a `true` takes nothing, since a pop would otherwise take
   /// whatever is on top instead of what was asked about.
+  ///
+  /// On a root node the hook is asked as it is anywhere else, but `true` takes
+  /// nothing there either: [isRoot] says the node keeps a pop to itself, and
+  /// there is nothing outside it to let the pop through to. What such a hook is
+  /// for is the press itself — a "press again to exit", or a call to
+  /// `SystemNavigator.pop()` the application makes on its own terms.
   final FutureOr<bool> Function(BuildContext context, Object? result)? onPop;
 
   /// Creates a navigation node around [child].
@@ -99,7 +105,7 @@ final class _NavigationNodeState extends State<NavigationNode> {
               return;
             }
 
-            _navigatorKey.currentState?.previous?.pop(result);
+            _popOutside(result);
           },
           // A question that falls over -- a confirmation dialog raising, most
           // likely -- fails inside a chain nobody holds, and the failure then
@@ -123,9 +129,30 @@ final class _NavigationNodeState extends State<NavigationNode> {
         );
       case final bool? canPop:
         if (canPop ?? true) {
-          _navigator.previous?.pop(result);
+          _popOutside(result);
         }
     }
+  }
+
+  /// Hands the pop to the navigator above, unless this node is the outermost
+  /// one.
+  ///
+  /// [NavigationNode.isRoot] says the node keeps a pop to itself, and
+  /// [NodeNavigatorState.pop] has always honoured that. The system back arrives
+  /// by this other path, where the promise held only for as long as nobody
+  /// wrote an [NavigationNode.onPop]: a root node with one that allowed the pop
+  /// took the route below it, and a root node placed as `home` took the last
+  /// route of the application's own navigator and left a blank screen.
+  ///
+  /// The hook is still asked — it is where an application decides what its own
+  /// outermost back means, and it may act on the press itself. What a root node
+  /// no longer does is leave.
+  void _popOutside(Object? result) {
+    if (widget.isRoot) {
+      return;
+    }
+
+    _navigatorKey.currentState?.previous?.pop(result);
   }
 
   @override

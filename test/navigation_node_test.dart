@@ -196,6 +196,67 @@ void main() {
       );
     });
 
+    // The two parameters had never been used together. `isRoot` says the node
+    // keeps a pop to itself, and `pop()` honours that; the system back path
+    // reaches the navigator above by a different line, and nothing checked
+    // that the same promise holds there.
+    testWidgets('a root node keeps the pop even when onPop allows it',
+        (tester) async {
+      var calls = 0;
+
+      await tester.pumpWidget(
+        _OnPopHost(
+          isRoot: true,
+          onPop: (context, result) {
+            calls++;
+
+            return true;
+          },
+        ),
+      );
+      await tester.tap(find.text('go'));
+      await tester.pumpAndSettle();
+
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+
+      expect(calls, 1, reason: 'the hook is still asked');
+      expect(
+        find.text('node content'),
+        findsOneWidget,
+        reason: 'a root node keeps a pop to itself, and an onPop that allows '
+            'one answers about the node, not about the route below it',
+      );
+    });
+
+    // The answer reaches the same decision by the other branch, and the
+    // asynchronous one is where the route is popped a whole turn of the event
+    // loop after the press.
+    testWidgets(
+        'a root node keeps the pop when an asynchronous onPop allows it',
+        (tester) async {
+      var calls = 0;
+
+      await tester.pumpWidget(
+        _OnPopHost(
+          isRoot: true,
+          onPop: (context, result) async {
+            calls++;
+
+            return true;
+          },
+        ),
+      );
+      await tester.tap(find.text('go'));
+      await tester.pumpAndSettle();
+
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+
+      expect(calls, 1);
+      expect(find.text('node content'), findsOneWidget);
+    });
+
     testWidgets(
         'system back still reaches onPop after an inner route came '
         'and went', (tester) async {

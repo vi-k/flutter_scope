@@ -103,7 +103,11 @@ was asked about.
 
 System back first asks the node's nested navigator to close its top route. Only
 when that navigator has nothing left to pop do `onPop` and `isRoot` decide what
-happens outside the node.
+happens outside the node. The two never compete: on a root node the hook is
+asked as it is anywhere else, and an answer of `true` still takes nothing, since
+a root node has nothing outside it to let the pop through to. Such a hook is
+there for the press itself — a "press again to exit", or a `SystemNavigator
+.pop()` the application makes on its own terms.
 
 A node never empties itself. `Navigator.pop()` on its first page — from the back
 arrow of an `AppBar`, say — leaves the node instead of taking that page away: an

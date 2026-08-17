@@ -145,6 +145,14 @@
   to put a widget around the ready branch alone, and `Scope` has always
   honoured it, but the element behind `LiteScope` never called it: whatever it
   returned was thrown away, and the ready branch was built unwrapped.
+* Fix a root `NavigationNode` forwarding a pop after all. `isRoot` says the
+  node keeps a pop to itself, and `NodeNavigatorState.pop` honoured it, but the
+  system back reaches the navigator above by another path — and there the
+  promise held only for as long as nobody wrote an `onPop`. A root node whose
+  hook allowed the pop took the route below it; a root node placed as `home`
+  took the last route of the application's own navigator and left a blank
+  screen. The hook is still asked, since that is where an application decides
+  what its own outermost back means, but a `true` no longer leaves the node.
 * A notification no longer rebuilds the widgets of the subtree it is not
   rebuilding. "Skips rebuilding the whole subtree" was true of the elements and
   not of the widgets: `ComponentElement.performRebuild` calls `build()`

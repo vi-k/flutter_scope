@@ -242,6 +242,67 @@ void main() {
       );
     });
 
+    // A wait that expired is abandoned, not forgotten. The teardown behind it
+    // goes on running with nobody holding its future, and a failure it reaches
+    // long afterwards has no caller left to raise at -- so the one way out it
+    // has is a report. Without it the failure would be lost in silence, which
+    // is the one outcome this whole file exists to prevent.
+    testWidgets('reports a teardown that fails after it was given up on',
+        (tester) async {
+      final disposed = <String>[];
+      final hang = Completer<void>();
+      final reported = <FlutterErrorDetails>[];
+      final previousOnError = FlutterError.onError;
+      FlutterError.onError = reported.add;
+      addTearDown(() => FlutterError.onError = previousOnError);
+
+      await tester.pumpWidget(
+        _wrap(
+          _Async(
+            label: 'holder',
+            disposeGate: hang,
+            disposeAsyncTimeout: const Duration(milliseconds: 50),
+            disposed: disposed,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.pumpWidget(_wrap(const SizedBox.shrink()));
+      await settle(tester, until: () => reported.isNotEmpty);
+
+      expect(
+        reported.map((details) => details.exception),
+        [isA<TimeoutException>()],
+        reason: 'the expiry itself, and nothing else yet',
+      );
+
+      // Long after the disposal stopped waiting for it.
+      hang.completeError(StateError('the teardown fell over at last'));
+      await settle(tester, until: () => reported.length > 1);
+
+      // Put back before the assertions below, and not only by the tear-down:
+      // while it is in place, a failing `expect` is reported through it and
+      // collected instead of ending the test, which leaves the run hanging
+      // rather than red.
+      FlutterError.onError = previousOnError;
+
+      expect(
+        reported.map((details) => details.exception),
+        [
+          isA<TimeoutException>(),
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            'the teardown fell over at last',
+          ),
+        ],
+        reason: 'nobody is waiting for this future any more, so a report is '
+            'the only way the failure reaches anyone at all',
+      );
+      expect(disposed, isEmpty, reason: 'it never got as far as releasing');
+    });
+
     // The expiry callback runs while the scope still holds everything: its
     // entry with the parent, its key, its model. It is reached from the
     // disposal itself, one step before the block that gives all of that back.
