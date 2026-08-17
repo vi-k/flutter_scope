@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 /// Navigation node.
@@ -67,17 +68,31 @@ final class _NavigationNodeState extends State<NavigationNode> {
   late final GlobalKey<NodeNavigatorState>? _declaredKey = widget.navigatorKey;
 
   late final _navigatorKey = _declaredKey ?? GlobalKey<NodeNavigatorState>();
-  late final _observer = _NodeNavigatorObserver(this);
 
   /// Whether an [NavigationNode.onPop] is still deciding about a press.
   bool _deciding = false;
 
   NodeNavigatorState get _navigator => _navigatorKey.currentState!;
 
+  /// Whether the nested navigator has something of its own to close.
+  ///
+  /// Asked, never remembered. What it answers about is the local history of the
+  /// route the node stands on as much as the stack above it — a `Drawer`, a
+  /// bottom sheet, an `addLocalHistoryEntry` of the application's own — and
+  /// none of those tell anybody they happened: `LocalHistoryRoute
+  /// .addLocalHistoryEntry` ends in `changedInternalState`, which marks the
+  /// route dirty and dispatches no notification. A remembered answer is
+  /// therefore an answer from before the drawer opened.
+  bool get _handlesBackInside {
+    final navigator = _navigatorKey.currentState;
+
+    return navigator != null && navigator.mounted && navigator.canPop();
+  }
+
   /// Decides what a system back does once the node itself cannot answer it.
   ///
-  /// Refusing takes no undoing: the node's marker stays where it is, so the
-  /// next press arrives here exactly as this one did.
+  /// Refusing takes no undoing: nothing has been spent to get here, so the next
+  /// press arrives exactly as this one did.
   void _decideOutside(BuildContext context, Object? result) {
     // A decision already under way is the answer to this press too. Nothing
     // queues: a second back while a confirmation is on screen must not ask a
@@ -161,7 +176,7 @@ final class _NavigationNodeState extends State<NavigationNode> {
     final previous = _navigatorKey.currentState?.previous;
 
     // `maybePop` would be the natural way to ask, and it is what the imperative
-    // path uses. Not here: the node's own `PopScope` is registered on the very
+    // path uses. Not here: the node's own `PopEntry` is registered on the very
     // route being asked about, so the navigator above hands the press straight
     // back to this node, which decides again, and so on without end. Asking the
     // navigator instead settles the one thing this path gets wrong. What it
@@ -194,7 +209,7 @@ final class _NavigationNodeState extends State<NavigationNode> {
       child: _NodeNavigator(
         key: _navigatorKey,
         node: this,
-        pages: [MaterialPage<void>(child: widget.child)],
+        pages: [_NodePage(child: widget.child, leavesTheNode: !widget.isRoot)],
         onDidRemovePage: (_) {},
       ),
     );
@@ -203,9 +218,18 @@ final class _NavigationNodeState extends State<NavigationNode> {
 
 /// Sends a system back to the navigator below before anything outside sees it.
 ///
-/// This lives in a widget of its own so that the flag it keeps never rebuilds
+/// It is a [PopEntry] of its own rather than a [PopScope] because the answer a
+/// [PopScope] gives is the one its `canPop` had when it was last built, and the
+/// question is asked at moments no build of this subtree is tied to. A drawer
+/// opening inside the node is the plain case: the route the node stands on
+/// gains a local history entry, nothing is dispatched and nothing rebuilds, and
+/// a remembered `true` then lets the whole route go instead of closing the
+/// drawer. A [PopEntry] is read at the moment [ModalRoute.popDisposition] asks,
+/// which is when the node can still answer correctly.
+///
+/// It also lives in a widget of its own so that what it keeps never rebuilds
 /// the nested navigator: a rebuild would hand that navigator a fresh page list,
-/// which makes it report its stack again, which sets the flag again.
+/// which makes it report its stack again.
 final class _NodeBackDispatcher extends StatefulWidget {
   final _NavigationNodeState node;
   final Widget child;
@@ -216,57 +240,155 @@ final class _NodeBackDispatcher extends StatefulWidget {
   State<_NodeBackDispatcher> createState() => _NodeBackDispatcherState();
 }
 
-final class _NodeBackDispatcherState extends State<_NodeBackDispatcher> {
-  /// Whether the subtree below holds a route it can close on its own.
+final class _NodeBackDispatcherState extends State<_NodeBackDispatcher>
+    implements PopEntry<Object?> {
+  /// Whether something below the node refuses a pop of its own accord.
   ///
-  /// Kept from [NavigationNotification], which every nested navigator sends
-  /// after its stack changes — including navigators deeper than this node's
-  /// own, so a node nested in another node is heard here too.
+  /// Kept from [NavigationNotification], which is dispatched when a nested
+  /// navigator's stack changes and when a [PopScope] below registers or changes
+  /// its answer — including navigators deeper than this node's own, so a node
+  /// nested in another node is heard here too. This is the half the node cannot
+  /// work out by asking its own navigator, and it is the half that does get
+  /// announced.
   bool _innerCanPop = false;
+
+  ModalRoute<dynamic>? _route;
+
+  @override
+  late final _NodeCanPopOutside canPopNotifier = _NodeCanPopOutside(this);
+
+  /// Whether a system back arriving at the route this node stands on is none of
+  /// the node's business.
+  bool get _canPopOutside =>
+      widget.node.widget.onPop == null &&
+      !_innerCanPop &&
+      !widget.node._handlesBackInside;
+
+  @override
+  void onPopInvoked(bool didPop) => throw UnimplementedError();
+
+  @override
+  void onPopInvokedWithResult(bool didPop, Object? result) {
+    if (didPop) {
+      return;
+    }
+
+    if (_innerCanPop || widget.node._handlesBackInside) {
+      // The pop belongs to the navigator below, and only that navigator knows
+      // whether its top route accepts it. Nothing outside the node moves, so
+      // onPop and isRoot stay out of this.
+      // ignore: discarded_futures
+      widget.node._navigator._popInside(result);
+
+      return;
+    }
+
+    widget.node._decideOutside(context, result);
+  }
 
   bool _watchInnerStack(NavigationNotification notification) {
     if (notification.canHandlePop != _innerCanPop) {
-      // Navigators dispatch this outside of build, so a rebuild is safe here.
-      setState(() => _innerCanPop = notification.canHandlePop);
+      _innerCanPop = notification.canHandlePop;
+      canPopNotifier.notifyOfChange();
     }
 
     return false;
   }
 
   @override
-  Widget build(BuildContext context) => PopScope(
-        canPop: widget.node.widget.onPop == null && !_innerCanPop,
-        onPopInvokedWithResult: (didPop, result) {
-          if (didPop) return;
+  void didChangeDependencies() {
+    super.didChangeDependencies();
 
-          if (_innerCanPop) {
-            // The pop belongs to the navigator below, and only that navigator
-            // knows whether its top route accepts it. Nothing outside the node
-            // moves, so onPop and isRoot stay out of this.
-            // ignore: discarded_futures
-            widget.node._navigator.maybePop(result);
+    final nextRoute = ModalRoute.of(context);
+    if (nextRoute != _route) {
+      _route?.unregisterPopEntry(this);
+      _route = nextRoute;
+      _route?.registerPopEntry(this);
+    }
+  }
 
-            return;
-          }
+  @override
+  void dispose() {
+    _route?.unregisterPopEntry(this);
+    _route = null;
+    canPopNotifier.dispose();
+    super.dispose();
+  }
 
-          widget.node._decideOutside(context, result);
-        },
-        child: NotificationListener<NavigationNotification>(
-          onNotification: _watchInnerStack,
-          child: widget.child,
-        ),
+  @override
+  Widget build(BuildContext context) =>
+      NotificationListener<NavigationNotification>(
+        onNotification: _watchInnerStack,
+        child: widget.child,
       );
+}
+
+/// The answer a [_NodeBackDispatcher] gives, worked out when it is asked.
+///
+/// A [ValueNotifier] would hold an answer instead, and the node has no moment
+/// at which to write one: what the answer depends on changes without telling
+/// anybody. Listeners are still notified of what the node does hear about, so
+/// that the framework's own idea of who handles the back gesture keeps up.
+final class _NodeCanPopOutside extends ChangeNotifier
+    implements ValueListenable<bool> {
+  final _NodeBackDispatcherState _dispatcher;
+
+  _NodeCanPopOutside(this._dispatcher);
+
+  @override
+  bool get value => _dispatcher._canPopOutside;
+
+  void notifyOfChange() => notifyListeners();
+}
+
+/// The single page a node starts with.
+///
+/// It answers [ModalRoute.impliesAppBarDismissal] for itself, so that an
+/// `AppBar` on the node's first page draws a back arrow even though the page is
+/// the first of its navigator: pressing it leaves the node, which is somewhere
+/// to go. The node used to say the same thing with a [LocalHistoryEntry] on the
+/// route, and that cost it the ability to tell its own marker from a `Drawer`'s
+/// — both are entries in the same list, and a route reports only whether that
+/// list is empty.
+final class _NodePage extends MaterialPage<void> {
+  /// Whether a pop of this page goes on to the navigator above.
+  final bool leavesTheNode;
+
+  const _NodePage({required super.child, required this.leavesTheNode});
+
+  @override
+  Route<void> createRoute(BuildContext context) => _NodePageRoute(this);
+}
+
+final class _NodePageRoute extends PageRoute<void>
+    with MaterialRouteTransitionMixin<void> {
+  _NodePageRoute(_NodePage page) : super(settings: page);
+
+  _NodePage get _page => settings as _NodePage;
+
+  @override
+  Widget buildContent(BuildContext context) => _page.child;
+
+  @override
+  bool get maintainState => _page.maintainState;
+
+  @override
+  bool get fullscreenDialog => _page.fullscreenDialog;
+
+  @override
+  bool get impliesAppBarDismissal =>
+      _page.leavesTheNode || super.impliesAppBarDismissal;
 }
 
 final class _NodeNavigator extends Navigator {
   final _NavigationNodeState node;
 
-  _NodeNavigator({
+  const _NodeNavigator({
     super.key,
     required this.node,
     super.pages,
     super.onDidRemovePage,
-  }) : super(observers: [node._observer]);
+  });
 
   @override
   NavigatorState createState() => NodeNavigatorState();
@@ -283,23 +405,16 @@ final class _NodeNavigator extends Navigator {
 ///
 /// {@category utils}
 final class NodeNavigatorState extends NavigatorState {
-  _NodeNavigatorObserver get _observer =>
-      (widget as _NodeNavigator).node._observer;
+  _NavigationNodeState get _node => (widget as _NodeNavigator).node;
 
-  @override
-  bool canPop() {
-    // A node that forwards keeps a local history marker on its first route,
-    // and while that route is the only one on screen the marker alone would
-    // make the base implementation answer `true`. The marker is how a pop
-    // leaves the node, not a route the node can close, so it must not pass for
-    // one: everything above reads this answer to decide whether the back
-    // gesture belongs inside.
-    if (_observer._hookInstalled && (_observer._topRoute?.isCurrent ?? false)) {
-      return false;
-    }
-
-    return super.canPop();
-  }
+  /// Asks this navigator and nothing else.
+  ///
+  /// [maybePop] leaves the node when the node has nothing of its own to close,
+  /// which is what a caller wants and what the back arrow of an `AppBar` on the
+  /// first page does. The node itself needs the other half of that answer — did
+  /// anything below take the press — before it decides what happens outside.
+  // ignore: discarded_futures
+  Future<bool> _popInside(Object? result) => super.maybePop(result);
 
   @override
   void pop<T extends Object?>([T? result]) {
@@ -314,10 +429,30 @@ final class NodeNavigatorState extends NavigatorState {
     // stack — a hole where the screen used to be. A root node keeps the pop
     // instead; any other node hands it to the navigator above, every time and
     // not merely the first.
-    if (!_observer.node.widget.isRoot) {
+    if (!_node.widget.isRoot) {
       // ignore: discarded_futures
       previous?.maybePop(result);
     }
+  }
+
+  @override
+  Future<bool> maybePop<T extends Object?>([T? result]) async {
+    if (await super.maybePop(result)) {
+      return true;
+    }
+
+    // The base implementation has just said that the first page of the node has
+    // nothing to give up and nobody below refuses — which for an ordinary
+    // navigator is where a pop stops. For a node it is where it leaves: the way
+    // out is the navigator above, and this is the path the back arrow of an
+    // `AppBar` takes.
+    if (_node.widget.isRoot) {
+      return false;
+    }
+
+    final previous = this.previous;
+
+    return previous != null && await previous.maybePop(result);
   }
 }
 
@@ -339,41 +474,3 @@ extension PreviousNavigatorExtension on NavigatorState {
     return prevNavigator;
   }
 }
-
-final class _NodeNavigatorObserver extends NavigatorObserver {
-  final _NavigationNodeState node;
-  Route<void>? _topRoute;
-
-  /// Whether the forwarding marker currently sits on [_topRoute].
-  bool _hookInstalled = false;
-
-  _NodeNavigatorObserver(this.node);
-
-  void _addHook() {
-    final topRoute = _topRoute;
-    if (_hookInstalled || node.widget.isRoot || topRoute is! ModalRoute<void>) {
-      return;
-    }
-
-    _hookInstalled = true;
-    topRoute.addLocalHistoryEntry(_HookEntry());
-  }
-
-  @override
-  void didPush(Route<void> route, Route<void>? previousRoute) {
-    if (_topRoute == null) {
-      _topRoute = route;
-      _addHook();
-    }
-  }
-}
-
-/// Keeps a forwarding node reachable from a pop.
-///
-/// It makes the node's first page answer `willHandlePopInternally`, so a
-/// `maybePop` lands in [NodeNavigatorState.pop] instead of bubbling straight
-/// past the node — and it is what draws the back arrow in an `AppBar` on that
-/// page. The entry is never removed: forwarding is decided in
-/// [NodeNavigatorState.pop] rather than by spending this marker, so it works as
-/// many times as the user presses back.
-final class _HookEntry extends LocalHistoryEntry {}

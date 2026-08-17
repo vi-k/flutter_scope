@@ -196,6 +196,26 @@
   placed as `home` with an `onPop` that allowed the pop therefore left a blank
   screen, and an assertion of the framework on the frame after it. The pop is
   now handed over only when the navigator above has a route to give up.
+* Fix system back taking the whole route instead of closing a `Drawer`, a
+  `showBottomSheet` or anything else a `NavigationNode`'s page opened with
+  `addLocalHistoryEntry`. None of those change a navigator's stack, and nothing
+  announces them — `addLocalHistoryEntry` ends in `changedInternalState`, which
+  marks the route dirty and dispatches no notification — so the node was
+  deciding from an answer worked out before the drawer opened, and the answer
+  said the press was none of its business. The node was taking away what works
+  without it. It now works the answer out when the framework asks for it, by
+  registering a `PopEntry` of its own instead of building a `PopScope`.
+* **Behaviour change:** the node's first page no longer carries a
+  `LocalHistoryEntry` of the node's own. It was there to draw the back arrow of
+  an `AppBar` on that page and to route a `maybePop` out of the node, and it
+  cost the node the ability to tell it from a drawer's entry — a route reports
+  only whether its local history is empty. The page says
+  `impliesAppBarDismissal` for itself now, and `NodeNavigatorState.maybePop`
+  leaves the node when the node has nothing of its own to close, which is what
+  the arrow presses. `NodeNavigatorState.canPop()` therefore stopped
+  overriding `NavigatorState.canPop()`: with no marker of the node's own in the
+  way, the base answer is the true one, and it used to answer `false` while a
+  drawer was open.
 * A notification no longer rebuilds the widgets of the subtree it is not
   rebuilding. "Skips rebuilding the whole subtree" was true of the elements and
   not of the widgets: `ComponentElement.performRebuild` calls `build()`

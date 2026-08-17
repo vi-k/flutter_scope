@@ -84,6 +84,94 @@ void main() {
       expect(find.text('open dialog'), findsOneWidget);
     });
 
+    // A drawer is not a route: it puts a local history entry on the route it
+    // is on, and nothing tells any navigator its stack has changed. Without a
+    // node around it the back gesture closes it, and the node must not be what
+    // takes that away.
+    testWidgets('system back closes a drawer inside the node', (tester) async {
+      await tester.pumpWidget(const _DrawerHost(useNode: true));
+
+      await tester.tap(find.text('go'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Open navigation menu'));
+      await tester.pumpAndSettle();
+      expect(find.text('drawer'), findsOneWidget);
+
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('drawer'),
+        findsNothing,
+        reason: 'the press belongs to the drawer, which is what the route the '
+            'node sits on would close on its own',
+      );
+      expect(
+        find.text('node content'),
+        findsOneWidget,
+        reason: 'and the route around the node has to stay: the node must not '
+            'take away what works without it',
+      );
+    });
+
+    testWidgets(
+      'control: the same drawer without a node closes on system back',
+      (tester) async {
+        await tester.pumpWidget(const _DrawerHost(useNode: false));
+
+        await tester.tap(find.text('go'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byTooltip('Open navigation menu'));
+        await tester.pumpAndSettle();
+        expect(find.text('drawer'), findsOneWidget);
+
+        await tester.binding.handlePopRoute();
+        await tester.pumpAndSettle();
+
+        expect(find.text('drawer'), findsNothing);
+        expect(find.text('node content'), findsOneWidget);
+      },
+    );
+
+    // The node's first page is the first route of its own navigator, so
+    // nothing about that navigator implies a way back. The node says there is
+    // one for the page itself, because pressing it leaves the node.
+    testWidgets('an AppBar on the first page of a node draws a back arrow',
+        (tester) async {
+      await tester.pumpWidget(const _AppBarHost());
+
+      await tester.tap(find.text('go'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(BackButton), findsOneWidget);
+
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('go'),
+        findsOneWidget,
+        reason: 'the arrow leaves the node, which is the only thing it could '
+            'mean on a page that is the first of its navigator',
+      );
+    });
+
+    testWidgets('a root node draws no back arrow on its first page', (
+      tester,
+    ) async {
+      await tester.pumpWidget(const _AppBarHost(isRoot: true));
+
+      await tester.tap(find.text('go'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byType(BackButton),
+        findsNothing,
+        reason: 'a root node keeps a pop to itself, so there is nowhere for '
+            'an arrow on its first page to go',
+      );
+    });
+
     testWidgets('system back respects a guarded route inside the node', (
       tester,
     ) async {
@@ -780,6 +868,81 @@ final class _OnPopHost extends StatelessWidget {
             ),
           ),
         ),
+      );
+}
+
+/// Puts a node whose first page carries an `AppBar` on a pushed route, so the
+/// arrow that `AppBar` draws has somewhere to go.
+final class _AppBarHost extends StatelessWidget {
+  final bool isRoot;
+
+  const _AppBarHost({this.isRoot = false});
+
+  @override
+  Widget build(BuildContext context) => MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: Builder(
+              builder: (context) => TextButton(
+                onPressed: () => unawaited(
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (context) => NavigationNode(
+                        isRoot: isRoot,
+                        child: Scaffold(
+                          appBar: AppBar(title: const Text('node content')),
+                          body: const SizedBox.shrink(),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                child: const Text('go'),
+              ),
+            ),
+          ),
+        ),
+      );
+}
+
+/// Puts a `Scaffold` with a drawer on a pushed route, with or without a node
+/// around it, so the two can be compared on the same press.
+final class _DrawerHost extends StatelessWidget {
+  final bool useNode;
+
+  const _DrawerHost({required this.useNode});
+
+  @override
+  Widget build(BuildContext context) => MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: Builder(
+              builder: (context) => TextButton(
+                onPressed: () => unawaited(
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (context) => useNode
+                          ? const NavigationNode(child: _DrawerScreen())
+                          : const _DrawerScreen(),
+                    ),
+                  ),
+                ),
+                child: const Text('go'),
+              ),
+            ),
+          ),
+        ),
+      );
+}
+
+final class _DrawerScreen extends StatelessWidget {
+  const _DrawerScreen();
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(title: const Text('node content')),
+        drawer: const Drawer(child: Center(child: Text('drawer'))),
+        body: const SizedBox.shrink(),
       );
 }
 

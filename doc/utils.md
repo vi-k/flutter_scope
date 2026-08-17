@@ -101,8 +101,10 @@ was closed by something else, or buried under a newer one, a `true` takes
 nothing, since a pop would otherwise take whatever is on top instead of what
 was asked about.
 
-System back first asks the node's nested navigator to close its top route. Only
-when that navigator has nothing left to pop do `onPop` and `isRoot` decide what
+System back first asks the node's nested navigator to close its top route —
+and "route" includes what a `Drawer` or a `showBottomSheet` puts on the page
+without pushing anything, so a node takes none of that away. Only when that
+navigator has nothing left to pop do `onPop` and `isRoot` decide what
 happens outside the node. The two never compete: on a root node the hook is
 asked as it is anywhere else, and an answer of `true` still takes nothing, since
 a root node has nothing outside it to let the pop through to. Such a hook is
@@ -118,6 +120,11 @@ Nor does it empty the navigator above. A node placed on the first route of the
 application has nothing outside it to hand a pop to, and hands over nothing —
 whichever way the pop reached it. `isRoot` is still worth setting there: it says
 so at the node rather than leaving it to be discovered from the stack.
+
+An `AppBar` on the node's first page draws a back arrow, and pressing it leaves
+the node. That is the node's doing: the page is the first route of its own
+navigator, so nothing about that navigator implies a way back. A root node draws
+no arrow there, since it keeps a pop to itself and there would be nowhere to go.
 
 `PreviousNavigatorExtension.previous` gives the navigator above a given one,
 which is how a node forwards a pop it cannot handle itself.
