@@ -711,7 +711,7 @@ makes for the failures it cannot hand to a caller**». Пара (2, 3) дост�
 случая «`failure` уже занят». Уверенность high.
 
 **Вердикт: исправлено ровно как предложено.** Волна 14, блок «потерянные
-отказы». Три `catch` в `_performAsyncDispose` теперь зовут общий
+отказы», `3462b71`. Три `catch` в `_performAsyncDispose` теперь зовут общий
 `take(error, stackTrace)`: первый отказ забирает `failure`, каждый следующий
 уходит в `FlutterError.reportError` через новый приватный `_reportFailure`
 (`base/base.dart`), с контекстом «while disposing of the scope». Тот же
@@ -801,7 +801,7 @@ P1-1, и он закреплял **прямой** порядок — то ест
 отказ — в `FlutterError.reportError`. Уверенность high.
 
 **Вердикт: исправлено ровно как предложено, с уточнением к находке.** Волна 14,
-тем же блоком, что и P2-5. Обе половины — `onUnmount` и `disposeAsync` — теперь
+тем же блоком, что и P2-5, `3462b71`. Обе половины — `onUnmount` и `disposeAsync` — теперь
 защищены по отдельности: первый отказ уходит броском, второй `_reportFailure`
 с контекстом «while unmounting the dependencies» / «while disposing of the
 dependencies».
