@@ -47,6 +47,18 @@ jobs:
       - name: Formatting
         run: dart format --set-exit-if-changed lib test
 
+      # Before the root analyze, not after it: `flutter analyze` walks the whole
+      # tree, `example/` included, and on a fresh clone those packages are not
+      # resolved yet -- 60 errors about a `package:` URI that does not exist.
+      # Locally the step passes only because the examples were fetched at some
+      # point in the past; the first CI run said so.
+      - name: Dependencies of the examples
+        run: |
+          for example in example/*/; do
+            echo "== $example"
+            (cd "$example" && flutter pub get)
+          done
+
       - name: Analyze
         run: flutter analyze
 
@@ -58,13 +70,17 @@ jobs:
       - name: Tests
         run: flutter test
 
-      # The examples carry their own `pubspec`, so each needs its own `pub get`
-      # before it can be analyzed.
+      # Largely a repeat: the root analyze above already walks `example/`, and
+      # it reports each file under the nearest `analysis_options.yaml`, the
+      # example's own -- `pubspec.yaml` included, which a probe confirmed. Kept
+      # because §6 of the regimen lists these three runs separately, and because
+      # they are what a person runs by hand: the step name says which example
+      # broke without reading a path.
       - name: Examples, analyzed
         run: |
           for example in example/*/; do
             echo "== $example"
-            (cd "$example" && flutter pub get && flutter analyze)
+            (cd "$example" && flutter analyze)
           done
 
       # Two of the three have suites of their own. They are outside the local
