@@ -283,6 +283,13 @@ never took the connection over and `dispose` will not be called for it. Once the
 flag is set, releasing it is the scope's job and the guard must not do it a
 second time.
 
+The flag can be trusted with that decision because of when the line below the
+`yield` runs: a generator is resumed when its consumer asks for the next event,
+and by then the scope has taken the one it was given — `dispose` is going to be
+called. There is no window where the flag says handed over and the scope
+disagrees, not even while the ready branch is still held back by
+`pauseAfterInitialization`, and the suite stands in that state to check.
+
 Keep what the guard awaits able to finish. Nothing downstream sees the failure
 until the generator does, so an `await` in the guard holds the failure as well
 as the resource: a `close()` that never completes leaves the scope showing its

@@ -301,6 +301,13 @@ also carries a `ScopeDependencyState` — `ScopeDependencyInitial`,
 this is what it says afterwards. It is a `ScopeDependencyDisposed`, so
 `isDisposed` covers both.
 
+`ScopeDependencyDisposalCancelled` is the one state a scope never produces on its
+own — nothing in the package cancels a teardown walk halfway. It belongs to
+whoever drives one: `runDispose()` is a stream, and a caller who listens to it
+and cancels the subscription before it is done leaves the dependencies it had not
+reached still initialized, and the one it stopped on saying `disposal cancelled`.
+Reading it therefore means reading about a teardown of your own.
+
 ## Dependency paths
 
 A dependency is identified by its path from the root of the tree: the names of

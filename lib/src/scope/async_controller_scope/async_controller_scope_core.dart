@@ -94,13 +94,21 @@ abstract base class AsyncControllerScopeElementBase<
       yield AsyncDataScopeReady(controller);
     } finally {
       // The criterion is the one `_performAsyncDispose` uses to decide whether
-      // to call `disposeAsync`, and it has to be: a flag set beside the `yield`
-      // above would lie. The event travels from there through the `map` that
-      // stores the value to the `asyncMap` callback that sets
-      // `_initSucceeded` -- and a cancellation landing in between drops it,
-      // because nothing is delivered after `cancel()`. The scope would then
-      // never call `disposeAsync`, while a local flag would be saying the
-      // controller had been handed over.
+      // to call `disposeAsync`, and it is that one on purpose: the controller
+      // has to be released exactly once, so the flag that releases it here and
+      // the flag that releases it there must be the same fact rather than two
+      // facts that agree.
+      //
+      // A flag set beside the `yield` above -- what the `AsyncScope`,
+      // `AsyncDataScope` and `Scope` topics teach for an initialization written
+      // by hand -- would agree today, and that is not a coincidence worth
+      // relying on twice over: the statement after a `yield` runs when the
+      // stream asks for the next event, which is after the scope has taken the
+      // one it was given, and a cancellation at the `yield` ends the body
+      // without running it. The suite stands in the narrowest state where the
+      // two could disagree -- registered, but with the ready branch still held
+      // back by `pauseAfterInitialization` -- and they do not
+      // (`scope_removed_while_initializing_test.dart`).
       if (!_initSucceeded) {
         await _releaseController(controller);
       }

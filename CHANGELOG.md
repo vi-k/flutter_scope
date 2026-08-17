@@ -141,6 +141,13 @@
   again — twice per rebuild, to every listener above the node — for a page that
   had not changed. While `child` and `isRoot` are the same objects, nothing is
   handed over anew.
+* The bookkeeping that decides which build a dependent's selectors belong to asks
+  for a frame when nothing else will bring one. The reset runs in a post-frame
+  callback, and a build is not always inside a frame — `runApp` builds the first
+  tree outside any — so with no frame to come the flag would stay raised and
+  every dependent from then on would add its selectors to a pass that never ends.
+  Asked for only when the scheduler is idle: from inside a frame it would order
+  one more, empty, after every frame that built anything.
 * `AsyncControllerScopeCore` has `maybeOf`, `of` and `select` of its own, like
   the two `Core` layers below it. Statics are not inherited in Dart, so a family
   built on this layer had to reach for `AsyncDataScopeCore.maybeOf` with its own

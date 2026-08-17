@@ -204,6 +204,44 @@ void main() {
         reason: 'and from there it is the scope that releases it',
       );
     });
+
+    // The narrowest state the two can be caught in. `pauseAfterInitialization`
+    // holds the ready branch back, so the scope has registered the
+    // initialization -- `disposeAsync` will run -- while the screen still shows
+    // the loading one. If the flag beside the `yield` could disagree with that,
+    // this is where it would: the guard would release what the scope is about to
+    // release too.
+    //
+    // It cannot. The statement after a `yield` runs when the stream asks for the
+    // next event, which happens in a microtask after the scope has taken the
+    // one it was given -- and a tree can only change in a frame, which is later
+    // than any pending microtask.
+    testWidgets('says handed over while the ready branch is still held back',
+        (tester) async {
+      final log = <String>[];
+      final gate = Completer<void>()..complete();
+
+      await tester.pumpWidget(
+        _wrap(
+          _Guarded.withFinally(
+            log: log,
+            gate: gate,
+            pause: const Duration(milliseconds: 100),
+          ),
+        ),
+      );
+      await settle(tester, until: () => log.contains('handed over'));
+
+      await tester.pumpWidget(_wrap(const SizedBox.shrink()));
+      await settle(tester, until: () => log.contains('disposeAsync'));
+
+      expect(
+        log,
+        ['took', 'handed over', 'disposeAsync'],
+        reason: 'released once, by the scope -- the guard kept quiet, and it '
+            'was right to',
+      );
+    });
   });
 }
 
@@ -299,13 +337,24 @@ final class _Guarded extends AsyncScopeBase<_Guarded> {
   /// Whether the guard is a `finally` rather than a `catch`.
   final bool guardIsFinally;
 
+  /// Holds the ready branch back, so the scope can be caught having registered
+  /// the initialization while the screen still shows the loading one.
+  final Duration? pause;
+
   const _Guarded.withCatch({required this.log, required this.gate})
       : guardIsFinally = false,
+        pause = null,
         super(child: const SizedBox.shrink());
 
-  const _Guarded.withFinally({required this.log, required this.gate})
-      : guardIsFinally = true,
+  const _Guarded.withFinally({
+    required this.log,
+    required this.gate,
+    this.pause,
+  })  : guardIsFinally = true,
         super(child: const SizedBox.shrink());
+
+  @override
+  Duration? get pauseAfterInitialization => pause;
 
   @override
   Stream<AsyncScopeInitState> initAsync(BuildContext context) async* {

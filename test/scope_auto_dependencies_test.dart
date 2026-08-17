@@ -1661,6 +1661,30 @@ void main() {
     });
   });
 
+  // `ScopeDependencyDisposalCancelled` was read as unreachable: nothing in the
+  // package stops a teardown walk halfway. The walk is public, though --
+  // `runDispose()` is a stream -- so a caller who drives one and cancels the
+  // subscription reaches the state, and this is what it looks like.
+  test('a disposal cancelled by whoever drove it says so', () {
+    myFakeAsync((async) {
+      final dependencies = TestDependencies();
+      handleInitFor(dependencies, async);
+
+      final subscription = dependencies.root.runDispose().listen((_) {});
+      async
+        ..elapse(TestDependencies.step)
+        ..waitFuture(subscription.cancel());
+
+      expect(dependencies.root.state, isA<ScopeDependencyDisposalCancelled>());
+      expect(dependencies.root.stateToString(), 'disposal cancelled');
+      expect(
+        dependencies.root.isDisposed,
+        isFalse,
+        reason: 'a walk that stopped halfway did not dispose of the tree',
+      );
+    });
+  });
+
   // The `Scope` topic used to promise that sibling errors are all kept in the
   // state, and the group renders them with a `join(', ')` that reads the same
   // way. Neither is true: the stream a group runs its children in is guarded,

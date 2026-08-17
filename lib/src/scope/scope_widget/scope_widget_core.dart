@@ -24,7 +24,25 @@ bool _buildPassEnding = false;
 Object _currentBuildPass() {
   if (!_buildPassEnding) {
     _buildPassEnding = true;
-    SchedulerBinding.instance.addPostFrameCallback((_) {
+
+    final scheduler = SchedulerBinding.instance;
+
+    // The callback needs a frame to run in, and a build is not always inside
+    // one: `BuildOwner.buildScope` also runs with no frame in progress, which is
+    // how `runApp` builds the first tree. With no frame to come, this flag would
+    // stay raised and every dependent from then on would add its selectors to a
+    // pass that never ends.
+    //
+    // Asked for only when nothing else will bring a frame, unlike the
+    // neighbouring `runOutsideFrame`, which asks unconditionally: what that one
+    // defers marks an element dirty and needs a frame of its own, while this
+    // callback resets a field. Asking from inside a frame would order one more,
+    // empty, after every frame that built anything.
+    if (scheduler.schedulerPhase == SchedulerPhase.idle) {
+      scheduler.scheduleFrame();
+    }
+
+    scheduler.addPostFrameCallback((_) {
       _buildPass = Object();
       _buildPassEnding = false;
     });

@@ -143,6 +143,14 @@ final class ScopeDependencyDisposalFailed extends ScopeDependencyFailedStates {
       );
 }
 
+/// The state of a dependency whose teardown was stopped before it finished.
+///
+/// Nothing in the package produces it: a scope disposes of its dependencies to
+/// the end. It belongs to whoever drives a teardown themselves —
+/// `ScopeDependency.runDispose()` is a stream, and a caller who cancels the
+/// subscription before it is done leaves what it had not reached still
+/// initialized, and the dependency it stopped on in this state.
+///
 /// {@category Scope}
 final class ScopeDependencyDisposalCancelled
     extends ScopeDependencyCancelledStates {
