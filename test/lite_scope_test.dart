@@ -794,6 +794,15 @@ void main() {
       );
       expect(outer.childrenCount, 1);
 
+      // Two failures are reported here, one after the other -- the expiry of
+      // the wait, and then the stage that failed behind the first one --
+      // and `takeException` collapses several of them into one summary
+      // string. Captured directly, so both can be seen.
+      final reported = <FlutterErrorDetails>[];
+      final previousOnError = FlutterError.onError;
+      FlutterError.onError = reported.add;
+      addTearDown(() => FlutterError.onError = previousOnError);
+
       Object? failure;
       var done = false;
       unawaited(
@@ -811,6 +820,11 @@ void main() {
       // here, or the second stage never fails and the test asks nothing.
       await settle(tester, until: () => done);
 
+      // Put back before the assertions, and not only by the tear-down: while
+      // it is in place, a failing `expect` is reported through it and
+      // collected instead of ending the test.
+      FlutterError.onError = previousOnError;
+
       expect(
         failure,
         isA<StateError>().having(
@@ -822,8 +836,21 @@ void main() {
             'teardown, which is what the four stages were written to promise',
       );
 
-      // The expiry of the wait is reported on its own, as it always is.
-      expect(tester.takeException(), isA<TimeoutException>());
+      expect(
+        reported.map((details) => details.exception),
+        [
+          isA<TimeoutException>(),
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            'onWaitForChildrenTimeout failed',
+          ),
+        ],
+        reason: 'the expiry of the wait is reported on its own, as it always '
+            'is, and the failure of the second stage goes the same way: the '
+            'throw is taken by the first stage, so a report is the only way '
+            'out it has left',
+      );
 
       // The child was held open on purpose, and while it is held its own half
       // of the teardown cannot finish. Let it go and give it the rounds to

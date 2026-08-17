@@ -262,6 +262,26 @@
   teardown is, and giving up is reported rather than passed over; a release that
   fails after it was abandoned is reported too. The `AsyncScope` topic now says
   what an `await` in a hand-written guard costs when it cannot finish.
+* Fix every failure of a teardown but the first being lost. The disposal of an
+  asynchronous scope runs in four stages, each guarded on its own so that a
+  failure in one never skips the ones behind it, and only the first of them can
+  be passed on — a throw carries one failure. The rest went to an `info`-level
+  logger that is off by default, which is the same as losing them: a scope
+  whose wait for its children expired and whose own `disposeAsync` then fell
+  over said nothing at all about the second failure. Every failure behind the
+  first is now reported through `FlutterError.reportError`, which is the trade
+  the rest of the teardown already makes for failures it cannot hand to a
+  caller.
+* Fix the *first* failure being lost in the two halves of a `Scope` teardown.
+  `ScopeState.onUnmount` runs before `ScopeDependencies.onUnmount`, and
+  `ScopeState.disposeAsync` before `ScopeDependencies.dispose`; in both pairs
+  the state's failure was kept in a local while the container's was left to
+  throw over the top of it, so the first — the one that explains what the
+  second made of the same teardown — vanished without a trace. Both halves are
+  now guarded apart: the first failure leaves through the throw, the second
+  through a report. This shows only with a hand-written `ScopeDependencies`:
+  `ScopeAutoDependencies` reports what its own children throw and never hands a
+  failure up. The `Scope` and `AsyncScope` topics say what the order costs.
 * The dartdoc of the twelve timeout parameters said the opposite of what they
   do. `scopeKeyTimeout`, `initCancellationTimeout`, `disposeAsyncTimeout` and
   `waitForChildrenTimeout`, in all three asynchronous families, each promised

@@ -35,6 +35,25 @@ final class _NullWidget extends Widget {
 /// which can never be honoured -- from an ordinary one.
 Element? _debugInitializingElement;
 
+/// Reports a failure that has no caller left to be raised at.
+///
+/// A teardown runs in halves and stages, each guarded on its own, and every
+/// one of them reaches user code. Only the first failure can be passed on --
+/// a throw takes one -- and the ones behind it used to end in a log line that
+/// is off by default, which is the same as losing them. This is the trade the
+/// rest of the package makes for such failures: reported, and the teardown
+/// goes on.
+void _reportFailure(Object error, StackTrace stackTrace, [String? context]) {
+  FlutterError.reportError(
+    FlutterErrorDetails(
+      exception: error,
+      stack: stackTrace,
+      library: 'scopo',
+      context: context == null ? null : ErrorDescription(context),
+    ),
+  );
+}
+
 /// {@category base}
 abstract interface class ScopeContext<W extends ScopeInheritedWidget> {
   /// The widget of this scope.

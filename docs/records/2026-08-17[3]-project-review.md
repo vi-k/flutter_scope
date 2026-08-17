@@ -710,6 +710,28 @@ makes for the failures it cannot hand to a caller**». Пара (2, 3) дост�
 `disposeAsync()` — второй отказ не видит никто. Направление: `reportError` для
 случая «`failure` уже занят». Уверенность high.
 
+**Вердикт: исправлено ровно как предложено.** Волна 14, блок «потерянные
+отказы». Три `catch` в `_performAsyncDispose` теперь зовут общий
+`take(error, stackTrace)`: первый отказ забирает `failure`, каждый следующий
+уходит в `FlutterError.reportError` через новый приватный `_reportFailure`
+(`base/base.dart`), с контекстом «while disposing of the scope». Тот же
+помощник взяли обе половины `scope_core.dart` — см. вердикт P2-9.
+
+Тест — пара (2, 3), названная самой находкой: у родителя истекает
+`waitForChildrenTimeout`, `onWaitForChildrenTimeout` бросает, следом бросает
+собственный `disposeAsync` родителя (`cleanup_after_user_error_test.dart`,
+«reports the second failure of a disposal that failed twice»). До правки второй
+отказ не виден нигде — список отрепорченного пуст. Мутация (вернуть `failure ??=`
+вместо `take`) роняет этот тест.
+
+Заодно вскрылась половина, которую находка не называет: тест
+`lite_scope_test.dart` «reports the first failure of a teardown, not the last»
+проверял `tester.takeException()` ровно на один зарепорченный
+`TimeoutException` — то есть **консервировал потерю**. После правки исключений
+стало два, и тест переписан на сбор через `FlutterError.onError`: истечение
+ожидания и отказ стадии за ним. Это ровно та ловушка, о которой предупреждает
+`docs/handoff.md`: тест, написанный по факту поведения, закрепляет расхождение.
+
 **P2-6. Из состояния ошибки `ScopeStateWithErrorNotifier` нет выхода, а
 `update()` в нём делает хуже, чем ничего.**
 `scope_state_with_error_model.dart:26, 47-54`. `_error` присваивается один раз
@@ -777,6 +799,27 @@ P1-1, и он закреплял **прямой** порядок — то ест
 `failure` пропадает бесследно. Та же форма в `disposeAsync`. Направление:
 `failure ??=` вокруг второй половины, как в `_performAsyncDispose`; второй
 отказ — в `FlutterError.reportError`. Уверенность high.
+
+**Вердикт: исправлено ровно как предложено, с уточнением к находке.** Волна 14,
+тем же блоком, что и P2-5. Обе половины — `onUnmount` и `disposeAsync` — теперь
+защищены по отдельности: первый отказ уходит броском, второй `_reportFailure`
+с контекстом «while unmounting the dependencies» / «while disposing of the
+dependencies».
+
+Уточнение: находка называет обе половины равнозначными, но достижимы они
+по-разному. **`ScopeAutoDependencies` наверх ничего не отдаёт** — его `dispose()`
+репортит то, что бросили его дети, и сам не бросает никогда
+(`scope_auto_dependency.dart`), так что асинхронная половина через штатный
+контейнер не воспроизводится вовсе. Синхронная — воспроизводится: `onUnmount`
+группы отказ детей рефроусит. То есть дефект целиком виден только на контейнере,
+написанном руками против интерфейса `ScopeDependencies`, и оба теста написаны
+именно на таком (`_PlainDepScope` в `cleanup_after_user_error_test.dart`).
+Первая проба, сделанная на `ScopeAutoDependencies`, показала это сразу: отказ
+диспозера не всплыл нигде.
+
+Тесты — по одному на половину, оба падали до правки (наружу уходил отказ
+контейнера, отказ состояния исчезал) и оба сняты мутацией: убрать `try` вокруг
+второй половины — краснеет ровно свой.
 
 **P2-10. Дартдок `of`/`maybeOf`/`select` обещает «if the scope is not found», а
 условий два.** Восемь мест: `scope_base.dart:165, 176`;

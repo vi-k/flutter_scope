@@ -214,6 +214,13 @@ awaited:
 7. **The scope unregisters from its parent and releases its `scopeKey`**, which
    lets the next scope waiting on that key through.
 
+Every step is guarded on its own: a failure in one is never a reason to skip
+the ones behind it. Only one failure can be passed on, though — that is all a
+throw carries — and it is the first one, handed over once the whole sequence is
+over: to whoever called `close()`, or, for a scope taken off the tree, to the
+zone the teardown ran in. Every failure behind it is reported through
+`FlutterError.reportError` instead.
+
 The order is what makes the family worth using: a parent never disposes of
 something while a child is still using it, and a re-created scope never
 overlaps with the one it replaces.

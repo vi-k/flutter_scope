@@ -365,6 +365,79 @@ void main() {
       await settle(tester, until: () => disposed.contains('child'));
       expect(disposed, containsAll(['parent', 'child']));
     });
+
+    // The disposal runs in four stages, each guarded on its own, and only the
+    // first failure has a caller left to raise at -- the others used to end in
+    // a log line that is off by default. Two of the four failing is an
+    // ordinary path, not a contrived one: the wait for the children expired,
+    // and the scope's own release fell over behind it.
+    testWidgets('reports the second failure of a disposal that failed twice',
+        (tester) async {
+      final disposed = <String>[];
+      final childGate = Completer<void>();
+      final errors = <Object>[];
+      final reported = <FlutterErrorDetails>[];
+      final previousOnError = FlutterError.onError;
+      FlutterError.onError = reported.add;
+      addTearDown(() => FlutterError.onError = previousOnError);
+
+      await runZonedGuarded(
+        () async {
+          await tester.pumpWidget(
+            _wrap(
+              _Async(
+                label: 'parent',
+                disposed: disposed,
+                failOnDispose: true,
+                waitForChildrenTimeout: const Duration(milliseconds: 50),
+                onWaitForChildrenTimeout: () =>
+                    throw StateError('onWaitForChildrenTimeout failed'),
+                child: _Async(
+                  label: 'child',
+                  disposed: disposed,
+                  disposeGate: childGate,
+                ),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+
+          await tester.pumpWidget(_wrap(const SizedBox.shrink()));
+          await tester.pump(const Duration(milliseconds: 100));
+          // The re-throw is the last thing the disposal does, after the block
+          // that gives back what the scope was lent.
+          await settle(tester, until: () => errors.isNotEmpty);
+        },
+        (error, stackTrace) => errors.add(error),
+      );
+
+      // Put back before the assertions, and not only by the tear-down: a
+      // failing `expect` reported through it is collected instead of ending
+      // the test, which leaves the run hanging rather than red.
+      FlutterError.onError = previousOnError;
+
+      expect(
+        errors.single,
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          'onWaitForChildrenTimeout failed',
+        ),
+        reason: 'the first failure is the one the caller hears',
+      );
+      expect(
+        reported
+            .map((details) => details.exception)
+            .whereType<StateError>()
+            .map((error) => error.message),
+        contains('disposeAsync of parent failed'),
+        reason: 'the second has no caller left to raise at, so a report is '
+            'the only way out it has',
+      );
+
+      childGate.complete();
+      await settle(tester, until: () => disposed.contains('child'));
+    });
   });
 
   group('AsyncDataScope', () {
@@ -560,6 +633,127 @@ void main() {
             'still have to let go of theirs',
       );
     });
+
+    // Both halves of the teardown can fail, and each half is the other's
+    // equal: the second is run whatever the first did. Only one of the two
+    // failures has a caller to be raised at, though, and it must be the first
+    // -- the state let go before the dependencies did, so its failure is the
+    // one that explains the other.
+    //
+    // The container is written by hand here rather than built by
+    // `ScopeAutoDependencies`, and that is the point: the automatic one
+    // absorbs what its own children throw on the way out, so the only
+    // container that can hand a failure to the state above it is a
+    // hand-written one.
+    testWidgets(
+        'keeps the failure of the state when the dependencies fail to unmount '
+        'behind it', (tester) async {
+      final log = <String>[];
+      final reported = <FlutterErrorDetails>[];
+      final previousOnError = FlutterError.onError;
+      FlutterError.onError = reported.add;
+      addTearDown(() => FlutterError.onError = previousOnError);
+
+      await tester.pumpWidget(
+        _wrap(
+          _PlainDepScope(
+            log: log,
+            failOnStateUnmount: true,
+            failOnDepsUnmount: true,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.pumpWidget(_wrap(const SizedBox.shrink()));
+      await settle(tester, until: () => log.contains('dispose deps'));
+
+      // See the test above: put back before the assertions, or a failing
+      // `expect` is collected instead of ending the test.
+      FlutterError.onError = previousOnError;
+
+      expect(
+        reported
+            .where((details) => details.library != 'scopo')
+            .map((details) => details.exception)
+            .whereType<StateError>()
+            .map((error) => error.message),
+        contains('the state failed to unmount itself'),
+        reason: 'the first failure leaves the way it always has -- through '
+            'the caller, which here is the framework unmounting the element',
+      );
+      expect(
+        reported
+            .where((details) => details.library == 'scopo')
+            .map((details) => details.exception)
+            .whereType<StateError>()
+            .map((error) => error.message),
+        contains('the dependencies failed to unmount'),
+        reason: 'and the second leaves through a report, since the throw is '
+            'taken by the first',
+      );
+    });
+
+    // The same rule in the asynchronous half, where the two failures are told
+    // apart by where they end up: the first on the discarded future the
+    // disposal runs on, the second in a report.
+    testWidgets(
+        'keeps the failure of the state when the dependencies fail to dispose '
+        'behind it', (tester) async {
+      final log = <String>[];
+      final errors = <Object>[];
+      final reported = <FlutterErrorDetails>[];
+      final previousOnError = FlutterError.onError;
+      FlutterError.onError = reported.add;
+      addTearDown(() => FlutterError.onError = previousOnError);
+
+      await runZonedGuarded(
+        () async {
+          await tester.pumpWidget(
+            _wrap(
+              _PlainDepScope(
+                log: log,
+                failOnStateDispose: true,
+                failOnDepsDispose: true,
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+
+          // The re-throw is the last thing the disposal does, after the block
+          // that gives back what the scope was lent: waiting for it is waiting
+          // for the whole teardown, model included.
+          await tester.pumpWidget(_wrap(const SizedBox.shrink()));
+          await settle(tester, until: () => errors.isNotEmpty);
+        },
+        (error, stackTrace) => errors.add(error),
+      );
+
+      FlutterError.onError = previousOnError;
+
+      expect(
+        errors.single,
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          'the state failed to dispose of itself',
+        ),
+        reason: 'the first failure is the one the caller hears',
+      );
+      expect(
+        reported
+            .map((details) => details.exception)
+            .whereType<StateError>()
+            .map((error) => error.message),
+        contains('the dependencies failed to dispose'),
+        reason: 'and the second is reported rather than lost',
+      );
+      expect(
+        log,
+        ['unmount deps', 'dispose deps'],
+        reason: 'a failing state is no reason to skip either half',
+      );
+    });
   });
 }
 
@@ -579,6 +773,7 @@ int _readyCount(WidgetTester tester) => tester
 final class _Async extends AsyncScopeBase<_Async> {
   final String label;
   final bool failOnUnmount;
+  final bool failOnDispose;
   final List<String> disposed;
 
   /// Holds [disposeAsync] open, so this scope can keep its parent waiting.
@@ -591,6 +786,7 @@ final class _Async extends AsyncScopeBase<_Async> {
     required this.label,
     required this.disposed,
     this.failOnUnmount = false,
+    this.failOnDispose = false,
     this.disposeGate,
     this.initGate,
     super.scopeKey,
@@ -625,6 +821,9 @@ final class _Async extends AsyncScopeBase<_Async> {
       await gate.future;
     }
     disposed.add(label);
+    if (failOnDispose) {
+      throw StateError('disposeAsync of $label failed');
+    }
   }
 
   @override
@@ -801,6 +1000,105 @@ final class _Deps extends ScopeAutoDependencies<_Deps, BuildContext> {
 
 final class _DepScopeState
     extends ScopeState<_DepScope, _Deps, _DepScopeState> {
+  @override
+  void onUnmount() {
+    super.onUnmount();
+    if (params.failOnStateUnmount) {
+      throw StateError('the state failed to unmount itself');
+    }
+  }
+
+  @override
+  FutureOr<void> disposeAsync() {
+    if (params.failOnStateDispose) {
+      throw StateError('the state failed to dispose of itself');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => const SizedBox.shrink();
+}
+
+/// A scope over a hand-written container, so that both halves of the teardown
+/// can be made to fail on both sides at once.
+///
+/// [ScopeAutoDependencies] never hands a failure up: what its children throw
+/// on the way out it reports itself. A container written against the interface
+/// is the one that can, which is what the two halves of [ScopeCoreState] are
+/// written for.
+final class _PlainDepScope
+    extends Scope<_PlainDepScope, _PlainDeps, _PlainDepScopeState> {
+  final List<String> log;
+  final bool failOnDepsUnmount;
+  final bool failOnDepsDispose;
+  final bool failOnStateUnmount;
+  final bool failOnStateDispose;
+
+  const _PlainDepScope({
+    required this.log,
+    this.failOnDepsUnmount = false,
+    this.failOnDepsDispose = false,
+    this.failOnStateUnmount = false,
+    this.failOnStateDispose = false,
+  }) : super(child: const SizedBox.shrink());
+
+  @override
+  Stream<ScopeInitState<Object, _PlainDeps>> initDependencies(
+    BuildContext context,
+  ) =>
+      _PlainDeps(
+        log: log,
+        failOnUnmount: failOnDepsUnmount,
+        failOnDispose: failOnDepsDispose,
+      ).asStream();
+
+  @override
+  Widget buildOnInitializing(BuildContext context, Object? progress) =>
+      const SizedBox.shrink();
+
+  @override
+  Widget buildOnError(
+    BuildContext context,
+    Object error,
+    StackTrace stackTrace,
+    Object? progress,
+  ) =>
+      const SizedBox.shrink();
+
+  @override
+  _PlainDepScopeState createState() => _PlainDepScopeState();
+}
+
+final class _PlainDeps implements ScopeDependencies {
+  final List<String> log;
+  final bool failOnUnmount;
+  final bool failOnDispose;
+
+  _PlainDeps({
+    required this.log,
+    this.failOnUnmount = false,
+    this.failOnDispose = false,
+  });
+
+  @override
+  void onUnmount() {
+    log.add('unmount deps');
+    if (failOnUnmount) {
+      throw StateError('the dependencies failed to unmount');
+    }
+  }
+
+  @override
+  FutureOr<void> dispose() {
+    log.add('dispose deps');
+    if (failOnDispose) {
+      throw StateError('the dependencies failed to dispose');
+    }
+  }
+}
+
+final class _PlainDepScopeState
+    extends ScopeState<_PlainDepScope, _PlainDeps, _PlainDepScopeState> {
   @override
   void onUnmount() {
     super.onUnmount();

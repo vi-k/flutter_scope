@@ -762,6 +762,19 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
     // still hears about it.
     AsyncError? failure;
 
+    // Takes what a stage threw. A throw carries one failure, and the first
+    // stage to fail has already claimed it, so everything after it goes out
+    // the only other way there is. Left to the log line above each call, as
+    // it was, the second and third failures reached nobody at all: that log
+    // is off by default.
+    void take(Object error, StackTrace stackTrace) {
+      if (failure == null) {
+        failure = AsyncError(error, stackTrace);
+      } else {
+        _reportFailure(error, stackTrace, 'while disposing of the scope');
+      }
+    }
+
     try {
       try {
         // Nothing on a removed element: the framework got here first. On a
@@ -770,7 +783,7 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
         // ignore: avoid_catching_errors
       } on Object catch (error, stackTrace) {
         _log.e('unmount failed', error: error, stackTrace: stackTrace);
-        failure ??= AsyncError(error, stackTrace);
+        take(error, stackTrace);
       }
 
       try {
@@ -782,7 +795,7 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
           error: error,
           stackTrace: stackTrace,
         );
-        failure ??= AsyncError(error, stackTrace);
+        take(error, stackTrace);
       }
 
       try {
@@ -816,7 +829,7 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
         // ignore: avoid_catching_errors
       } on Object catch (error, stackTrace) {
         _log.e('disposal failed', error: error, stackTrace: stackTrace);
-        failure ??= AsyncError(error, stackTrace);
+        take(error, stackTrace);
       }
     } finally {
       // Cleared, not just unregistered: the element outlives its disposal

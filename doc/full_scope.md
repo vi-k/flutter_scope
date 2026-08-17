@@ -394,6 +394,14 @@ it is awaited:
 6. The `scopeKey`, if any, is released, and the next scope waiting for it is let
    through.
 
+Every step is guarded on its own, and so are the two halves of steps 1 and 4–5:
+a failure in one is never a reason to skip what comes behind it. Only one
+failure can be passed on, though — that is all a throw carries — and it is the
+first one, handed over once the whole teardown is over. Every failure behind it
+is reported through `FlutterError.reportError` instead. So a state whose
+`onUnmount` threw and whose container threw behind it says both things: the
+state's failure through the throw, the container's through a report.
+
 `close()` starts that same teardown while the scope is still on screen: the
 ready subtree is frozen into a screenshot, `buildOnClosing` is shown on top of
 it, and the returned future completes when the disposal is done. It is the way

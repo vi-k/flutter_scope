@@ -189,7 +189,23 @@ abstract base class ScopeElementBase<
       failure = AsyncError(error, stackTrace);
     }
 
-    _dependencies?.onUnmount();
+    // Guarded on its own for the same reason, and the two failures are not
+    // equals: the state let go first, so its failure is the one that explains
+    // whatever the container made of the same teardown. Uncaught, as it was,
+    // the container's failure left through the throw and took the state's
+    // with it -- the first one vanished without so much as a log line.
+    // [ScopeAutoDependencies] never gets this far, since it reports what its
+    // children throw itself; a container written against the interface does.
+    try {
+      _dependencies?.onUnmount();
+      // ignore: avoid_catching_errors
+    } on Object catch (error, stackTrace) {
+      if (failure == null) {
+        failure = AsyncError(error, stackTrace);
+      } else {
+        _reportFailure(error, stackTrace, 'while unmounting the dependencies');
+      }
+    }
 
     if (failure case final failure?) {
       Error.throwWithStackTrace(failure.error, failure.stackTrace);
@@ -211,9 +227,24 @@ abstract base class ScopeElementBase<
       failure = AsyncError(error, stackTrace);
     }
 
-    final result = _dependencies?.dispose();
-    if (result is Future<void>) {
-      await result;
+    // Guarded like the half above, and for the same reason: the first failure
+    // is the one that leaves through the throw, the second through a report.
+    try {
+      final result = _dependencies?.dispose();
+      if (result is Future<void>) {
+        await result;
+      }
+      // ignore: avoid_catching_errors
+    } on Object catch (error, stackTrace) {
+      if (failure == null) {
+        failure = AsyncError(error, stackTrace);
+      } else {
+        _reportFailure(
+          error,
+          stackTrace,
+          'while disposing of the dependencies',
+        );
+      }
     }
 
     if (failure case final failure?) {
