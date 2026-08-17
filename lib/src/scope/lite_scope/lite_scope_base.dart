@@ -69,31 +69,63 @@ abstract base class LiteScope<W extends LiteScope<W, S>,
   /// and [buildOnError] methods.
   Stream<AsyncScopeInitState> init() => Stream.value(AsyncScopeReady());
 
-  /// Waiting buider.
+  /// Waiting builder.
   ///
   /// A builder waiting for access to the widget (see [scopeKey]) and the first
   /// [init] event.
   ///
-  /// The method may return `null` if the [buildOnInitializing] method is
-  /// overridden.
+  /// **Required, and the only builder here that is** — which is the other way
+  /// round from the families that initialize something, where
+  /// `buildOnInitializing` is the required one. The rule behind both is the
+  /// same: exactly one branch before the ready one has to be written, and it
+  /// is the branch that scope is certain to reach. A [LiteScope] initializes
+  /// nothing of its own, so the branch it always has is this one — the frames
+  /// spent waiting for a `scopeKey` and for the first event — while
+  /// [buildOnInitializing] and [buildOnError] belong to an [init] most scopes
+  /// never override.
+  ///
+  /// Returning `null` is allowed only when [buildOnInitializing] is
+  /// overridden, since something has to be on screen: `null` here means "show
+  /// the initializing branch instead", and the default of that one throws.
   Widget? buildOnWaiting(BuildContext context);
 
   /// Pre-initialization builder.
   ///
-  /// This method will only be called if you have overridden [init].
+  /// Reached only by a scope that overrides [init], which is why it is
+  /// optional: a scope that pre-initializes nothing has no progress to build.
+  /// The default throws rather than returning a blank screen — a branch
+  /// nobody wrote is a mistake, and a scope that shows nothing while it
+  /// initializes looks like one that never initializes at all.
   Widget buildOnInitializing(BuildContext context, Object? progress) =>
-      throw UnimplementedError();
+      throw UnimplementedError(
+        '$runtimeType overrides `init()` but not `buildOnInitializing()`. A '
+        'scope that pre-initializes has frames to fill before it is ready, '
+        'and this is the branch that fills them. Override it, or drop the '
+        '`init()` override -- the default one is ready at once and never '
+        'comes here.',
+      );
 
   /// Error builder.
   ///
-  /// This method will only be called if you have overridden [init].
+  /// Reached only by a scope that overrides [init], and optional for the same
+  /// reason as [buildOnInitializing]: an initialization that does not exist
+  /// cannot fail.
+  ///
+  /// The default throws, and carries the failure it was called for in the
+  /// message: left out, that failure would be replaced on screen by the
+  /// missing-builder error, and the reason the scope failed at all would go
+  /// with it.
   Widget buildOnError(
     BuildContext context,
     Object error,
     StackTrace stackTrace,
     Object? progress,
   ) =>
-      throw UnimplementedError();
+      throw UnimplementedError(
+        '$runtimeType overrides `init()` but not `buildOnError()`, and the '
+        'initialization it never wrote a branch for has just failed with: '
+        '$error',
+      );
 
   /// Creates the state for this scope.
   S createState();

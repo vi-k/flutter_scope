@@ -143,6 +143,62 @@ void main() {
       expect(asked, isTrue, reason: 'the builder did run');
       expect(seen, isNull);
     });
+
+    // `buildOnInitializing` and `buildOnError` are optional here, and rightly
+    // so: a `LiteScope` initializes nothing of its own, so most of them have
+    // no progress branch to build. Overriding `init()` is what gives them
+    // one, and the defaults left behind then throw rather than show a blank
+    // screen. What they throw has to say which method is missing — a bare
+    // `UnimplementedError` names neither the method nor the scope.
+    testWidgets('says which builder is missing when init() is overridden',
+        (tester) async {
+      await tester.pumpWidget(_wrap(const _HalfWritten()));
+      await tester.pump();
+
+      expect(
+        tester.takeException(),
+        isA<UnimplementedError>().having(
+          (error) => error.message,
+          'message',
+          allOf(
+            contains('buildOnInitializing'),
+            contains('init()'),
+            contains('_HalfWritten'),
+          ),
+        ),
+      );
+
+      // The scope is still on the tree, and its teardown is asynchronous:
+      // ending here would leave the notifier undisposed, which the leak
+      // tracker reports as a leak of the package rather than of the test.
+      await tester.pumpWidget(const SizedBox.shrink());
+      await settle(tester, until: () => false, rounds: 5);
+    });
+
+    // The same for the error branch, with one thing more to carry: the
+    // failure the scope was about to show. Left out, it is lost — the screen
+    // gets the missing-builder error and the reason the scope failed at all
+    // goes with it.
+    testWidgets('says which builder is missing, and why it was needed',
+        (tester) async {
+      await tester.pumpWidget(_wrap(const _HalfWritten(failing: true)));
+      await tester.pump();
+
+      expect(
+        tester.takeException(),
+        isA<UnimplementedError>().having(
+          (error) => error.message,
+          'message',
+          allOf(
+            contains('buildOnError'),
+            contains('the initialization it never wrote'),
+          ),
+        ),
+      );
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await settle(tester, until: () => false, rounds: 5);
+    });
   });
 
   group('ScopeWidgetBase', () {
@@ -280,6 +336,37 @@ final class _LiteState extends LiteScopeState<_Lite, _LiteState> {
 
     return params.body;
   }
+}
+
+/// A scope that took the half of the bargain it wanted: it overrides `init()`
+/// and leaves the two builders that go with it to their defaults.
+final class _HalfWritten extends LiteScope<_HalfWritten, _HalfWrittenState> {
+  final bool failing;
+
+  const _HalfWritten({this.failing = false})
+      : super(child: const SizedBox.shrink());
+
+  @override
+  Stream<AsyncScopeInitState> init() async* {
+    if (failing) {
+      throw StateError('the pre-initialization fell over');
+    }
+
+    yield AsyncScopeProgress('half');
+    yield AsyncScopeReady();
+  }
+
+  @override
+  Widget? buildOnWaiting(BuildContext context) => const Text('waiting');
+
+  @override
+  _HalfWrittenState createState() => _HalfWrittenState();
+}
+
+final class _HalfWrittenState
+    extends LiteScopeState<_HalfWritten, _HalfWrittenState> {
+  @override
+  Widget build(BuildContext context) => const Text('ready');
 }
 
 /// Marks what [_Lite.wrapState] put around the ready branch.

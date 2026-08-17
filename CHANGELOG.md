@@ -274,6 +274,22 @@
   teardown is, and giving up is reported rather than passed over; a release that
   fails after it was abandoned is reported too. The `AsyncScope` topic now says
   what an `await` in a hand-written guard costs when it cannot finish.
+* `LiteScope.buildOnWaiting` is documented as the required builder it is, and
+  the two optional ones say what happens when they are left out. The dartdoc
+  read like that of an optional method — "may return `null`" — while the
+  method is abstract, which is the wrong half of the story to tell first. The
+  rule across the families is one: exactly one branch before the ready one has
+  to be written, and it is the one that family is certain to reach. A `Scope`
+  always initializes a container, so `buildOnInitializing` is its required
+  one; a `LiteScope` initializes nothing of its own, so the branch it always
+  has is the wait. The `LiteScope` topic now says so, and says what moving a
+  screen from `Scope` to `LiteScope` trades for what.
+* A `LiteScope` that overrides `init()` and forgets `buildOnInitializing` or
+  `buildOnError` gets an `UnimplementedError` that names the scope and the
+  method instead of a bare one that names nothing. The error branch carries
+  the failure it was called for as well: without it that failure was replaced
+  on screen by the missing-builder error, and the reason the initialization
+  failed at all went with it.
 * The `AsyncScope` topic showed `hasChildren`, `childrenCount` and
   `waitForChildren` on a `scope` a reader has no way of getting hold of: the
   mixin that carries them sits on the element, and the elements of the five

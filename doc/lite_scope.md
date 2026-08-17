@@ -107,6 +107,17 @@ the frames spent waiting for a `scopeKey` and for the first event. Returning
 `null` from it is allowed only when `buildOnInitializing` is overridden, since
 something has to be on screen.
 
+That is why `buildOnWaiting` is the one builder a `LiteScope` must write, which
+is the other way round from `Scope` and the asynchronous families, where
+`buildOnInitializing` is the required one. The rule behind both is the same:
+**exactly one branch before the ready one has to be written, and it is the one
+the family is certain to reach.** A `Scope` always initializes a container, so
+it always has a progress branch and may skip the waiting one; a `LiteScope`
+initializes nothing of its own, so what it always has is the wait. Moving a
+screen from `Scope` to `LiteScope` therefore trades one required builder for
+another: `buildOnInitializing` and `buildOnError` become optional — keep them
+only if you override `init()` — and `buildOnWaiting` becomes required.
+
 `wrapState` wraps the ready branch alone, so a widget every branch needs is
 built inside each builder instead.
 
