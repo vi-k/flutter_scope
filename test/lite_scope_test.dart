@@ -41,7 +41,7 @@ void main() {
           var isClosed = false;
           unawaited(element.close().whenComplete(() => isClosed = true));
 
-          await _settle(tester, until: () => isClosed);
+          await settle(tester, until: () => isClosed);
 
           expect(
             isClosed,
@@ -72,7 +72,7 @@ void main() {
         await tester.pump();
         expect(find.byType(ScreenshotReplacer), findsOneWidget);
 
-        await _settle(tester, until: () => isClosed);
+        await settle(tester, until: () => isClosed);
 
         expect(
           isClosed,
@@ -111,7 +111,7 @@ void main() {
           reason: 'the probe must be able to see the barrier being installed',
         );
 
-        await _settle(tester, until: () => isClosed);
+        await settle(tester, until: () => isClosed);
         expect(isClosed, isTrue);
       },
     );
@@ -133,7 +133,7 @@ void main() {
         var isClosed = false;
         unawaited(element.close().whenComplete(() => isClosed = true));
 
-        await _settle(tester, until: () => isClosed);
+        await settle(tester, until: () => isClosed);
 
         expect(
           isClosed,
@@ -164,7 +164,7 @@ void main() {
         // at all.
         await tester.pumpWidget(_app(const SizedBox.shrink()));
 
-        await _settle(tester, until: () => isClosed);
+        await settle(tester, until: () => isClosed);
 
         expect(
           isClosed,
@@ -201,7 +201,7 @@ void main() {
         // the replacer releases.
         unawaited(element.close().whenComplete(() => isSecondClosed = true));
 
-        await _settle(tester, until: () => isFirstClosed && isSecondClosed);
+        await settle(tester, until: () => isFirstClosed && isSecondClosed);
 
         expect(
           isFirstClosed,
@@ -254,7 +254,7 @@ void main() {
           ),
         );
 
-        await _settle(tester, until: () => isFirstSettled && isSecondSettled);
+        await settle(tester, until: () => isFirstSettled && isSecondSettled);
 
         expect(isFirstSettled, isTrue, reason: 'both calls must settle');
         expect(isSecondSettled, isTrue, reason: 'both calls must settle');
@@ -281,7 +281,7 @@ void main() {
         await tester.pumpWidget(
           _app(const Offstage(child: _CloseScope(init: _becomesReady))),
         );
-        await _settle(
+        await settle(
           tester,
           until: () => _scopeOf(tester).state is AsyncScopeReady,
         );
@@ -290,7 +290,7 @@ void main() {
         var isClosed = false;
         unawaited(_scopeOf(tester).close().whenComplete(() => isClosed = true));
 
-        await _settle(tester, until: () => isClosed);
+        await settle(tester, until: () => isClosed);
 
         expect(
           isClosed,
@@ -339,7 +339,7 @@ void main() {
 
         // The disposal chain runs to `_model.dispose()`, and only then is the
         // stale post-frame callback drained by a real frame.
-        await _settle(tester, until: () => isClosed);
+        await settle(tester, until: () => isClosed);
 
         expect(isClosed, isTrue);
         expect(
@@ -419,7 +419,7 @@ void main() {
               .waitForChildren(timeout: const Duration(days: 1))
               .then((_) => waited = true),
         );
-        await _settle(tester, until: () => waited);
+        await settle(tester, until: () => waited);
 
         expect(
           waited,
@@ -470,7 +470,7 @@ void main() {
         final element = _scopeOf(tester);
         var isClosed = false;
         unawaited(element.close().whenComplete(() => isClosed = true));
-        await _settle(tester, until: () => isClosed);
+        await settle(tester, until: () => isClosed);
 
         expect(isClosed, isTrue);
         expect(coordinator.childrenCount, 0);
@@ -538,7 +538,7 @@ void main() {
           unawaited(
             _scopeOf(tester).close().whenComplete(() => isClosed = true),
           );
-          await _settle(tester, until: () => isClosed);
+          await settle(tester, until: () => isClosed);
 
           expect(isClosed, isTrue, reason: 'the key has been released');
           expect(tester.takeException(), isNull);
@@ -571,7 +571,7 @@ void main() {
           unawaited(
             _scopeOf(tester).close().whenComplete(() => isClosed = true),
           );
-          await _settle(tester, until: () => isClosed);
+          await settle(tester, until: () => isClosed);
 
           expect(isClosed, isTrue, reason: 'the key has been released');
           expect(tester.takeException(), isNull);
@@ -616,7 +616,7 @@ void main() {
           unawaited(
             _scopeOf(tester).close().whenComplete(() => isClosed = true),
           );
-          await _settle(tester, until: () => isClosed);
+          await settle(tester, until: () => isClosed);
 
           expect(isClosed, isFalse, reason: 'the disposal is still in flight');
           expect(tester.takeException(), isNull);
@@ -636,7 +636,7 @@ void main() {
           );
 
           gate.complete();
-          await _settle(tester, until: () => isClosed);
+          await settle(tester, until: () => isClosed);
           expect(isClosed, isTrue);
         },
         // The violation this test is written for is raised while the element
@@ -681,10 +681,10 @@ void main() {
               element = _scopeOf(tester);
               // The state only exists once the scope is ready: it is created
               // by the widget `buildOnReady()` mounts.
-              await _settle(tester, until: () => element.createdState != null);
+              await settle(tester, until: () => element.createdState != null);
 
               unawaited(element.close().whenComplete(() => isClosed = true));
-              await _settle(tester, until: () => isClosed);
+              await settle(tester, until: () => isClosed);
             },
             (error, stackTrace) => errors.add(error),
           );
@@ -730,7 +730,7 @@ void main() {
       var closed = false;
       unawaited(element.close().then((_) => closed = true));
 
-      // Not `_settle`: the failure is terminal, so every rebuild the disposal
+      // Not `settle`: the failure is terminal, so every rebuild the disposal
       // asks for reports it again, and a second pending exception is a test
       // failure of its own. This is about `close()` coming back at all.
       for (var i = 0; i < 20 && !closed; i++) {
@@ -814,10 +814,11 @@ void main() {
           },
         ),
       );
-      // The shared helper, not the `_settle` of this file: that one pumps
-      // without a duration, so the fake clock never moves and the zone timer
-      // behind `waitForChildren` never fires. The wait has to actually expire
-      // here, or the second stage never fails and the test asks nothing.
+      // The wait has to actually expire here, or the second stage never fails
+      // and the test asks nothing -- so this needs a helper that moves the
+      // fake clock as well as real time. The file used to carry a private
+      // copy that pumped without a duration, which moved neither, and this
+      // test had to say so; there is one helper now.
       await settle(tester, until: () => done);
 
       // Put back before the assertions, and not only by the tear-down: while
@@ -996,7 +997,7 @@ void main() {
               'have been called before the key was granted',
         );
 
-        await _settle(tester, until: () => element.state is AsyncScopeReady);
+        await settle(tester, until: () => element.state is AsyncScopeReady);
 
         expect(
           initCount,
@@ -1025,7 +1026,7 @@ void main() {
         var isClosed = false;
         unawaited(element.close().whenComplete(() => isClosed = true));
 
-        await _settle(tester, until: () => isClosed);
+        await settle(tester, until: () => isClosed);
 
         expect(isClosed, isTrue, reason: 'close() must still settle');
         expect(
@@ -1069,7 +1070,7 @@ void main() {
         );
 
         ui.Image? captured;
-        await _settle(
+        await settle(
           tester,
           until: () {
             final images = find.byType(RawImage);
@@ -1175,7 +1176,6 @@ _CloseScopeElement _scopeOf(WidgetTester tester) =>
       find.byType(_CloseScope, skipOffstage: false),
     );
 
-/// Pumps frames interleaved with slices of *real* time, until [until] holds or
 /// the budget runs out.
 ///
 /// Some of the futures involved here are only completed outside the test's
@@ -1184,18 +1184,6 @@ _CloseScopeElement _scopeOf(WidgetTester tester) =>
 /// chain of `AsyncScopeElementBase._performAsyncDispose` (the same `runAsync`
 /// workaround is documented in `async_scope_test.dart`) -- so plain `pump()`
 /// and `idle()` are not enough to let them make progress.
-Future<void> _settle(
-  WidgetTester tester, {
-  required bool Function() until,
-}) async {
-  for (var i = 0; i < 20 && !until(); i++) {
-    await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 10)),
-    );
-    await tester.pump();
-  }
-}
-
 /// Mounts a scope holding a `scopeKey` and returns while its
 /// `_performAsyncInit` is still parked on `AsyncScopeCoordinator.enter()`.
 ///

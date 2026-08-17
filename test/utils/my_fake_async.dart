@@ -2,8 +2,6 @@ import 'dart:async';
 import 'dart:collection';
 
 import 'package:fake_async/fake_async.dart';
-import 'package:flutter/foundation.dart' show debugPrint;
-import 'package:meta/meta.dart';
 
 T myFakeAsync<T>(
   T Function(MyFakeAsync async) callback, {
@@ -117,16 +115,6 @@ final class MyFakeAsync {
   /// See [FakeAsync.flushMicrotasks].
   void flushMicrotasks() => _fakeAsync.flushMicrotasks();
 
-  /// See [FakeAsync.flushTimers].
-  void flushTimers() {
-    _fakeAsync.flushTimers();
-  }
-
-  /// Обработать текущий event-loop (таймеры с длительностью 0).
-  void handleEventLoop() {
-    _fakeAsync.elapse(Duration.zero);
-  }
-
   bool flushNextTimer() {
     final nextTimer = _nextTimer();
     if (nextTimer == null) {
@@ -160,24 +148,6 @@ final class MyFakeAsync {
         );
       }
     }
-  }
-
-  /// Prints when the timers tracked by this wrapper are due.
-  @visibleForTesting
-  void printPendingTimers() {
-    debugPrint(_pendingTimers.map((e) => e.nextCall).toList().toString());
-  }
-
-  /// Prints the durations of the timers [FakeAsync] itself is holding.
-  ///
-  /// Not the same list as [pendingTimers]: this wrapper tracks the timers
-  /// created through its own zone, and telling the two apart is the whole
-  /// point of having both methods.
-  @visibleForTesting
-  void printFakeAsyncPendingTimers() {
-    debugPrint(
-      _fakeAsync.pendingTimers.map((e) => e.duration).toList().toString(),
-    );
   }
 
   MyFakeTimer? _nextTimer() {

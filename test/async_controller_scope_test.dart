@@ -107,8 +107,10 @@ void main() {
       expect(outcomes.first, isA<StateError>());
       expect(
         outcomes.last,
-        isA<StateError>(),
-        reason: 'a failure the first caller sees is not a success for the next',
+        same(outcomes.first),
+        reason: 'the same failure, and not merely a failure of the same kind: '
+            'the disposal is one per controller, so a second caller is told '
+            'about the disposal that happened, not about one of its own',
       );
     });
 

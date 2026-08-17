@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:scopo/scopo.dart';
 
 import 'utils/leaks.dart';
+import 'utils/settle.dart';
 
 void main() {
   setUp(_TestScopeElement.reset);
@@ -173,7 +174,7 @@ void main() {
         child: SizedBox.shrink(),
       ),
     );
-    await _settle(
+    await settle(
       tester,
       until: () => _TestScopeElement.disposalOrder.length == 2,
     );
@@ -202,7 +203,7 @@ void main() {
         child: SizedBox.shrink(),
       ),
     );
-    await _settle(
+    await settle(
       tester,
       until: () => _TestScopeElement.disposalOrder.length == 2,
     );
@@ -234,7 +235,7 @@ void main() {
         child: SizedBox.shrink(),
       ),
     );
-    await _settle(
+    await settle(
       tester,
       until: () => _TestScopeElement.disposalOrder.length == 2,
     );
@@ -258,7 +259,7 @@ void main() {
         child: SizedBox.shrink(),
       ),
     );
-    await _settle(
+    await settle(
       tester,
       until: () => _TestScopeElement.disposalOrder.isNotEmpty,
     );
@@ -288,13 +289,13 @@ void main() {
     unawaited(
       AsyncScopeCoordinator.waitForChildren(context).then((_) => waited = true),
     );
-    await _settle(tester, until: () => waited);
+    await settle(tester, until: () => waited);
 
     expect(waited, isFalse, reason: 'disposeAsync has not finished yet');
     expect(_TestScopeElement.disposalOrder, isEmpty);
 
     gate.complete();
-    await _settle(tester, until: () => waited);
+    await settle(tester, until: () => waited);
 
     expect(_TestScopeElement.disposalOrder, ['top']);
     expect(waited, isTrue);
@@ -331,7 +332,7 @@ void main() {
         onError: (Object failure) => error = failure,
       ),
     );
-    await _settle(tester, until: () => waited || error != null);
+    await settle(tester, until: () => waited || error != null);
 
     expect(error, isNull, reason: 'an expiry completes the future normally');
     expect(
@@ -359,7 +360,7 @@ void main() {
     );
 
     gate.complete();
-    await _settle(
+    await settle(
       tester,
       until: () => _TestScopeElement.disposalOrder.isNotEmpty,
     );
@@ -399,7 +400,7 @@ void main() {
         child: SizedBox.shrink(),
       ),
     );
-    await _settle(tester, until: () => waited || error != null);
+    await settle(tester, until: () => waited || error != null);
 
     expect(error, isNull, reason: 'an expiry completes the future normally');
     expect(waited, isTrue);
@@ -412,7 +413,7 @@ void main() {
     );
 
     gate.complete();
-    await _settle(
+    await settle(
       tester,
       until: () => _TestScopeElement.disposalOrder.isNotEmpty,
     );
@@ -452,7 +453,7 @@ void main() {
             onError: (Object failure) => error = failure,
           ),
     );
-    await _settle(tester, until: () => waited || error != null);
+    await settle(tester, until: () => waited || error != null);
 
     expect(error, isNull, reason: 'an expiry completes the future normally');
     expect(waited, isTrue);
@@ -510,7 +511,7 @@ void main() {
       // anything but a default of its own leaves this future unsettled.
       parent.waitForChildren().then((_) => waited = true),
     );
-    await _settle(tester, until: () => waited);
+    await settle(tester, until: () => waited);
 
     expect(
       waited,
@@ -601,7 +602,7 @@ void main() {
       // successor asks for the key while the holder is still inside
       // `disposeAsync`.
       await tester.pumpWidget(build(holder: false, successor: true));
-      await _settle(tester, until: () => _TestScopeElement.initialized > 1);
+      await settle(tester, until: () => _TestScopeElement.initialized > 1);
 
       final successor = tester.element<_TestScopeElement>(
         find.byKey(const ValueKey('successor')),
@@ -620,7 +621,7 @@ void main() {
       expect(_TestScopeElement.disposalOrder, isEmpty);
 
       gate.complete();
-      await _settle(tester, until: () => _TestScopeElement.initialized > 1);
+      await settle(tester, until: () => _TestScopeElement.initialized > 1);
 
       expect(
         _TestScopeElement.disposalOrder,
@@ -658,8 +659,8 @@ void main() {
       ),
     );
     // Real time, not the fake clock: the limit of this wait is a timer of the
-    // root zone, and a fake clock reaches no such timer. `_settle` moves both.
-    await _settle(tester, until: () => _TestScopeElement.initialized == 2);
+    // root zone, and a fake clock reaches no such timer. `settle` moves both.
+    await settle(tester, until: () => _TestScopeElement.initialized == 2);
     await tester.pumpAndSettle();
 
     final exception = tester.takeException();
@@ -739,8 +740,8 @@ void main() {
         await tester
             .pumpWidget(build(holder: true, waiter: true, successor: false));
         // Real time, not the fake clock: the limit is a timer of the root
-        // zone, and only `_settle` moves both.
-        await _settle(tester, until: () => errors.isNotEmpty);
+        // zone, and only `settle` moves both.
+        await settle(tester, until: () => errors.isNotEmpty);
       },
       (error, stackTrace) => errors.add(error),
     );
@@ -757,7 +758,7 @@ void main() {
     // must the waiter whose hook threw.
     await tester
         .pumpWidget(build(holder: false, waiter: false, successor: false));
-    await _settle(
+    await settle(
       tester,
       until: () => _TestScopeElement.disposalOrder.contains('holder'),
     );
@@ -798,7 +799,7 @@ void main() {
   // advance: an expiry cannot be what let it in.
   testWidgets('a scopeKey is given back by a scope stuck in initAsync',
       (tester) async {
-    // Short enough to expire inside `_settle`'s budget of real time.
+    // Short enough to expire inside `settle`'s budget of real time.
     ScopeConfig.defaultInitCancellationTimeout =
         const Duration(milliseconds: 50);
 
@@ -836,7 +837,7 @@ void main() {
     // moment the disposal gives up -- `disposeAsync()` is skipped on a scope
     // that never initialized -- so the settle runs its whole budget.
     await tester.pumpWidget(build(hung: false, successor: false));
-    await _settle(tester, until: () => false);
+    await settle(tester, until: () => false);
 
     expect(
       tester.takeException(),
@@ -849,7 +850,7 @@ void main() {
     );
 
     await tester.pumpWidget(build(hung: false, successor: true));
-    await _settle(
+    await settle(
       tester,
       until: () => _TestScopeElement.initialized == 2,
     );
@@ -883,7 +884,7 @@ void main() {
   // in because the key came back.
   testWidgets('a scopeKey is given back by a scope stuck in disposeAsync',
       (tester) async {
-    // Short enough to expire inside `_settle`'s budget of real time.
+    // Short enough to expire inside `settle`'s budget of real time.
     ScopeConfig.defaultDisposeAsyncTimeout = const Duration(milliseconds: 50);
 
     // Never completed: this is the hang under test.
@@ -914,7 +915,7 @@ void main() {
 
     // It leaves the tree and parks inside its own teardown.
     await tester.pumpWidget(build(hung: false, successor: false));
-    await _settle(tester, until: () => false);
+    await settle(tester, until: () => false);
 
     expect(
       tester.takeException(),
@@ -927,7 +928,7 @@ void main() {
     );
 
     await tester.pumpWidget(build(hung: false, successor: true));
-    await _settle(tester, until: () => _TestScopeElement.initialized == 2);
+    await settle(tester, until: () => _TestScopeElement.initialized == 2);
     await tester.pumpAndSettle();
 
     final successor =
@@ -1152,7 +1153,7 @@ void main() {
               .waitForChildren(timeout: const Duration(days: 1))
               .then((_) => waited = true),
         );
-        await _settle(tester, until: () => waited);
+        await settle(tester, until: () => waited);
 
         expect(
           waited,
@@ -1189,7 +1190,7 @@ void main() {
         child: SizedBox.shrink(),
       ),
     );
-    await _settle(
+    await settle(
       tester,
       until: () => _TestScopeElement.disposalOrder.contains('parent'),
     );
@@ -1208,7 +1209,7 @@ void main() {
     );
 
     gate.complete();
-    await _settle(
+    await settle(
       tester,
       until: () => _TestScopeElement.disposalOrder.length == 2,
     );
@@ -1256,13 +1257,12 @@ Future<void> _tearDownTree(WidgetTester tester, {required int scopes}) async {
   final before = _TestScopeElement.disposed;
 
   await tester.pumpWidget(const SizedBox.shrink());
-  await _settle(
+  await settle(
     tester,
     until: () => _TestScopeElement.disposed >= before + scopes,
   );
 }
 
-/// Pumps frames interleaved with slices of *real* time, until [until] holds or
 /// the budget runs out.
 ///
 /// The `StreamSubscription.cancel()` chain of
@@ -1270,18 +1270,6 @@ Future<void> _tearDownTree(WidgetTester tester, {required int scopes}) async {
 /// test's fake-async zone, so `pumpAndSettle()` alone never reaches
 /// `disposeAsync()`. The same workaround is documented in
 /// `async_scope_test.dart` and `lite_scope_test.dart`.
-Future<void> _settle(
-  WidgetTester tester, {
-  required bool Function() until,
-}) async {
-  for (var i = 0; i < 20 && !until(); i++) {
-    await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 10)),
-    );
-    await tester.pump(const Duration(milliseconds: 10));
-  }
-}
-
 final class _TestScope extends AsyncScopeCore<_TestScope, _TestScopeElement> {
   final Object? testKey;
   final String? disposeLabel;

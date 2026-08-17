@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:scopo/scopo.dart';
 
+import 'utils/settle.dart';
+
 void main() {
   group('AsyncScope post-frame callbacks', () {
     testWidgets(
@@ -170,7 +172,7 @@ void main() {
   // The assertions are about effects, never about timings: fake time in a
   // widget test advances instantly, so a wall-clock measurement proves nothing
   // about a stall. What proves it is that the parent's `waitForChildren` came
-  // back on its own (the timeout is set far beyond the budget `_settle` can
+  // back on its own (the timeout is set far beyond the budget `settle` can
   // advance, so an expiry cannot be what released it) and that the parent got
   // to `disposeAsync()` at all.
   group('AsyncScope failed initialization', () {
@@ -219,7 +221,7 @@ void main() {
             child: SizedBox.shrink(),
           ),
         );
-        await _settle(tester, until: () => false);
+        await settle(tester, until: () => false);
 
         expect(
           element.disposeCount,
@@ -280,7 +282,7 @@ void main() {
             child: SizedBox.shrink(),
           ),
         );
-        await _settle(tester, until: () => element.disposeCount == 1);
+        await settle(tester, until: () => element.disposeCount == 1);
 
         expect(element.disposeCount, 1);
       },
@@ -343,7 +345,7 @@ void main() {
             child: SizedBox.shrink(),
           ),
         );
-        await _settle(tester, until: () => parent.disposed);
+        await settle(tester, until: () => parent.disposed);
 
         expect(
           parent.disposed,
@@ -495,7 +497,7 @@ void main() {
                 child: SizedBox.shrink(),
               ),
             );
-            await _settle(tester, until: () => parent.disposed);
+            await settle(tester, until: () => parent.disposed);
           },
           (error, stackTrace) => errors.add(error),
         );
@@ -575,7 +577,7 @@ void main() {
                 child: SizedBox.shrink(),
               ),
             );
-            await _settle(tester, until: () => parent.disposed);
+            await settle(tester, until: () => parent.disposed);
           },
           (error, stackTrace) => errors.add(error),
         );
@@ -686,7 +688,7 @@ void main() {
             child: SizedBox.shrink(),
           ),
         );
-        await _settle(tester, until: () => false);
+        await settle(tester, until: () => false);
       },
     );
 
@@ -734,7 +736,7 @@ void main() {
             child: SizedBox.shrink(),
           ),
         );
-        await _settle(tester, until: () => false);
+        await settle(tester, until: () => false);
       },
     );
   });
@@ -849,7 +851,7 @@ void main() {
             child: SizedBox.shrink(),
           ),
         );
-        await _settle(tester, until: () => first.disposed && second.disposed);
+        await settle(tester, until: () => first.disposed && second.disposed);
       },
     );
 
@@ -882,7 +884,7 @@ void main() {
             child: SizedBox.shrink(),
           ),
         );
-        await _settle(tester, until: () => first.disposed);
+        await settle(tester, until: () => first.disposed);
 
         expect(
           first.disposed,
@@ -901,7 +903,7 @@ void main() {
         );
 
         held.complete();
-        await _settle(tester, until: () => second.disposed);
+        await settle(tester, until: () => second.disposed);
 
         expect(
           second.disposed,
@@ -945,7 +947,7 @@ void main() {
                 child: SizedBox.shrink(),
               ),
             );
-            await _settle(tester, until: () => parent.disposed);
+            await settle(tester, until: () => parent.disposed);
           },
           (error, stackTrace) => errors.add(error),
         );
@@ -1039,7 +1041,7 @@ void main() {
             child: SizedBox.shrink(),
           ),
         );
-        await _settle(tester, until: () => scope.disposeCount > 0);
+        await settle(tester, until: () => scope.disposeCount > 0);
 
         expect(
           scope.disposeCount,
@@ -1095,7 +1097,7 @@ void main() {
             child: SizedBox.shrink(),
           ),
         );
-        await _settle(tester, until: () => scope.disposeCount > 0);
+        await settle(tester, until: () => scope.disposeCount > 0);
 
         expect(
           scope.disposeCount,
@@ -1107,7 +1109,6 @@ void main() {
   });
 }
 
-/// Pumps frames interleaved with slices of *real* time, until [until] holds or
 /// the budget runs out.
 ///
 /// The `StreamSubscription.cancel()` chain of
@@ -1115,18 +1116,6 @@ void main() {
 /// test's fake-async zone, so `pumpAndSettle()` alone never reaches
 /// `disposeAsync()`. The same workaround is documented in
 /// `async_scope_coordinator_test.dart` and `lite_scope_test.dart`.
-Future<void> _settle(
-  WidgetTester tester, {
-  required bool Function() until,
-}) async {
-  for (var i = 0; i < 20 && !until(); i++) {
-    await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 10)),
-    );
-    await tester.pump(const Duration(milliseconds: 10));
-  }
-}
-
 /// A scope that can be moved between parents with a [GlobalKey], and can hold
 /// its own disposal open so that the parent awaiting it can be observed
 /// waiting.

@@ -144,6 +144,13 @@ void main() {
       await tester.pumpWidget(build(holder: false, successor: false));
       await settle(tester, until: () => false);
 
+      // Put back before the assertions, and not only by the tear-down: while
+      // it is in place a failing `expect` is reported through it and
+      // collected instead of ending the test, which leaves the run hanging
+      // rather than red. The test three blocks below says the same and does
+      // it; this one only said it.
+      FlutterError.onError = previousOnError;
+
       expect(
         reported.map((details) => details.exception),
         [

@@ -32,9 +32,18 @@ void main() {
       isEmpty,
       reason: 'the scope left before the initialization could finish',
     );
+    // Both indices are checked for existence first: `indexWhere` answers -1
+    // when it finds nothing, and `-1 < 0` is true -- so the comparison alone
+    // passed when `onUnmount` was not logged at all, which is the regression
+    // it exists to catch.
+    final unmountedAt = lines.indexWhere((line) => line.contains('onUnmount'));
+    final disposedAt = lines.indexWhere((line) => line.contains('disposed'));
+
+    expect(unmountedAt, isNonNegative, reason: 'the hook ran at all');
+    expect(disposedAt, isNonNegative, reason: 'and so did the release');
     expect(
-      lines.indexWhere((line) => line.contains('onUnmount')),
-      lessThan(lines.indexWhere((line) => line.contains('disposed'))),
+      unmountedAt,
+      lessThan(disposedAt),
       reason: 'the synchronous half of the teardown comes first',
     );
     expect(
