@@ -396,6 +396,72 @@ bounded by `ScreenshotReplacer.maxRetries` frames, after which `close()`
 proceeds and `buildOnClosing` runs over the live subtree instead of a frozen
 one.
 
+### An initialization that failed is torn down from the inside
+
+The six steps above are the ordinary path, the one where the scope became
+ready. An initialization that failed takes a different route, and the
+difference is worth reading twice, because half of the sequence simply does not
+happen:
+
+| what runs | ready, then gone | the initialization failed |
+| --- | --- | --- |
+| `ScopeState.onUnmount` | yes | **no state exists** |
+| `dep.unmount` | yes, for every dependency | yes, for every dependency |
+| `ScopeState.disposeAsync` | yes | **no state exists** |
+| `dep.dispose` | yes, in reverse | yes, in reverse |
+
+**The state is the part that never existed.** `createState()` runs when the
+ready branch is built, and a scope that failed never builds it — so there is
+nothing for `ScopeState.onUnmount` and `ScopeState.disposeAsync` to run on.
+This is the same rule the `AsyncScope` topic states for `disposeAsync` there,
+and it holds for the same reason: those hooks are written against a finished
+scope, and only the code that was doing the building knows how far it got.
+
+**The dependencies are the part that did exist**, and they are given back —
+just not by the element. The element is handed the container only together with
+`ScopeReady`, so on this path it never has one to reach for. The container
+tears itself down from inside its own initialization instead, which is what
+`ScopeAutoDependencies.autoDisposeOnError` is: `dep.unmount` for every
+dependency, then `dep.dispose` for everything that registered one, in reverse.
+The promise `dep.unmount` carries — exactly once, always before `dep.dispose` —
+holds on this route as it does on the other.
+
+Turning `autoDisposeOnError` off keeps the half-built tree for inspection and
+leaves the disposal to you. The unmounting still happens: a container held for
+inspection is holding subscriptions, and they should not wait for you to get
+round to it.
+
+Read across the families, that is one rule rather than three, though it is easy
+to read it as three. **A hook you wrote for a finished scope does not run on a
+scope that never finished; a thing the scope holds on your behalf is given back
+whatever happened.** `ScopeState.disposeAsync` here and `dispose` in the
+`AsyncScope` and `AsyncDataScope` topics are the first kind, and they are
+skipped. `dep.dispose` here, and `ScopeController.dispose` in the
+`AsyncControllerScope` topic — where the table says `init()` threw → disposed —
+are the second kind, and they run.
+
+So the rule of thumb is the one from the `AsyncScope` topic. Whatever the
+initialization takes before it fails, the initialization gives back — through
+`dep.dispose` when it was taken through `dep`, and by its own hand when it was
+not:
+
+```dart
+// Wrong: the connection is open and no hook will ever be handed it.
+initDependencies: (context) async* {
+  final connection = await Connection.open();
+  yield* somethingThatFails();
+}
+
+// Right: what this initializer took, this initializer registers.
+ScopeDependency buildDependencies(BuildContext context) => sequential('', [
+      dep('connection', (dep) async {
+        final connection = await Connection.open();
+        dep.dispose = connection.close;
+      }),
+      dep('somethingThatFails', (dep) async { /* ... */ }),
+    ]);
+```
+
 ## Access from the subtree
 
 The state is reached through the static helpers of `Scope`, which every scope
