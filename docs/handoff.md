@@ -122,33 +122,47 @@ await settle(tester, until: () => log.contains('state.disposeAsync'));
 `example/navigation_node` — 17) **трекер не включён**, своего
 `flutter_test_config.dart` у них нет. Эти сьюты и в гейт §6 не входят.
 
-### Волна 14, попутно: провальный путь описан в теме `Scope`
+### Волна 14, попутно: две инициализации `Scope` описаны в теме
 
 Не находка ревью, а вопрос владельца из бэклога: «`dispose`/`disposeAsync`
-вызывается не всегда — а какое правило у `unmount`/`onUnmount`?» Проверено
-пробой и записано в `doc/full_scope.md` (раздел «An initialization that failed
-is torn down from the inside») с зеркалом в `docs/ru/`.
+вызывается не всегда — а какое правило у `unmount`/`onUnmount`?» Записано в
+`doc/full_scope.md`, раздел «Two initializations, and what a failure of each
+leaves behind», с зеркалом в `docs/ru/`.
 
-Что показала проба — порядок при успехе и при провале, семейство `Scope`:
+Ключевое, что стоит помнить: **у `Scope` две инициализации, и провал каждой
+оставляет разное.** Контейнер (`initDependencies`) и собственная асинхронная
+половина состояния (`ScopeState.initAsync`). Проверено пробой:
 
 ```
-успех:  state.initAsync, state.onUnmount, dep.unmount a, dep.unmount b,
-        state.disposeAsync, dep.dispose b, dep.dispose a
-провал: dep.unmount a, dep.unmount b, dep.dispose b, dep.dispose a
+готов:            state.onUnmount, dep.unmount a, dep.unmount b,
+                  state.disposeAsync, dep.dispose b, dep.dispose a
+провал deps:      dep.unmount a, dep.unmount b, dep.dispose b, dep.dispose a
+провал initAsync: state.onUnmount, dep.unmount a, dep.unmount b,
+                  dep.dispose b, dep.dispose a
 ```
 
-То есть **состояния при провале не существует вовсе** — `createState()`
-выполняется при постройке готовой ветки, — поэтому ни `ScopeState.onUnmount`, ни
-`ScopeState.disposeAsync` выполнять не на чем. А зависимости разбираются, но
-**не элементом**: контейнер разбирает себя сам, изнутри инициализации, по
-`autoDisposeOnError`. Элементу контейнер вручают только вместе с `ScopeReady`.
+- **провалился `initDependencies` — состояния не существует вовсе.**
+  `createState()` выполняется при постройке готовой ветки, а её не построили;
+  выполнять `ScopeState.onUnmount`/`disposeAsync` не на чем;
+- **провалился `initAsync` состояния — состояние есть, его отмонтируют, но не
+  утилизируют.** `onUnmount()` идёт, `disposeAsync()` — нет: у состояния свой
+  `_initSucceeded`, и `LiteScopeCoreState._performAsyncDispose` выходит раньше;
+- **зависимости возвращают на любом пути**, но при провале `initDependencies`
+  — не элементом: контейнер разбирает себя сам, изнутри инициализации, по
+  `autoDisposeOnError`. Элементу контейнер вручают только вместе с
+  `ScopeReady`.
 
-Тремя темами это раньше описывалось (`async_scope`, `async_data_scope`,
-`async_controller_scope`), а темой `full_scope` — нет: её список из шести шагов
-читался как безусловный. Заодно записано, почему семейства отвечают по-разному,
-хотя правило одно: **хук, написанный про законченный скоуп, на незаконченном не
+Тремя темами половина этого раньше описывалась (`async_scope`,
+`async_data_scope`, `async_controller_scope`), а темой `full_scope` — нет: её
+список из шести шагов читался как безусловный и не различал, о какой из двух
+инициализаций речь. Заодно записано, почему семейства отвечают по-разному, хотя
+правило одно: **хук, написанный про законченную вещь, на незаконченной не
 выполняется; вещь, которую скоуп держит за вас, возвращается что бы ни
 случилось.**
+
+**Таблица темы закреплена тестами** — два новых в
+`test/scope_lifecycle_order_test.dart`, по одному на провальный путь; готовый
+путь там был закреплён и раньше. Оба проверены мутацией.
 
 **У каждой находки первых двух ревью в конце стоит вердикт** — что с ней
 сделано, в какой волне и каким коммитом, и чем находка ошибалась, если
@@ -244,7 +258,7 @@ leak-трекером** — см. раздел о волне 14 выше.
 
 | проверка | результат |
 | --- | --- |
-| `fvm flutter test` | **299 тестов, все зелёные, leak-трекер включён** |
+| `fvm flutter test` | **301 тест, все зелёные, leak-трекер включён** |
 | `fvm flutter analyze` (корень) | `No issues found!` |
 | `analyze` во всех трёх `example/*` | `No issues found!` в каждом |
 | `fvm dart format --set-exit-if-changed lib test` | 94 файла, 0 changed |

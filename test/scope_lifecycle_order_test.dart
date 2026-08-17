@@ -157,6 +157,68 @@ void main() {
       );
     });
 
+    // The two halves of a `Scope` initialize separately -- the container
+    // through `initDependencies`, the state through its own `initAsync` --
+    // and a failure of each leaves a different amount of the teardown behind.
+    // The `full_scope` topic states both as a table; these two pin it.
+    testWidgets('drops the state entirely when initDependencies failed',
+        (tester) async {
+      _Deps.failing = true;
+      addTearDown(() => _Deps.failing = false);
+
+      await runZonedGuarded(
+        () async {
+          await tester.pumpWidget(const _DepHost());
+          await tester.pumpAndSettle();
+          tester.takeException();
+
+          await tester.pumpWidget(const SizedBox.shrink());
+          await settle(tester, until: () => _order.contains('dep.dispose'));
+          tester.takeException();
+        },
+        (_, __) {},
+      );
+
+      expect(
+        _order,
+        ['dep.unmount', 'dep.dispose'],
+        reason: 'the ready branch was never built, so `createState()` never '
+            'ran and there is no state for `onUnmount`/`disposeAsync` to run '
+            'on -- while the dependencies, which did exist, are still given '
+            'back, by the container tearing itself down from inside its own '
+            'initialization',
+      );
+    });
+
+    testWidgets(
+        'unmounts but does not dispose of a state whose initAsync '
+        'failed', (tester) async {
+      _DepState.failing = true;
+      addTearDown(() => _DepState.failing = false);
+
+      await runZonedGuarded(
+        () async {
+          await tester.pumpWidget(const _DepHost());
+          await tester.pumpAndSettle();
+          tester.takeException();
+
+          await tester.pumpWidget(const SizedBox.shrink());
+          await settle(tester, until: () => _order.contains('dep.dispose'));
+          tester.takeException();
+        },
+        (_, __) {},
+      );
+
+      expect(
+        _order,
+        ['state.onUnmount', 'dep.unmount', 'dep.dispose'],
+        reason: 'the state exists and may already hold a subscription, so the '
+            'synchronous half runs; `disposeAsync` is written against a state '
+            'that finished initializing and this one did not, so it is '
+            'skipped -- the same rule as for the scope itself, one level down',
+      );
+    });
+
     testWidgets('of an AsyncScope still precedes its disposal', (tester) async {
       await tester.pumpWidget(
         Directionality(
@@ -221,12 +283,19 @@ final class _DepScope extends Scope<_DepScope, _Deps, _DepState> {
 }
 
 final class _Deps extends ScopeAutoDependencies<_Deps, BuildContext> {
+  /// Makes the one dependency fail *after* registering its teardown, which is
+  /// the position the promise is about.
+  static bool failing = false;
+
   @override
   ScopeDependency buildDependencies(BuildContext context) => sequential('', [
         dep('a', (dep) {
           dep
             ..unmount = (() => _order.add('dep.unmount'))
             ..dispose = (() => _order.add('dep.dispose'));
+          if (failing) {
+            throw StateError('dependency a failed');
+          }
         }),
       ]);
 }
@@ -234,10 +303,21 @@ final class _Deps extends ScopeAutoDependencies<_Deps, BuildContext> {
 final class _DepState extends ScopeState<_DepScope, _Deps, _DepState> {
   static _DepState? instance;
 
+  /// Makes the state's own asynchronous half fail, which is a different
+  /// failure from the container's and has a different answer.
+  static bool failing = false;
+
   @override
   void initState() {
     super.initState();
     instance = this;
+  }
+
+  @override
+  FutureOr<void> initAsync() {
+    if (failing) {
+      throw StateError('state initAsync failed');
+    }
   }
 
   @override
