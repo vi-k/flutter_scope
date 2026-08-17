@@ -9,7 +9,7 @@ final rootNodeLesson = Lesson(
   title: '5. isRoot keeps a pop at home',
   summary: 'A pop the node cannot handle: forwarded, or stopped here',
   explanation: const [
-    'Call pop() on the node\'s first page and there is nothing left inside to '
+    "Call pop() on the node's first page and there is nothing left inside to "
         'close. An ordinary node forwards that pop to the Navigator above it, '
         'so the screen around the node closes instead.',
     'A node marked isRoot: true keeps it. The pop finds nothing to do and '

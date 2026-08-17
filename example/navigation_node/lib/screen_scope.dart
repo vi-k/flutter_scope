@@ -64,8 +64,8 @@ class ScopeReadout extends StatelessWidget {
           Flexible(
             child: Text(
               found
-                  ? 'ticket ${ticket.number} — the screen\'s scope is right here'
-                  : 'no ticket — the screen\'s scope is out of reach',
+                  ? "ticket ${ticket.number} — the screen's scope is right here"
+                  : "no ticket — the screen's scope is out of reach",
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: found ? null : theme.colorScheme.error,
               ),

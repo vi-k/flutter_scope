@@ -51,7 +51,7 @@ class SystemBackButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final icon = const Icon(Icons.arrow_back);
+    const icon = Icon(Icons.arrow_back);
     const label = Text('System back');
 
     return compact

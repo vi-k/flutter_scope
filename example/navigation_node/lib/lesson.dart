@@ -197,9 +197,9 @@ class PushButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) => FilledButton.tonal(
         onPressed: () {
-          final journal = JournalScope.of(context, listen: false);
+          final journal = JournalScope.of(context, listen: false)
+            ..log('pushed "$pageName"');
 
-          journal.log('pushed "$pageName"');
           Navigator.of(context)
               .push<void>(MaterialPageRoute<void>(builder: builder))
               .then((_) => journal.log('"$pageName" was closed'));

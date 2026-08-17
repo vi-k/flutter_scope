@@ -12,15 +12,15 @@ final dialogInsideLesson = Lesson(
   summary: 'showDialog with useRootNavigator: false belongs to the node',
   explanation: const [
     'showDialog pushes a route like any other, and by default it pushes it on '
-        'the application\'s Navigator — above the node, out of its reach and '
+        "the application's Navigator — above the node, out of its reach and "
         'out of reach of everything the screen provides.',
     'Pass useRootNavigator: false and the dialog goes to the nearest Navigator '
-        'instead, which is the node\'s. It is then built under the screen, so '
-        'the screen\'s scope is still there to read; and the system back closes '
+        "instead, which is the node's. It is then built under the screen, so "
+        "the screen's scope is still there to read; and the system back closes "
         'it and stops there, leaving the screen underneath alone.',
   ],
   instruction: 'open both dialogs in turn: each says whether it can still see '
-      'the screen\'s ticket. Close them with System back and watch the line '
+      "the screen's ticket. Close them with System back and watch the line "
       'above the journal.',
   stage: (context) => const _Stage(),
 );

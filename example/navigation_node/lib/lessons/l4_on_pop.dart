@@ -10,7 +10,7 @@ final onPopLesson = Lesson(
   summary: 'Asked once, when the node has nothing of its own left to close',
   explanation: const [
     'While the node holds a page of its own, the back is spent inside and '
-        'onPop never hears about it. Empty the node\'s stack and the next back '
+        "onPop never hears about it. Empty the node's stack and the next back "
         'is the one that would leave: that is when onPop is asked.',
     'Return false and the screen stays. Return true and the pop goes on '
         'outwards — here that closes the lesson and returns to the list. It is '

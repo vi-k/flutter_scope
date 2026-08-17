@@ -10,7 +10,7 @@ final whyANodeLesson = Lesson(
   summary: 'Whether a pushed page can still reach the screen it came from',
   explanation: const [
     'A push always goes to the nearest Navigator above it. Without a node that '
-        'is the application\'s own one, which sits above every screen — so the '
+        "is the application's own one, which sits above every screen — so the "
         'new page is built above the screen too, and whatever the screen set up '
         'around itself is no longer among its ancestors.',
     'Both stages below stand under the same scope, a screen holding onto ticket '
@@ -53,11 +53,11 @@ class _WithNode extends StatelessWidget {
   const _WithNode();
 
   @override
-  Widget build(BuildContext context) => Stage(
+  Widget build(BuildContext context) => const Stage(
         label: 'NavigationNode — pushes stay in here',
         isNode: true,
         child: NavigationNode(
-          child: const NodeHome(
+          child: NodeHome(
             title: 'first page of the node',
             child: _StageBody(
               pushLabel: 'Push a page',

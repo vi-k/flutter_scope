@@ -32,7 +32,7 @@ void main() {
   setLogPrinter(ScopeLogLevel.info, ansi.Color256.rgb345);
   setLogPrinter(ScopeLogLevel.error, ansi.Color256.rgb400);
 
-  runApp(App(title: 'scopo minimal demo'));
+  runApp(const App(title: 'scopo minimal demo'));
 }
 
 /// [App] scope.
@@ -201,7 +201,7 @@ final class AppState extends ScopeState<App, AppDependencies, AppState> {
 
   @override
   Widget build(BuildContext context) {
-    return HomeScreen();
+    return const HomeScreen();
   }
 }
 
@@ -265,7 +265,7 @@ class HomeScreen extends StatelessWidget {
           // Access [AppState] and call [AppState.increment].
           App.of(context).increment();
         },
-        child: Icon(Icons.add),
+        child: const Icon(Icons.add),
       ),
     );
   }

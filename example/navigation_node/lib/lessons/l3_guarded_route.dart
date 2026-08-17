@@ -12,7 +12,7 @@ final guardedRouteLesson = Lesson(
     'The node does not close its top page itself. It asks that page, the same '
         'way any Navigator does, so a PopScope the page put up is asked too.',
     'A page that answers "no" stays. The back is spent — it does not fall '
-        'through to the node\'s own policy, and nothing outside moves either.',
+        "through to the node's own policy, and nothing outside moves either.",
   ],
   instruction: 'push the guarded page and press System back a few times. Then '
       'let it through with the switch and press again.',
@@ -23,11 +23,11 @@ class _Stage extends StatelessWidget {
   const _Stage();
 
   @override
-  Widget build(BuildContext context) => Stage(
+  Widget build(BuildContext context) => const Stage(
         label: 'NavigationNode',
         isNode: true,
         child: NavigationNode(
-          child: const NodeHome(
+          child: NodeHome(
             title: 'first page of the node',
             child: ScrollIfTight(
               child: PushButton(

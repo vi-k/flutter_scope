@@ -20,13 +20,11 @@ Future<void> openLesson(WidgetTester tester, String title) async {
 void main() {
   group('on a small window', () {
     setUp(() {
-      final view =
-          TestWidgetsFlutterBinding.instance.platformDispatcher.views.first;
-
       // A node's dialog is drawn inside the node's own box, which is a slice of
       // an already small window. Anything that does not fit throws here.
-      view.physicalSize = const Size(800, 600);
-      view.devicePixelRatio = 1.0;
+      TestWidgetsFlutterBinding.instance.platformDispatcher.views.first
+        ..physicalSize = const Size(800, 600)
+        ..devicePixelRatio = 1.0;
     });
 
     testWidgets('lesson 2: both dialogs fit inside the node', (tester) async {
@@ -68,7 +66,7 @@ void main() {
       expect(
         nodeBox.expandToInclude(tester.getRect(dialog)),
         nodeBox,
-        reason: 'and being the node\'s means being drawn in the node\'s box, '
+        reason: "and being the node's means being drawn in the node's box, "
             'which is a slice of an already small window',
       );
 
@@ -78,13 +76,11 @@ void main() {
   });
 
   setUp(() {
-    final view =
-        TestWidgetsFlutterBinding.instance.platformDispatcher.views.first;
-
     // Two lessons put two stages side by side; the default 800x600 is not
     // enough for their buttons to be hit-testable.
-    view.physicalSize = const Size(1400, 1600);
-    view.devicePixelRatio = 1.0;
+    TestWidgetsFlutterBinding.instance.platformDispatcher.views.first
+      ..physicalSize = const Size(1400, 1600)
+      ..devicePixelRatio = 1.0;
   });
 
   for (final lesson in lessons) {
