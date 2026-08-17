@@ -196,6 +196,37 @@ void main() {
       );
     });
 
+    // Every test above pushes the node as a second route, so the pop it
+    // forwards always has a route to take. On the first route of the
+    // application there is none, and the navigator above must be left alone
+    // rather than emptied.
+    testWidgets('an ordinary node on the first route keeps the application',
+        (tester) async {
+      var calls = 0;
+
+      await tester.pumpWidget(
+        _FirstRouteNodeHost(
+          onPop: (context, result) {
+            calls++;
+
+            return true;
+          },
+        ),
+      );
+
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+
+      expect(calls, 1, reason: 'the hook is asked here as anywhere else');
+      expect(
+        find.text('node content'),
+        findsOneWidget,
+        reason: 'there is nothing outside the node to let the pop through to, '
+            'and taking the only route of the application navigator leaves a '
+            'blank screen',
+      );
+    });
+
     // The two parameters had never been used together. `isRoot` says the node
     // keeps a pop to itself, and `pop()` honours that; the system back path
     // reaches the navigator above by a different line, and nothing checked
@@ -749,6 +780,19 @@ final class _OnPopHost extends StatelessWidget {
             ),
           ),
         ),
+      );
+}
+
+/// Puts an ordinary node straight on the first route of the application, where
+/// a pop that leaves the node has nowhere to land.
+final class _FirstRouteNodeHost extends StatelessWidget {
+  final FutureOr<bool> Function(BuildContext context, Object? result)? onPop;
+
+  const _FirstRouteNodeHost({this.onPop});
+
+  @override
+  Widget build(BuildContext context) => MaterialApp(
+        home: NavigationNode(onPop: onPop, child: const _OnPopNodeContent()),
       );
 }
 

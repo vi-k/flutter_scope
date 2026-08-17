@@ -147,12 +147,30 @@ final class _NavigationNodeState extends State<NavigationNode> {
   /// The hook is still asked — it is where an application decides what its own
   /// outermost back means, and it may act on the press itself. What a root node
   /// no longer does is leave.
+  ///
+  /// A pop is handed over only when the navigator above has a route to give up.
+  /// [NavigatorState.pop] takes the last one it holds without asking whether it
+  /// is the last, so a node placed on the first route of the application used to
+  /// empty the application's own navigator: a blank screen, and an assertion of
+  /// the framework on the frame after it.
   void _popOutside(Object? result) {
     if (widget.isRoot) {
       return;
     }
 
-    _navigatorKey.currentState?.previous?.pop(result);
+    final previous = _navigatorKey.currentState?.previous;
+
+    // `maybePop` would be the natural way to ask, and it is what the imperative
+    // path uses. Not here: the node's own `PopScope` is registered on the very
+    // route being asked about, so the navigator above hands the press straight
+    // back to this node, which decides again, and so on without end. Asking the
+    // navigator instead settles the one thing this path gets wrong. What it
+    // leaves is a `PopScope` the application put around the node: `pop` walks
+    // past it. That is the older, narrower defect, recorded in
+    // `docs/handoff.md`.
+    if (previous != null && previous.canPop()) {
+      previous.pop(result);
+    }
   }
 
   @override

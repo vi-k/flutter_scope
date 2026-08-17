@@ -114,6 +114,11 @@ arrow of an `AppBar`, say — leaves the node instead of taking that page away: 
 ordinary node hands the pop to the navigator above it, as often as it is asked,
 and a root node keeps it and does nothing.
 
+Nor does it empty the navigator above. A node placed on the first route of the
+application has nothing outside it to hand a pop to, and hands over nothing —
+whichever way the pop reached it. `isRoot` is still worth setting there: it says
+so at the node rather than leaving it to be discovered from the stack.
+
 `PreviousNavigatorExtension.previous` gives the navigator above a given one,
 which is how a node forwards a pop it cannot handle itself.
 

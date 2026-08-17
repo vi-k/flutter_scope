@@ -189,6 +189,13 @@
   took the last route of the application's own navigator and left a blank
   screen. The hook is still asked, since that is where an application decides
   what its own outermost back means, but a `true` no longer leaves the node.
+* Fix an ordinary `NavigationNode` on the first route emptying the application's
+  own navigator. The fix above was made for `isRoot` and stopped there, while
+  the line it left in place — a plain `pop` on the navigator above — takes the
+  last route that navigator holds without asking whether it is the last. A node
+  placed as `home` with an `onPop` that allowed the pop therefore left a blank
+  screen, and an assertion of the framework on the frame after it. The pop is
+  now handed over only when the navigator above has a route to give up.
 * A notification no longer rebuilds the widgets of the subtree it is not
   rebuilding. "Skips rebuilding the whole subtree" was true of the elements and
   not of the widgets: `ComponentElement.performRebuild` calls `build()`
