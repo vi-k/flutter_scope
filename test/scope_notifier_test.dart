@@ -299,6 +299,111 @@ void main() {
       expect(find.text('101'), findsOneWidget);
     },
   );
+
+  // `notifyDependents()` is what the scope's own subscription to the model
+  // calls, and it sets a flag that the *next* rebuild reads. Nothing stopped
+  // it from being set in the middle of the current one: a `builder` that
+  // touches the model synchronously -- a lazy load, a default being filled in
+  // -- notifies while the scope is building, `markNeedsBuild()` is swallowed
+  // for an element that is already building, and the flag was still up by the
+  // time `updateChild` ran. `updateChild` then kept "the child from the last
+  // real build", of which there was none.
+  //
+  // In debug the framework raises two derived assertions that name neither
+  // the scope nor the reason. In release there are no assertions at all and
+  // the subtree is simply not there.
+  testWidgets(
+    'a model notified from inside the builder still mounts the subtree',
+    (tester) async {
+      final counter = _Counter();
+      addTearDown(counter.dispose);
+
+      await tester.pumpWidget(
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: ScopeNotifier<_Counter>.value(
+            value: counter,
+            builder: (context) {
+              // The notification happens while this very scope is building.
+              counter.increment();
+
+              return const _CounterValueView();
+            },
+          ),
+        ),
+      );
+
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: 'a notification made during the build is a thing user code '
+            'does; it must not break the frame',
+      );
+      expect(
+        find.byType(_CounterValueView),
+        findsOneWidget,
+        reason: 'the subtree the builder returned has to be mounted -- the '
+            'notify-only path is about *later* rebuilds, and there is no '
+            'earlier build whose child could be kept instead',
+      );
+    },
+  );
+
+  // The other half of the same defect. Marking the element dirty from inside
+  // its own build does nothing at all: the framework's assertion lets the
+  // self case through and `if (dirty) return;` swallows the call. So the
+  // notification is not merely late, it is gone -- unless something asks for
+  // the rebuild once the build is over.
+  //
+  // Showing that needs a dependent the subtree walk will *not* rebuild on its
+  // own, or the assertion passes whether the notification arrived or not: the
+  // child here is a `const` instance, so `updateChild` returns it untouched,
+  // and the selector check that runs on `update` happens before the builder
+  // increments. Being notified is the only way left for it to learn.
+  testWidgets(
+    'a model notified from inside the builder does not lose the notification',
+    (tester) async {
+      final counter = _Counter();
+      addTearDown(counter.dispose);
+      var notifyOnBuild = false;
+
+      Widget build(String tag) => Directionality(
+            textDirection: TextDirection.ltr,
+            child: ScopeNotifier<_Counter>.value(
+              tag: tag,
+              value: counter,
+              builder: (context) {
+                if (notifyOnBuild) {
+                  counter.increment();
+                }
+
+                return const _CounterValueView();
+              },
+            ),
+          );
+
+      await tester.pumpWidget(build('first'));
+      expect(find.text('value: 0'), findsOneWidget);
+
+      final buildsBefore = _CounterValueView.buildCount;
+
+      notifyOnBuild = true;
+      await tester.pumpWidget(build('second'));
+      await tester.pumpAndSettle();
+
+      expect(
+        _CounterValueView.buildCount,
+        greaterThan(buildsBefore),
+        reason: 'the dependent has to be rebuilt by the notification: the '
+            'walk itself reuses the const child and leaves it alone',
+      );
+      expect(
+        find.text('value: 1'),
+        findsOneWidget,
+        reason: 'a notification made during a build is deferred, not dropped',
+      );
+    },
+  );
 }
 
 /// A model whose equality is by name, so two of them can be equal and still be

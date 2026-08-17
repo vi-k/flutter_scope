@@ -134,11 +134,30 @@ abstract base class ScopeWidgetElementBase<W extends ScopeWidgetCore<W, E>,
   /// field.
   _ScopeDependencies<E>? _selfDependencies;
 
-  /// Whether the next rebuild ([performRebuild]) should only notify the
-  /// dependents instead of rebuilding the subtree.
-  bool _shouldOnlyNotify = false;
+  /// Whether a notification is waiting for a rebuild to carry it.
+  ///
+  /// Written by [notifyDependents] and read once, at the top of the next
+  /// [performRebuild]. It is deliberately *not* what [updateChild] and
+  /// [buildChild] consult: a notification made while this element is building
+  /// belongs to the rebuild after this one, and letting it reach the rebuild
+  /// in progress left the subtree unmounted.
+  bool _notifyPending = false;
 
-  /// Whether the element must rebuild anyway, ignoring [_shouldOnlyNotify].
+  /// Whether the rebuild running right now is a notify-only one.
+  ///
+  /// Taken from [_notifyPending] at the top of [performRebuild] and put down
+  /// at the bottom of it, so it describes one rebuild and cannot be changed
+  /// from inside that rebuild.
+  bool _isNotifyOnlyRebuild = false;
+
+  /// Whether [performRebuild] is running on this element right now.
+  ///
+  /// A plain field rather than `SchedulerBinding.isBuilding`: this is about
+  /// *this* element, not about the phase, and unlike the binding's answer it
+  /// is the same in release as in debug.
+  bool _isRebuilding = false;
+
+  /// Whether the element must rebuild anyway, ignoring [_isNotifyOnlyRebuild].
   bool _forceRebuild = true;
 
   /// How far the one-shot [init] hook got.
@@ -371,8 +390,29 @@ abstract base class ScopeWidgetElementBase<W extends ScopeWidgetCore<W, E>,
   /// element dirty and notify the dependents from [performRebuild].
   @protected
   void notifyDependents() {
-    _shouldOnlyNotify = true;
-    markNeedsBuild();
+    _notifyPending = true;
+
+    if (_isRebuilding) {
+      // `markNeedsBuild()` on an element that is building right now does
+      // nothing: the framework's assertion lets the self case through, and
+      // `if (dirty) return;` swallows the call. Asking for the rebuild after
+      // the frame is what turns a lost notification into a late one.
+      //
+      // A model touched from inside `builder` is ordinary user code -- a lazy
+      // load, a default filled in on first read -- and this is the path it
+      // takes.
+      SchedulerBinding.instance
+        // The build may be one `runApp` drives outside a frame, and then
+        // nothing has asked for the frame this callback needs.
+        ..scheduleFrame()
+        ..addPostFrameCallback((_) {
+          if (mounted && _notifyPending) {
+            markNeedsBuild();
+          }
+        });
+    } else {
+      markNeedsBuild();
+    }
   }
 
   /// Rebuilds the subtree anyway when the parent updates the element while a
@@ -397,18 +437,33 @@ abstract base class ScopeWidgetElementBase<W extends ScopeWidgetCore<W, E>,
   ///    updating the element or the element depends on itself.
   @override
   void performRebuild() {
-    if (_shouldOnlyNotify) {
+    // Taken once, here, and put down at the end: everything this rebuild does
+    // reads `_isNotifyOnlyRebuild`, and `notifyDependents()` writes only to
+    // `_notifyPending`. Reading the same field for both let a notification
+    // made from inside `build()` turn the rebuild that was already running
+    // into a notify-only one -- `updateChild` then kept a child from an
+    // earlier real build, and on a first build there is none.
+    _isRebuilding = true;
+    if (_notifyPending) {
+      _notifyPending = false;
       notifyClients(widget);
-      _shouldOnlyNotify = !autoSelfDependence && !_forceRebuild;
+      _isNotifyOnlyRebuild = !autoSelfDependence && !_forceRebuild;
     }
-    super.performRebuild();
-    _forceRebuild = false;
-    _shouldOnlyNotify = false;
+
+    try {
+      super.performRebuild();
+    } finally {
+      _isRebuilding = false;
+      _forceRebuild = false;
+      _isNotifyOnlyRebuild = false;
+    }
   }
 
   @override
   Element? updateChild(Element? child, Widget? newWidget, Object? newSlot) =>
-      _shouldOnlyNotify ? child : super.updateChild(child, newWidget, newSlot);
+      _isNotifyOnlyRebuild
+          ? child
+          : super.updateChild(child, newWidget, newSlot);
 
   /// Runs [init] once, inside the build error boundary of
   /// [ComponentElement.performRebuild], and only then builds the subtree.
@@ -459,7 +514,7 @@ abstract base class ScopeWidgetElementBase<W extends ScopeWidgetCore<W, E>,
     // returned was thrown away unlooked at. For a scope notified once a frame
     // that is the whole widget graph of its subtree, built and dropped, once
     // a frame.
-    if (_shouldOnlyNotify) {
+    if (_isNotifyOnlyRebuild) {
       if (_builtChild case final builtChild?) {
         return builtChild;
       }

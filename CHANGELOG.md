@@ -26,6 +26,19 @@
   is now released either way, once. A dependency in that position therefore
   reports `disposed` rather than `cancelled` when it carried no errors of its
   own.
+* Fix a scope left with no subtree when its own build notified its dependents.
+  A `builder` that touches the model synchronously — a lazy load, a default
+  filled in on first read — notifies while the scope is building, and the flag
+  that notification raises was read by the rebuild already in progress: the
+  subtree was treated as one to keep rather than one to mount, and there was
+  none to keep. In debug this surfaced as two framework assertions naming
+  neither the scope nor the cause; in release the subtree was simply absent.
+  The flag a notification raises and the flag the current rebuild reads are
+  now separate, so a notification can no longer reach into the rebuild that is
+  running. Such a notification is also no longer lost: marking an element that
+  is already building as needing a build does nothing, so the rebuild is asked
+  for once the frame is over, and the dependents hear about the change a frame
+  later instead of never.
 * Fix `unmount` being skipped for a dependency whose scope failed to
   initialize, while `dispose` ran. The hook is documented to run exactly once
   and always before `dispose`, whichever way the scope goes, but the container
