@@ -118,10 +118,12 @@ arrow of an `AppBar`, say — leaves the node instead of taking that page away: 
 ordinary node hands the pop to the navigator above it, as often as it is asked,
 and a root node keeps it and does nothing.
 
-Nor does it empty the navigator above. A node placed on the first route of the
-application has nothing outside it to hand a pop to, and hands over nothing —
-whichever way the pop reached it. `isRoot` is still worth setting there: it says
-so at the node rather than leaving it to be discovered from the stack.
+Nor does it empty the navigator above, or overrule it. Handing a pop over is
+asking, not taking: a node placed on the first route of the application has
+nothing outside it to hand a pop to and hands over nothing, and a `PopScope` the
+application put around the node is answered by the application, not walked past.
+`isRoot` is still worth setting on a node that is the first route: it says so at
+the node rather than leaving it to be discovered from the stack.
 
 An `AppBar` on the node's first page draws a back arrow, and pressing it leaves
 the node. That is the node's doing: the page is the first route of its own

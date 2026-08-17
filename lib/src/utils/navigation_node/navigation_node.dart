@@ -74,6 +74,10 @@ final class _NavigationNodeState extends State<NavigationNode> {
 
   late final _navigatorKey = _declaredKey ?? GlobalKey<NodeNavigatorState>();
 
+  /// Whether the node is standing aside while it asks the route it stands on
+  /// what a pop there would do. Raised for the length of one read.
+  bool _forwarding = false;
+
   /// Whether an [NavigationNode.onPop] is still deciding about a press.
   bool _deciding = false;
 
@@ -131,7 +135,7 @@ final class _NavigationNodeState extends State<NavigationNode> {
               return;
             }
 
-            _popOutside(result);
+            _popOutside(route, result);
           },
           // A question that falls over -- a confirmation dialog raising, most
           // likely -- fails inside a chain nobody holds, and the failure then
@@ -155,7 +159,7 @@ final class _NavigationNodeState extends State<NavigationNode> {
         );
       case final bool? canPop:
         if (canPop ?? true) {
-          _popOutside(result);
+          _popOutside(ModalRoute.of(outerContext), result);
         }
     }
   }
@@ -179,22 +183,28 @@ final class _NavigationNodeState extends State<NavigationNode> {
   /// is the last, so a node placed on the first route of the application used to
   /// empty the application's own navigator: a blank screen, and an assertion of
   /// the framework on the frame after it.
-  void _popOutside(Object? result) {
+  void _popOutside(ModalRoute<dynamic>? route, Object? result) {
     if (widget.isRoot) {
       return;
     }
 
     final previous = _navigatorKey.currentState?.previous;
+    if (previous == null || route == null) {
+      return;
+    }
 
-    // `maybePop` would be the natural way to ask, and it is what the imperative
-    // path uses. Not here: the node's own `PopEntry` is registered on the very
-    // route being asked about, so the navigator above hands the press straight
-    // back to this node, which decides again, and so on without end. Asking the
-    // navigator instead settles the one thing this path gets wrong. What it
-    // leaves is a `PopScope` the application put around the node: `pop` walks
-    // past it. That is the older, narrower defect, recorded in
-    // `docs/handoff.md`.
-    if (previous != null && previous.canPop()) {
+    // The route is asked rather than told, and it is asked with the node's own
+    // answer stood aside -- the node's entry is registered on this very route,
+    // and it has already had its say. What is left is what the node has no
+    // business answering for itself: a `PopScope` the application put around
+    // the node, and whether there is a route to give up at all. `maybePop`
+    // would ask the same question by telling the route the pop was refused,
+    // and the application would then hear one press as two.
+    _forwarding = true;
+    final disposition = route.popDisposition;
+    _forwarding = false;
+
+    if (disposition == RoutePopDisposition.pop) {
       previous.pop(result);
     }
   }
@@ -271,16 +281,17 @@ final class _NodeBackDispatcherState extends State<_NodeBackDispatcher>
   /// Whether a system back arriving at the route this node stands on is none of
   /// the node's business.
   bool get _canPopOutside =>
-      widget.node.widget.onPop == null &&
-      !_innerCanPop &&
-      !widget.node._handlesBackInside;
+      widget.node._forwarding ||
+      (widget.node.widget.onPop == null &&
+          !_innerCanPop &&
+          !widget.node._handlesBackInside);
 
   @override
   void onPopInvoked(bool didPop) => throw UnimplementedError();
 
   @override
   void onPopInvokedWithResult(bool didPop, Object? result) {
-    if (didPop) {
+    if (didPop || widget.node._forwarding) {
       return;
     }
 

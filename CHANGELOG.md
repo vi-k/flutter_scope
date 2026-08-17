@@ -194,8 +194,17 @@
   the line it left in place — a plain `pop` on the navigator above — takes the
   last route that navigator holds without asking whether it is the last. A node
   placed as `home` with an `onPop` that allowed the pop therefore left a blank
-  screen, and an assertion of the framework on the frame after it. The pop is
-  now handed over only when the navigator above has a route to give up.
+  screen, and an assertion of the framework on the frame after it.
+* Fix that same forwarding walking past a `PopScope` the application put around
+  the node: a route the application guarded, and refused a pop for, was taken
+  anyway. Both defects are one line, and the node now asks the route it stands
+  on what a pop there would do instead of telling it. It asks with its own
+  answer stood aside for the length of the question — the node's own entry is
+  registered on that very route and has already had its say — so what is left is
+  what the node has no business answering for itself: the application's guard,
+  and whether there is a route to give up at all. Asking rather than telling is
+  also why an application still hears one press as one: a `maybePop` of the
+  node's own would report a second refusal to every `PopScope` on that route.
 * Fix system back taking the whole route instead of closing a `Drawer`, a
   `showBottomSheet` or anything else a `NavigationNode`'s page opened with
   `addLocalHistoryEntry`. None of those change a navigator's stack, and nothing

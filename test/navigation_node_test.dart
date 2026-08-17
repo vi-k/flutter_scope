@@ -315,6 +315,50 @@ void main() {
       );
     });
 
+    // An application may guard the route it puts a node on — "are you sure you
+    // want to leave this screen". A node hands a pop over; it does not take
+    // one, and a guard on the way out is not the node's to overrule.
+    testWidgets('an application PopScope over the node keeps its route', (
+      tester,
+    ) async {
+      var refusals = 0;
+
+      await tester.pumpWidget(_AppGuardedHost(onRefused: () => refusals++));
+      await tester.tap(find.text('go'));
+      await tester.pumpAndSettle();
+
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('node content'),
+        findsOneWidget,
+        reason: 'the application refused the pop, and the node was handing it '
+            'over rather than taking it',
+      );
+      expect(
+        refusals,
+        1,
+        reason: 'and the application hears one press as one: the node asks the '
+            'route what a pop would do, which tells nobody anything, where a '
+            'maybePop of its own would report a second refusal',
+      );
+    });
+
+    testWidgets('the only page of a node can guard itself', (tester) async {
+      await tester.pumpWidget(const _InnerGuardedHost());
+
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('node content'),
+        findsOneWidget,
+        reason: "a PopScope on the node's own page is inside the node, and "
+            'the node asks its navigator before it decides anything outside',
+      );
+    });
+
     // The two parameters had never been used together. `isRoot` says the node
     // keeps a pop to itself, and `pop()` honours that; the system back path
     // reaches the navigator above by a different line, and nothing checked
@@ -890,6 +934,54 @@ final class _OnPopHost extends StatelessWidget {
               ),
             ),
           ),
+        ),
+      );
+}
+
+/// The application guards the route it puts the node on, and refuses.
+final class _AppGuardedHost extends StatelessWidget {
+  final VoidCallback onRefused;
+
+  const _AppGuardedHost({required this.onRefused});
+
+  @override
+  Widget build(BuildContext context) => MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: Builder(
+              builder: (context) => TextButton(
+                onPressed: () => unawaited(
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (context) => PopScope<void>(
+                        canPop: false,
+                        onPopInvokedWithResult: (didPop, result) {
+                          if (!didPop) onRefused();
+                        },
+                        child: NavigationNode(
+                          onPop: (context, result) => true,
+                          child: const _OnPopNodeContent(),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                child: const Text('go'),
+              ),
+            ),
+          ),
+        ),
+      );
+}
+
+/// The node's only page refuses the pop itself.
+final class _InnerGuardedHost extends StatelessWidget {
+  const _InnerGuardedHost();
+
+  @override
+  Widget build(BuildContext context) => const MaterialApp(
+        home: NavigationNode(
+          child: PopScope<void>(canPop: false, child: _OnPopNodeContent()),
         ),
       );
 }
