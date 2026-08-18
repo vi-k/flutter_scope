@@ -281,7 +281,7 @@ void main() {
 
               return controller = _TestController();
             },
-            initBuilder: (context) => const Text('initializing'),
+            progressBuilder: (context) => const Text('initializing'),
             errorBuilder: (context, error, stackTrace) => const Text('error'),
             builder: (context, controller) => const _Reader(),
           ),
@@ -420,8 +420,7 @@ final class _TestScope
   _TestController createController(BuildContext context) => controller;
 
   @override
-  Widget buildOnInitializing(BuildContext context) =>
-      const Text('initializing');
+  Widget buildOnProgress(BuildContext context) => const Text('initializing');
 
   @override
   Widget buildOnError(

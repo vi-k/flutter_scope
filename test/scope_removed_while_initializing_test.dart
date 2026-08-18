@@ -303,7 +303,7 @@ final class _DepScope extends Scope<_DepScope, _Deps, _DepScopeState> {
       deps.init(context);
 
   @override
-  Widget buildOnInitializing(BuildContext context, Object? progress) =>
+  Widget buildOnProgress(BuildContext context, Object? progress) =>
       const SizedBox.shrink();
 
   @override
@@ -393,7 +393,7 @@ final class _Guarded extends AsyncScopeBase<_Guarded> {
   Future<void> disposeAsync() async => log.add('disposeAsync');
 
   @override
-  Widget buildOnInitializing(BuildContext context, Object? progress) =>
+  Widget buildOnProgress(BuildContext context, Object? progress) =>
       const SizedBox.shrink();
 
   @override

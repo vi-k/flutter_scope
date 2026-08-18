@@ -34,8 +34,8 @@ What the scope shows, and what it calls, in order:
 
 | Phase                                                     | Builder                                                                       |
 | --------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| waiting for `scopeKey` and for the first event of the stream | `buildOnWaiting` — may return `null`, then `buildOnInitializing(context, null)` |
-| a `ScopeProgress` arrived                                 | `buildOnInitializing(context, progress)`                                      |
+| waiting for `scopeKey` and for the first event of the stream | `buildOnWaiting` — may return `null`, then `buildOnProgress(context, null)` |
+| a `ScopeProgress` arrived                                 | `buildOnProgress(context, progress)`                                      |
 | `ScopeReady` arrived                                      | `wrapState` around the `build` of the state from `createState`                 |
 | the stream failed                                         | `buildOnError(context, error, stackTrace, progress)`                          |
 | `close()` is running                                      | `buildOnClosing`, over a frozen screenshot of the ready subtree when one can be taken |
@@ -165,12 +165,12 @@ Every event of that stream carries a `ScopeAutoDependenciesProgress`: `path` —
 the path of the dependency that has just been initialized — `name`, the last
 segment of that path, which is the name the dependency was declared with, plus
 the step counter of a `ProgressIterator` (`number`, `total`, and `value` as a
-fraction between 0 and 1). That object is what `buildOnInitializing` receives,
+fraction between 0 and 1). That object is what `buildOnProgress` receives,
 so a progress bar with a caption needs nothing else:
 
 ```dart
 @override
-Widget buildOnInitializing(
+Widget buildOnProgress(
   BuildContext context,
   covariant ScopeAutoDependenciesProgress? progress,
 ) =>

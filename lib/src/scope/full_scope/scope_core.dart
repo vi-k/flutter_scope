@@ -145,7 +145,7 @@ abstract base class ScopeElementBase<
 
   /// Builds a widget to display while the scope is initializing.
   @override
-  Widget buildOnInitializing(Object? progress);
+  Widget buildOnProgress(Object? progress);
 
   /// Builds a widget to display when an error occurs during initialization.
   @override

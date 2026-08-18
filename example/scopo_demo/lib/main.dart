@@ -79,7 +79,7 @@ void main() {
   runApp(
     App(
       init: AppDependencies.init,
-      initBuilder: (context, progress) => SplashScreen(progress: progress),
+      progressBuilder: (context, progress) => SplashScreen(progress: progress),
       builder: (context) {
         return Home(init: HomeDependencies().init);
       },

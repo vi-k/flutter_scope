@@ -1,6 +1,6 @@
 # scopo
 
-> Перевод `README.md` (blob `05842a5b3f2f9da299674342a128f0651b597cd1`).
+> Перевод `README.md` (blob `afaa0ef4b2a6f967ab9c6ecca472a4a3386f2dcf`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 [![pub version](https://img.shields.io/pub/v/scopo)](https://pub.dev/packages/scopo)
@@ -136,7 +136,7 @@ final class App extends Scope<App, AppDependencies, AppState> {
   AppState createState() => AppState();
 
   @override
-  Widget buildOnInitializing(
+  Widget buildOnProgress(
     BuildContext context,
     covariant String? progress,
   ) =>
@@ -347,7 +347,7 @@ class ConnectionGate extends StatelessWidget {
           yield AsyncScopeReady();
         },
         dispose: () => connection.close(),
-        initBuilder: (context, progress) => Text('$progress'),
+        progressBuilder: (context, progress) => Text('$progress'),
         errorBuilder: (context, error, stackTrace, progress) => Text('$error'),
         builder: (context) => const HomeScreen(),
       );
@@ -374,7 +374,7 @@ class DatabaseGate extends StatelessWidget {
           yield AsyncDataScopeReady(await Database.open());
         },
         dispose: (database) => database.close(),
-        initBuilder: (context, progress) => Text('$progress'),
+        progressBuilder: (context, progress) => Text('$progress'),
         errorBuilder: (context, error, stackTrace, progress) => Text('$error'),
         builder: (context, database) => DatabaseView(database: database),
       );
@@ -402,7 +402,7 @@ final class Player extends AsyncControllerScopeBase<Player, PlayerController> {
       PlayerController(api: ScopeModel.of<Api>(context, listen: false));
 
   @override
-  Widget buildOnInitializing(BuildContext context) => const SizedBox.shrink();
+  Widget buildOnProgress(BuildContext context) => const SizedBox.shrink();
 
   @override
   Widget buildOnError(BuildContext context, Object error, StackTrace stack) =>
@@ -457,7 +457,7 @@ final class ScreenScope extends LiteScope<ScreenScope, ScreenScopeState> {
   const ScreenScope({super.key, super.scopeKey});
 
   /// Показывается на первых кадрах и пока ждут [scopeKey]. Если вернуть
-  /// отсюда `null`, придётся переопределить [buildOnInitializing].
+  /// отсюда `null`, придётся переопределить [buildOnProgress].
   @override
   Widget? buildOnWaiting(BuildContext context) => const SizedBox.shrink();
 

@@ -123,7 +123,7 @@ final class CounterScope
   }
 
   @override
-  Widget buildOnInitializing(
+  Widget buildOnProgress(
     BuildContext context,
     covariant Progress? progress,
   ) {

@@ -20,7 +20,7 @@ AsyncDataScope<Database>(
     yield AsyncDataScopeReady(await Database.open());
   },
   dispose: (database) => database.close(),
-  initBuilder: (context, progress) => Text('$progress'),
+  progressBuilder: (context, progress) => Text('$progress'),
   errorBuilder: (context, error, stackTrace, progress) => Text('$error'),
   builder: (context, database) => DatabaseView(database: database),
 );
@@ -144,7 +144,7 @@ members to everything `AsyncScopeContext` has:
 
 A widget under `builder` is by definition below a ready scope and can use
 `data`. A widget that may also be built while the scope is still initializing —
-one in `initBuilder`, or one reached from elsewhere in the tree — should use
+one in `progressBuilder`, or one reached from elsewhere in the tree — should use
 `dataOrNull`, or check `hasData` first.
 
 For a nullable `T` — `AsyncDataScope<Session?>` — `dataOrNull` cannot answer
@@ -158,7 +158,7 @@ the two apart on its own.
 "Before the value arrives" is a shade earlier than `isInitialized`. The value
 is caught as it goes past; the state of the scope is applied at the end of the
 frame, or after the whole of `pauseAfterInitialization`, which is deliberately
-longer. In that window the scope is still building `initBuilder` while `data`
+longer. In that window the scope is still building `progressBuilder` while `data`
 already answers — and that is the window the teardown of a scope that left
 early runs in, which is why `dispose` can be promised the value at all.
 

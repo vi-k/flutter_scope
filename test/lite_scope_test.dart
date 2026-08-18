@@ -1471,7 +1471,7 @@ final class _CloseScopeElement extends LiteScopeElementBase<_CloseScope,
   Widget? buildOnWaiting() => const Text('waiting');
 
   @override
-  Widget buildOnInitializing(Object? progress) => const Text('initializing');
+  Widget buildOnProgress(Object? progress) => const Text('initializing');
 
   @override
   Widget buildOnError(

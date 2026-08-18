@@ -38,7 +38,7 @@ void main() {
             pauseAfterInitialization: const Duration(seconds: 1),
             init: (context) => Stream.value(AsyncScopeReady()),
             dispose: () {},
-            initBuilder: (context, progress) => const Text('init'),
+            progressBuilder: (context, progress) => const Text('init'),
             errorBuilder: (context, error, stackTrace, progress) =>
                 Text('$error'),
             builder: (context) => const Text('ready'),
@@ -77,7 +77,7 @@ void main() {
                     pauseAfterInitialization: const Duration(seconds: 5),
                     init: (context) => Stream.value(AsyncScopeReady()),
                     dispose: () {},
-                    initBuilder: (context, progress) => const Text('init'),
+                    progressBuilder: (context, progress) => const Text('init'),
                     errorBuilder: (context, error, stackTrace, progress) =>
                         Text('$error'),
                     builder: (context) => const Text('ready'),
@@ -123,7 +123,8 @@ void main() {
                       pauseAfterInitialization: const Duration(milliseconds: 1),
                       init: (context) => Stream.value(AsyncScopeReady()),
                       dispose: () => hang.future,
-                      initBuilder: (context, progress) => const Text('init'),
+                      progressBuilder: (context, progress) =>
+                          const Text('init'),
                       errorBuilder: (context, error, stackTrace, progress) =>
                           Text('$error'),
                       builder: (context) => const Text('ready'),
@@ -165,7 +166,7 @@ void main() {
             init: (context) =>
                 Stream.value(AsyncDataScopeReady<Object, String>('value')),
             dispose: (data) {},
-            initBuilder: (context, progress) => const Text('init'),
+            progressBuilder: (context, progress) => const Text('init'),
             errorBuilder: (context, error, stackTrace, progress) =>
                 Text('$error'),
             builder: (context, data) => Text('ready: $data'),
@@ -212,7 +213,8 @@ void main() {
                         AsyncDataScopeReady<Object, String>('value'),
                       ),
                       dispose: (data) => hang.future,
-                      initBuilder: (context, progress) => const Text('init'),
+                      progressBuilder: (context, progress) =>
+                          const Text('init'),
                       errorBuilder: (context, error, stackTrace, progress) =>
                           Text('$error'),
                       builder: (context, data) => Text('ready: $data'),

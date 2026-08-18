@@ -380,7 +380,7 @@ void main() {
                 throw StateError('init failed');
               },
               dispose: () {},
-              initBuilder: (context, progress) =>
+              progressBuilder: (context, progress) =>
                   Text('initializing: $progress'),
               errorBuilder: (context, error, stackTrace, progress) =>
                   Text('error at $progress'),
@@ -427,7 +427,8 @@ void main() {
                 throw StateError('init failed');
               },
               dispose: () {},
-              initBuilder: (context, progress) => const Text('initializing'),
+              progressBuilder: (context, progress) =>
+                  const Text('initializing'),
               errorBuilder: (context, error, stackTrace, progress) =>
                   Text('error: $error'),
               builder: (context) => const Text('ready'),
@@ -648,7 +649,7 @@ void main() {
                   scopeKey: 'k',
                   init: (context) => Stream.value(AsyncScopeReady()),
                   dispose: () {},
-                  initBuilder: (context, progress) => const Text('init'),
+                  progressBuilder: (context, progress) => const Text('init'),
                   errorBuilder: (context, error, stackTrace, progress) =>
                       const Text('error'),
                   builder: (context) => const Text('ready'),
@@ -707,7 +708,7 @@ void main() {
             child: AsyncScope(
               init: (context) => const Stream<AsyncScopeInitState>.empty(),
               dispose: () {},
-              initBuilder: (context, progress) => const Text('init'),
+              progressBuilder: (context, progress) => const Text('init'),
               errorBuilder: (context, error, stackTrace, progress) =>
                   Text('error: $error'),
               builder: (context) => const Text('ready'),

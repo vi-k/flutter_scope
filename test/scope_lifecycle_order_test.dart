@@ -26,7 +26,7 @@ void main() {
               return Stream.value(AsyncScopeReady());
             },
             dispose: () {},
-            initBuilder: (context, progress) => const SizedBox.shrink(),
+            progressBuilder: (context, progress) => const SizedBox.shrink(),
             errorBuilder: (context, error, stackTrace, progress) =>
                 const SizedBox.shrink(),
             builder: (context) => const SizedBox.shrink(),
@@ -57,7 +57,7 @@ void main() {
               return Stream.value(AsyncDataScopeReady('data'));
             },
             dispose: (data) {},
-            initBuilder: (context, progress) => const SizedBox.shrink(),
+            progressBuilder: (context, progress) => const SizedBox.shrink(),
             errorBuilder: (context, error, stackTrace, progress) =>
                 const SizedBox.shrink(),
             builder: (context, data) => const SizedBox.shrink(),
@@ -81,7 +81,7 @@ void main() {
               mount: (context) => seen = _Ancestor.of(context),
               init: (context) => Stream.value(AsyncScopeReady()),
               dispose: () {},
-              initBuilder: (context, progress) => const SizedBox.shrink(),
+              progressBuilder: (context, progress) => const SizedBox.shrink(),
               errorBuilder: (context, error, stackTrace, progress) =>
                   const SizedBox.shrink(),
               builder: (context) => const SizedBox.shrink(),
@@ -227,7 +227,7 @@ void main() {
             init: (context) => Stream.value(AsyncScopeReady()),
             unmount: () => _order.add('onUnmount'),
             dispose: () => _order.add('disposeAsync'),
-            initBuilder: (context, progress) => const SizedBox.shrink(),
+            progressBuilder: (context, progress) => const SizedBox.shrink(),
             errorBuilder: (context, error, stackTrace, progress) =>
                 const SizedBox.shrink(),
             builder: (context) => const SizedBox.shrink(),
@@ -266,7 +266,7 @@ final class _DepScope extends Scope<_DepScope, _Deps, _DepState> {
       _Deps().init(context);
 
   @override
-  Widget buildOnInitializing(BuildContext context, Object? progress) =>
+  Widget buildOnProgress(BuildContext context, Object? progress) =>
       const SizedBox.shrink();
 
   @override

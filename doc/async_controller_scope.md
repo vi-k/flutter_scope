@@ -10,7 +10,7 @@ has to be *shown*.
 ```dart
 AsyncControllerScope<PlayerController>(
   create: (context) => PlayerController(api: ScopeModel.of<Api>(context, listen: false)),
-  initBuilder: (context) => const SizedBox.shrink(),
+  progressBuilder: (context) => const SizedBox.shrink(),
   errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
   builder: (context, controller) => const PlayerView(),
 );
@@ -28,7 +28,7 @@ final class Player extends AsyncControllerScopeBase<Player, PlayerController> {
       PlayerController(api: ScopeModel.of<Api>(context, listen: false));
 
   @override
-  Widget buildOnInitializing(BuildContext context) => const SizedBox.shrink();
+  Widget buildOnProgress(BuildContext context) => const SizedBox.shrink();
 
   @override
   Widget buildOnError(BuildContext context, Object error, StackTrace stack) =>

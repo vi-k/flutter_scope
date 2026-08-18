@@ -8,11 +8,11 @@ final class AsyncControllerScope<C extends ScopeController>
 
   /// Built while waiting for a `scopeKey` and for the controller.
   ///
-  /// Falls back to [initBuilder] when omitted.
+  /// Falls back to [progressBuilder] when omitted.
   final Widget Function(BuildContext context)? waitingBuilder;
 
   /// Built while the controller is initializing.
-  final Widget Function(BuildContext context) initBuilder;
+  final Widget Function(BuildContext context) progressBuilder;
 
   /// Built when the initialization of the controller failed.
   final Widget Function(
@@ -40,7 +40,7 @@ final class AsyncControllerScope<C extends ScopeController>
     super.pauseAfterInitialization,
     required this.create,
     this.waitingBuilder,
-    required this.initBuilder,
+    required this.progressBuilder,
     required this.builder,
     required this.errorBuilder,
   });
@@ -52,7 +52,7 @@ final class AsyncControllerScope<C extends ScopeController>
   Widget? buildOnWaiting(BuildContext context) => waitingBuilder?.call(context);
 
   @override
-  Widget buildOnInitializing(BuildContext context) => initBuilder(context);
+  Widget buildOnProgress(BuildContext context) => progressBuilder(context);
 
   @override
   Widget buildOnError(

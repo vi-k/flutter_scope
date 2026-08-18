@@ -16,7 +16,7 @@ AsyncScope(
   },
   dispose: () => connection.close(),
   waitingBuilder: (context) => const SizedBox.shrink(),
-  initBuilder: (context, progress) => Text('$progress'),
+  progressBuilder: (context, progress) => Text('$progress'),
   errorBuilder: (context, error, stackTrace, progress) => Text('$error'),
   builder: (context) => const HomeScreen(),
 );
@@ -24,7 +24,7 @@ AsyncScope(
 
 `AsyncScopeBase` is the subclassable form: the same members as overrides —
 `initAsync`, `disposeAsync`, `onMount`, `onUnmount`, `buildOnWaiting`,
-`buildOnInitializing`, `buildOnReady`, `buildOnError` — plus `scopeKey`,
+`buildOnProgress`, `buildOnReady`, `buildOnError` — plus `scopeKey`,
 `scopeKeyTimeout`, `initCancellationTimeout`, `disposeAsyncTimeout`,
 `waitForChildrenTimeout`, their `onTimeout` callbacks and
 `pauseAfterInitialization`. `AsyncScopeCore` sits under both for a scope that
@@ -36,8 +36,8 @@ needs its own element.
 
 | state | builder | when |
 | --- | --- | --- |
-| `AsyncScopeWaiting` | `buildOnWaiting`, or `buildOnInitializing` when it returns `null` | mounted; waiting for a `scopeKey` and for the first event |
-| `AsyncScopeProgress` | `buildOnInitializing` | `init` reported progress; the value is `progress` |
+| `AsyncScopeWaiting` | `buildOnWaiting`, or `buildOnProgress` when it returns `null` | mounted; waiting for a `scopeKey` and for the first event |
+| `AsyncScopeProgress` | `buildOnProgress` | `init` reported progress; the value is `progress` |
 | `AsyncScopeReady` | `buildOnReady` | `init` yielded `AsyncScopeReady` |
 | `AsyncScopeError` | `buildOnError` | `init` failed before it was ready; the progress it had reached comes with it |
 
@@ -70,7 +70,7 @@ AsyncScope(
     yield AsyncScopeReady();
   },
   dispose: api.close,
-  initBuilder: (context, progress) => Center(child: Text('$progress')),
+  progressBuilder: (context, progress) => Center(child: Text('$progress')),
   errorBuilder: (context, error, stackTrace, progress) =>
       Center(child: Text('failed at $progress: $error')),
   builder: (context) => const HomeScreen(),
@@ -81,7 +81,7 @@ Four things are worth knowing about the `progress` argument.
 
 **It is `null` before the first event.** The scope is `AsyncScopeWaiting` from
 the moment it is mounted until `init` yields, and if `buildOnWaiting` returns
-`null` the waiting branch is `buildOnInitializing(context, null)`. Write the
+`null` the waiting branch is `buildOnProgress(context, null)`. Write the
 builder so that `null` means "nothing reported yet" — that is also what it means
 in `buildOnError` when the failure came before any progress did.
 
@@ -122,7 +122,7 @@ init: (context) async* {
 
   yield AsyncScopeReady();
 },
-initBuilder: (context, progress) => switch (progress) {
+progressBuilder: (context, progress) => switch (progress) {
   final Progress progress => LinearProgressIndicator(value: progress.progress),
   _ => const LinearProgressIndicator(),
 },
@@ -135,7 +135,7 @@ topic.
 ### Where the type comes back
 
 `Scope` types its progress: `ScopeInitState<P, D>` carries a `P`, so
-`buildOnInitializing` can declare `covariant P? progress` and read fields
+`buildOnProgress` can declare `covariant P? progress` and read fields
 instead of calling `toString`. `ScopeAutoDependencies` uses that to report a
 `ScopeAutoDependenciesProgress` per dependency — the path, the name and the step
 counter in one object. See the `Scope` topic.

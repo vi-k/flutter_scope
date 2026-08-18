@@ -95,11 +95,11 @@ abstract base class AsyncControllerScopeBase<
 
   /// Built while waiting for a `scopeKey` and for the controller.
   ///
-  /// Returning `null` falls back to [buildOnInitializing].
+  /// Returning `null` falls back to [buildOnProgress].
   Widget? buildOnWaiting(BuildContext context) => null;
 
   /// Built while the controller is initializing.
-  Widget buildOnInitializing(BuildContext context);
+  Widget buildOnProgress(BuildContext context);
 
   /// Built when the initialization of the controller failed.
   Widget buildOnError(
@@ -198,10 +198,10 @@ final class _AsyncControllerScopeElement<
   @override
   Widget buildOnState(AsyncScopeState state) => switch (state) {
         AsyncScopeWaiting() =>
-          widget.buildOnWaiting(this) ?? widget.buildOnInitializing(this),
+          widget.buildOnWaiting(this) ?? widget.buildOnProgress(this),
         // A controller reports no progress: the stream above yields the ready
         // state and nothing else.
-        AsyncScopeProgress() => widget.buildOnInitializing(this),
+        AsyncScopeProgress() => widget.buildOnProgress(this),
         AsyncScopeReady() => widget.buildOnReady(this, data),
         AsyncScopeError(:final error, :final stackTrace) =>
           widget.buildOnError(this, error, stackTrace),

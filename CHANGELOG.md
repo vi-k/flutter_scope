@@ -47,7 +47,7 @@
   `repo` listens to `bus`, the bus was unmounted first and the repository was
   left listening to a source that had already been told to stop. The order was
   not documented before and is now, in the dartdoc of `sequential`,
-  `concurrent` and `DepHelper.unmount`, and in the `Scope` topic.
+  `concurrent` and `ScopeDependencyHandle.unmount`, and in the `Scope` topic.
 * Fix `unmount` being skipped for a dependency whose scope failed to
   initialize, while `dispose` ran. The hook is documented to run exactly once
   and always before `dispose`, whichever way the scope goes, but the container
@@ -74,7 +74,7 @@
   built — the `AsyncScopeCoordinator` lookup of a scope that asks for a
   `scopeKey` and has no coordinator above it, or an `initAsync` that is not a
   generator and throws — never reached the model: the scope stayed in
-  `AsyncScopeWaiting` and went on showing `buildOnInitializing`, which for a
+  `AsyncScopeWaiting` and went on showing `buildOnProgress`, which for a
   missing coordinator is the commonest mistake in the tree. It now shows
   `buildOnError`, as the state table always said it would, and the failure is
   still reported as before. The state is applied outside the frame, because
@@ -89,12 +89,12 @@
   on the first rebuild that came from the parent rather than from a change.
   Keep the subscription in `build`, and read with `listen: false` from
   `didChangeDependencies` when the point is to react rather than to show.
-* `Progress.progress` is a fraction between 0 and 1 whatever it was built
+* `Progress.value` is a fraction between 0 and 1 whatever it was built
   from, which is what a progress indicator is handed. A task of no steps at all
   used to give the `NaN` of `0 / 0`, and a release build that stepped past the
   total gave `4/3`; the first is now 1 and the second is clamped. `Progress`
   also refuses a negative `number` or `total` by assertion, and the assertion
-  in `ProgressIterator.add` says `total` where it used to say `count`. The
+  in `ProgressIterator.addSteps` says `total` where it used to say `count`. The
   dartdoc example of `ProgressIterator` compiles again: it showed a named
   `count:` argument the constructor never had, and a `ProgressValue` type that
   does not exist.
@@ -185,6 +185,16 @@
   it — and `ScopeAutoDependenciesProgress.progress` follows it.
   `ProgressIterator.add` is `addSteps`, the word `nextStep` and `currentStep`
   already use.
+* [breaking changes] The branch built while a scope initializes is named after
+  the state it belongs to, in both halves of the API: the parameter
+  `initBuilder` is `progressBuilder` and the method `buildOnInitializing` is
+  `buildOnProgress`, in every family. `init` and `initBuilder` sat in one
+  constructor and read as a pair -- the work and its builder -- while the second
+  is the screen shown *while* the first runs; the state it answers is
+  `AsyncScopeProgress`, and so now is its name. `buildOnWaiting` and
+  `buildOnReady` already worked that way. The entries above that named the old
+  spelling were rewritten to the new one: 0.10.0 has not shipped, so the section
+  speaks the vocabulary the release will have. Released sections are untouched.
 * The bookkeeping that decides which build a dependent's selectors belong to asks
   for a frame when nothing else will bring one. The reset runs in a post-frame
   callback, and a build is not always inside a frame — `runApp` builds the first
@@ -411,11 +421,11 @@
   method is abstract, which is the wrong half of the story to tell first. The
   rule across the families is one: exactly one branch before the ready one has
   to be written, and it is the one that family is certain to reach. A `Scope`
-  always initializes a container, so `buildOnInitializing` is its required
+  always initializes a container, so `buildOnProgress` is its required
   one; a `LiteScope` initializes nothing of its own, so the branch it always
   has is the wait. The `LiteScope` topic now says so, and says what moving a
   screen from `Scope` to `LiteScope` trades for what.
-* A `LiteScope` that overrides `init()` and forgets `buildOnInitializing` or
+* A `LiteScope` that overrides `init()` and forgets `buildOnProgress` or
   `buildOnError` gets an `UnimplementedError` that names the scope and the
   method instead of a bare one that names nothing. The error branch carries
   the failure it was called for as well: without it that failure was replaced
@@ -651,13 +661,13 @@
   `AsyncDataScopeBase.select`. A call written for the old order stops
   compiling rather than changing meaning.
 * [breaking changes] `AsyncScope` hands the progress to the branches built
-  before the scope is ready: `initBuilder` is now
+  before the scope is ready: `progressBuilder` is now
   `(context, progress)` and `errorBuilder` is
   `(context, error, stackTrace, progress)`, matching `Scope`, `LiteScope` and
   `AsyncDataScope`. It was the only family that computed the progress, kept it
   in the model, and then left the builder to fish it back out of
   `AsyncScope.of`. Subclasses of `AsyncScopeBase` take the same two arguments
-  in `buildOnInitializing` and `buildOnError`.
+  in `buildOnProgress` and `buildOnError`.
 * Fix a teardown held forever by a `disposeAsync` that never completes — the
   same hole one step further down, and user code on both sides of it. The
   release that follows it, and with it the `scopeKey` of a scope that had
@@ -801,7 +811,7 @@
 * [breaking changes] An expired `waitForChildren` now drops the children it
   was awaiting, so `hasChildren` and `childrenCount` fall to zero for them.
   Children registered while the wait was already running are kept.
-* The dartdoc of `ScopeConfig.defaultScopeKeysTimeout` and
+* The dartdoc of `ScopeConfig.defaultScopeKeyTimeout` and
   `defaultWaitForChildrenTimeout` was wrong: a zero duration expires
   immediately, it does not disable the timeout. Only `null` removes the limit.
   The behaviour is unchanged — anyone who set `Duration.zero` expecting the

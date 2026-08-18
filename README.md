@@ -131,7 +131,7 @@ final class App extends Scope<App, AppDependencies, AppState> {
   AppState createState() => AppState();
 
   @override
-  Widget buildOnInitializing(
+  Widget buildOnProgress(
     BuildContext context,
     covariant String? progress,
   ) =>
@@ -338,7 +338,7 @@ class ConnectionGate extends StatelessWidget {
           yield AsyncScopeReady();
         },
         dispose: () => connection.close(),
-        initBuilder: (context, progress) => Text('$progress'),
+        progressBuilder: (context, progress) => Text('$progress'),
         errorBuilder: (context, error, stackTrace, progress) => Text('$error'),
         builder: (context) => const HomeScreen(),
       );
@@ -365,7 +365,7 @@ class DatabaseGate extends StatelessWidget {
           yield AsyncDataScopeReady(await Database.open());
         },
         dispose: (database) => database.close(),
-        initBuilder: (context, progress) => Text('$progress'),
+        progressBuilder: (context, progress) => Text('$progress'),
         errorBuilder: (context, error, stackTrace, progress) => Text('$error'),
         builder: (context, database) => DatabaseView(database: database),
       );
@@ -393,7 +393,7 @@ final class Player extends AsyncControllerScopeBase<Player, PlayerController> {
       PlayerController(api: ScopeModel.of<Api>(context, listen: false));
 
   @override
-  Widget buildOnInitializing(BuildContext context) => const SizedBox.shrink();
+  Widget buildOnProgress(BuildContext context) => const SizedBox.shrink();
 
   @override
   Widget buildOnError(BuildContext context, Object error, StackTrace stack) =>
@@ -448,7 +448,7 @@ final class ScreenScope extends LiteScope<ScreenScope, ScreenScopeState> {
   const ScreenScope({super.key, super.scopeKey});
 
   /// Shown on the first frames, and while waiting for [scopeKey]. Returning
-  /// `null` here requires overriding [buildOnInitializing].
+  /// `null` here requires overriding [buildOnProgress].
   @override
   Widget? buildOnWaiting(BuildContext context) => const SizedBox.shrink();
 

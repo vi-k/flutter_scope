@@ -21,14 +21,14 @@ final class AsyncScope extends AsyncScopeBase<AsyncScope> {
 
   /// Built while waiting for a `scopeKey` and for the first event.
   ///
-  /// Falls back to [initBuilder] when omitted.
+  /// Falls back to [progressBuilder] when omitted.
   final Widget Function(BuildContext context)? waitingBuilder;
 
   /// Built while the initialization is running.
   ///
   /// The second argument is what the last [AsyncScopeProgress] carried, and
   /// `null` before the first one.
-  final Widget Function(BuildContext context, Object? progress) initBuilder;
+  final Widget Function(BuildContext context, Object? progress) progressBuilder;
 
   /// Built when the initialization failed.
   ///
@@ -62,7 +62,7 @@ final class AsyncScope extends AsyncScopeBase<AsyncScope> {
     this.unmount,
     required this.dispose,
     this.waitingBuilder,
-    required this.initBuilder,
+    required this.progressBuilder,
     required this.builder,
     required this.errorBuilder,
   });
@@ -83,8 +83,8 @@ final class AsyncScope extends AsyncScopeBase<AsyncScope> {
   Widget? buildOnWaiting(BuildContext context) => waitingBuilder?.call(context);
 
   @override
-  Widget buildOnInitializing(BuildContext context, Object? progress) =>
-      initBuilder(context, progress);
+  Widget buildOnProgress(BuildContext context, Object? progress) =>
+      progressBuilder(context, progress);
 
   @override
   Widget buildOnError(

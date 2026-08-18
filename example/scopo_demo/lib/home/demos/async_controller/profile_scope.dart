@@ -106,8 +106,7 @@ final class ProfileScope
   Widget buildOnWaiting(BuildContext context) => const Text('Waiting…');
 
   @override
-  Widget buildOnInitializing(BuildContext context) =>
-      const Text('Initializing…');
+  Widget buildOnProgress(BuildContext context) => const Text('Initializing…');
 
   @override
   Widget buildOnError(

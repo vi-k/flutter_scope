@@ -106,7 +106,7 @@ abstract base class Scope<W extends Scope<W, D, S>, D extends ScopeDependencies,
   Widget? buildOnWaiting(BuildContext context) => null;
 
   /// Builds a widget to display while the scope is initializing dependencies.
-  Widget buildOnInitializing(BuildContext context, Object? progress);
+  Widget buildOnProgress(BuildContext context, Object? progress);
 
   /// Builds a widget to display if an error occurs during initialization.
   Widget buildOnError(
@@ -252,8 +252,8 @@ final class _ScopeElement<W extends Scope<W, D, S>, D extends ScopeDependencies,
   Widget? buildOnWaiting() => widget.buildOnWaiting(this);
 
   @override
-  Widget buildOnInitializing(Object? progress) =>
-      widget.buildOnInitializing(this, progress);
+  Widget buildOnProgress(Object? progress) =>
+      widget.buildOnProgress(this, progress);
 
   @override
   Widget buildOnError(

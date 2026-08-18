@@ -27,7 +27,7 @@ void main() {
                       scopeKey: 'k',
                       init: (context) => Stream.value(AsyncScopeReady()),
                       dispose: () => gate.future,
-                      initBuilder: (context, progress) =>
+                      progressBuilder: (context, progress) =>
                           const Text('holder: init'),
                       errorBuilder: (context, error, stackTrace, progress) =>
                           Text('holder: $error'),
@@ -40,7 +40,7 @@ void main() {
                       init: (context) => Stream.value(AsyncScopeReady()),
                       dispose: () {},
                       waitingBuilder: (context) => const Text('waiting'),
-                      initBuilder: (context, progress) =>
+                      progressBuilder: (context, progress) =>
                           const Text('initializing'),
                       errorBuilder: (context, error, stackTrace, progress) =>
                           Text('error: $error'),
@@ -91,7 +91,7 @@ void main() {
                   scopeKey: 'k',
                   init: (context) => Stream.value(AsyncScopeReady()),
                   dispose: () => gate.future,
-                  initBuilder: (context, progress) =>
+                  progressBuilder: (context, progress) =>
                       const Text('holder: init'),
                   errorBuilder: (context, error, stackTrace, progress) =>
                       Text('holder: $error'),
@@ -117,7 +117,7 @@ void main() {
                   dispose: () {},
                   // No waitingBuilder: `buildOnWaiting()` answers null and the
                   // initializing branch is built with a null progress instead.
-                  initBuilder: (context, progress) =>
+                  progressBuilder: (context, progress) =>
                       const Text('initializing'),
                   errorBuilder: (context, error, stackTrace, progress) =>
                       Text('error: $error'),

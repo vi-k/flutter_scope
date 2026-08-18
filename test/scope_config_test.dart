@@ -37,7 +37,7 @@ void main() {
                         await slow.future;
                         log.add('disposed');
                       },
-                      initBuilder: (context, progress) =>
+                      progressBuilder: (context, progress) =>
                           const SizedBox.shrink(),
                       errorBuilder: (context, error, stackTrace, progress) =>
                           Text('$error'),
@@ -49,7 +49,7 @@ void main() {
                       scopeKeyTimeout: const Duration(days: 1),
                       init: (context) => Stream.value(AsyncScopeReady()),
                       dispose: () {},
-                      initBuilder: (context, progress) =>
+                      progressBuilder: (context, progress) =>
                           const SizedBox.shrink(),
                       errorBuilder: (context, error, stackTrace, progress) =>
                           Text('$error'),

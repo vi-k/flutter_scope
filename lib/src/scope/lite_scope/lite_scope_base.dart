@@ -65,7 +65,7 @@ abstract base class LiteScope<W extends LiteScope<W, S>,
   /// Pre-initialization.
   ///
   /// Override this method if you need to perform pre-initialization before the
-  /// state is created. In that case, also override the [buildOnInitializing]
+  /// state is created. In that case, also override the [buildOnProgress]
   /// and [buildOnError] methods.
   Stream<AsyncScopeInitState> init() => Stream.value(AsyncScopeReady());
 
@@ -76,15 +76,15 @@ abstract base class LiteScope<W extends LiteScope<W, S>,
   ///
   /// **Required, and the only builder here that is** — which is the other way
   /// round from the families that initialize something, where
-  /// `buildOnInitializing` is the required one. The rule behind both is the
+  /// `buildOnProgress` is the required one. The rule behind both is the
   /// same: exactly one branch before the ready one has to be written, and it
   /// is the branch that scope is certain to reach. A [LiteScope] initializes
   /// nothing of its own, so the branch it always has is this one — the frames
   /// spent waiting for a `scopeKey` and for the first event — while
-  /// [buildOnInitializing] and [buildOnError] belong to an [init] most scopes
+  /// [buildOnProgress] and [buildOnError] belong to an [init] most scopes
   /// never override.
   ///
-  /// Returning `null` is allowed only when [buildOnInitializing] is
+  /// Returning `null` is allowed only when [buildOnProgress] is
   /// overridden, since something has to be on screen: `null` here means "show
   /// the initializing branch instead", and the default of that one throws.
   Widget? buildOnWaiting(BuildContext context);
@@ -96,9 +96,9 @@ abstract base class LiteScope<W extends LiteScope<W, S>,
   /// The default throws rather than returning a blank screen — a branch
   /// nobody wrote is a mistake, and a scope that shows nothing while it
   /// initializes looks like one that never initializes at all.
-  Widget buildOnInitializing(BuildContext context, Object? progress) =>
+  Widget buildOnProgress(BuildContext context, Object? progress) =>
       throw UnimplementedError(
-        '$runtimeType overrides `init()` but not `buildOnInitializing()`. A '
+        '$runtimeType overrides `init()` but not `buildOnProgress()`. A '
         'scope that pre-initializes has frames to fill before it is ready, '
         'and this is the branch that fills them. Override it, or drop the '
         '`init()` override -- the default one is ready at once and never '
@@ -108,7 +108,7 @@ abstract base class LiteScope<W extends LiteScope<W, S>,
   /// Error builder.
   ///
   /// Reached only by a scope that overrides [init], and optional for the same
-  /// reason as [buildOnInitializing]: an initialization that does not exist
+  /// reason as [buildOnProgress]: an initialization that does not exist
   /// cannot fail.
   ///
   /// The default throws, and carries the failure it was called for in the
@@ -267,8 +267,8 @@ final class _LiteScopeElement<W extends LiteScope<W, S>,
   Widget? buildOnWaiting() => widget.buildOnWaiting(this);
 
   @override
-  Widget buildOnInitializing(Object? progress) =>
-      widget.buildOnInitializing(this, progress);
+  Widget buildOnProgress(Object? progress) =>
+      widget.buildOnProgress(this, progress);
 
   @override
   Widget buildOnError(

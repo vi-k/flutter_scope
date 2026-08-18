@@ -834,7 +834,7 @@ final class _Async extends AsyncScopeBase<_Async> {
   }
 
   @override
-  Widget buildOnInitializing(BuildContext context, Object? progress) =>
+  Widget buildOnProgress(BuildContext context, Object? progress) =>
       const SizedBox.shrink();
 
   @override
@@ -873,7 +873,7 @@ final class _AsyncData extends AsyncDataScopeBase<_AsyncData, String> {
   }
 
   @override
-  Widget buildOnInitializing(BuildContext context, Object? progress) =>
+  Widget buildOnProgress(BuildContext context, Object? progress) =>
       const SizedBox.shrink();
 
   @override
@@ -902,7 +902,7 @@ final class _Controlled
   _Controller createController(BuildContext context) => controller;
 
   @override
-  Widget buildOnInitializing(BuildContext context) => const SizedBox.shrink();
+  Widget buildOnProgress(BuildContext context) => const SizedBox.shrink();
 
   @override
   Widget buildOnError(
@@ -965,7 +965,7 @@ final class _DepScope extends Scope<_DepScope, _Deps, _DepScopeState> {
       _Deps(log: log, failOnUnmount: failOnUnmount).init(context);
 
   @override
-  Widget buildOnInitializing(BuildContext context, Object? progress) =>
+  Widget buildOnProgress(BuildContext context, Object? progress) =>
       const SizedBox.shrink();
 
   @override
@@ -1061,7 +1061,7 @@ final class _PlainDepScope
       ).asStream();
 
   @override
-  Widget buildOnInitializing(BuildContext context, Object? progress) =>
+  Widget buildOnProgress(BuildContext context, Object? progress) =>
       const SizedBox.shrink();
 
   @override

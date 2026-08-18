@@ -1,6 +1,6 @@
 # AsyncControllerScope
 
-> Перевод `doc/async_controller_scope.md` (blob `cfd32ce1ea2a63661fc46042ea597b3ab64e9ed5`).
+> Перевод `doc/async_controller_scope.md` (blob `44ca1fb6fc9ff074c1aef31dd878279b105dbaad`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 Скоуп, всё содержимое которого — контроллер: объект со своим жизненным циклом,
@@ -13,7 +13,7 @@
 ```dart
 AsyncControllerScope<PlayerController>(
   create: (context) => PlayerController(api: ScopeModel.of<Api>(context, listen: false)),
-  initBuilder: (context) => const SizedBox.shrink(),
+  progressBuilder: (context) => const SizedBox.shrink(),
   errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
   builder: (context, controller) => const PlayerView(),
 );
@@ -31,7 +31,7 @@ final class Player extends AsyncControllerScopeBase<Player, PlayerController> {
       PlayerController(api: ScopeModel.of<Api>(context, listen: false));
 
   @override
-  Widget buildOnInitializing(BuildContext context) => const SizedBox.shrink();
+  Widget buildOnProgress(BuildContext context) => const SizedBox.shrink();
 
   @override
   Widget buildOnError(BuildContext context, Object error, StackTrace stack) =>

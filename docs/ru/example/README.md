@@ -1,6 +1,6 @@
 # example
 
-> Перевод `example/README.md` (blob `68c94ddb167685bf2751000b96facef57ed58160`).
+> Перевод `example/README.md` (blob `28f842377ef4d3b8e61abd9baaaf3c0d122c1268`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 Полный обзор scopo — в
@@ -132,7 +132,7 @@ final class App extends Scope<App, AppDependencies, AppState> {
 
   /// Ветка, которая строится во время инициализации скоупа.
   @override
-  Widget buildOnInitializing(
+  Widget buildOnProgress(
     BuildContext context,
     covariant String? progress,
   ) =>

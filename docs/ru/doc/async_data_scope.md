@@ -1,6 +1,6 @@
 # AsyncDataScope
 
-> Перевод `doc/async_data_scope.md` (blob `ec27d4b5203b4e4ba253c94d7660fb21862e1481`).
+> Перевод `doc/async_data_scope.md` (blob `5715ca9247e206de2ea5bb2db34907d38627a941`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 `AsyncScope`, который производит значение. Инициализация заканчивается объектом,
@@ -22,7 +22,7 @@ AsyncDataScope<Database>(
     yield AsyncDataScopeReady(await Database.open());
   },
   dispose: (database) => database.close(),
-  initBuilder: (context, progress) => Text('$progress'),
+  progressBuilder: (context, progress) => Text('$progress'),
   errorBuilder: (context, error, stackTrace, progress) => Text('$error'),
   builder: (context, database) => DatabaseView(database: database),
 );
@@ -145,7 +145,7 @@ final database = AsyncDataScope.of<Database>(context, listen: false).data;
 
 Виджет внутри `builder` по определению находится под готовым скоупом и может
 пользоваться `data`. Виджет, который может строиться и во время инициализации —
-в `initBuilder` или добравшийся сюда из другого места дерева, — должен брать
+в `progressBuilder` или добравшийся сюда из другого места дерева, — должен брать
 `dataOrNull` или сперва проверять `hasData`.
 
 Для нullable-`T` — `AsyncDataScope<Session?>` — `dataOrNull` на этот вопрос не
@@ -159,7 +159,7 @@ final database = AsyncDataScope.of<Database>(context, listen: false).data;
 «До появления значения» — чуть раньше, чем `isInitialized`. Значение
 перехватывают на пролёте, а состояние скоупа применяют в конце кадра или после
 всей `pauseAfterInitialization`, которая нарочно длиннее. В этом окне скоуп ещё
-строит `initBuilder`, а `data` уже отвечает — и именно в этом окне идёт разбор
+строит `progressBuilder`, а `data` уже отвечает — и именно в этом окне идёт разбор
 скоупа, ушедшего раньше времени, поэтому `dispose` и можно обещать значение.
 
 `select` — дешёвый вход, когда важна лишь часть значения:

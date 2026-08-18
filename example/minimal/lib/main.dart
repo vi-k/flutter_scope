@@ -111,7 +111,7 @@ final class App extends Scope<App, AppDependencies, AppState> {
 
   /// A branch that is created during scope initialization.
   @override
-  Widget buildOnInitializing(
+  Widget buildOnProgress(
     BuildContext context,
     covariant String? progress,
   ) =>

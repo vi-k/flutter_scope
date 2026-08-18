@@ -110,7 +110,7 @@ abstract base class AsyncDataScopeBase<W extends AsyncDataScopeBase<W, T>,
   Widget? buildOnWaiting(BuildContext context) => null;
 
   /// Built while the initialization is running.
-  Widget buildOnInitializing(BuildContext context, Object? progress);
+  Widget buildOnProgress(BuildContext context, Object? progress);
 
   /// Built when the initialization failed.
   Widget buildOnError(
@@ -226,9 +226,9 @@ final class _AsyncDataScopeElement<W extends AsyncDataScopeBase<W, T>,
   @override
   Widget buildOnState(AsyncScopeState state) => switch (state) {
         AsyncScopeWaiting() =>
-          widget.buildOnWaiting(this) ?? widget.buildOnInitializing(this, null),
+          widget.buildOnWaiting(this) ?? widget.buildOnProgress(this, null),
         AsyncScopeProgress(:final progress) =>
-          widget.buildOnInitializing(this, progress),
+          widget.buildOnProgress(this, progress),
         AsyncScopeReady() => widget.buildOnReady(this, data),
         AsyncScopeError(:final error, :final stackTrace, :final progress) =>
           widget.buildOnError(this, error, stackTrace, progress),

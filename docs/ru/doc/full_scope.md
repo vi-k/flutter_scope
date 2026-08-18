@@ -1,6 +1,6 @@
 # Scope
 
-> Перевод `doc/full_scope.md` (blob `6b0dd4ae9919901a1c3d361ef0e608f6fe770730`).
+> Перевод `doc/full_scope.md` (blob `9db02b583ffc4bbf5452b819c7ade6ab445c9785`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 `Scope` — основной строительный блок пакета: виджет, который владеет контейнером
@@ -35,8 +35,8 @@
 
 | Фаза | Билдер |
 | --- | --- |
-| ожидание `scopeKey` и первого события потока | `buildOnWaiting` — может вернуть `null`, тогда `buildOnInitializing(context, null)` |
-| пришёл `ScopeProgress` | `buildOnInitializing(context, progress)` |
+| ожидание `scopeKey` и первого события потока | `buildOnWaiting` — может вернуть `null`, тогда `buildOnProgress(context, null)` |
+| пришёл `ScopeProgress` | `buildOnProgress(context, progress)` |
 | пришёл `ScopeReady` | `wrapState` вокруг `build` состояния из `createState` |
 | поток упал | `buildOnError(context, error, stackTrace, progress)` |
 | работает `close()` | `buildOnClosing` поверх замороженного снимка готового поддерева, если снимок удалось снять |
@@ -167,12 +167,12 @@ ScopeAutoDependenciesStream<HomeDependencies> initDependencies(
 только что инициализированной зависимости, `name` — последний сегмент этого
 пути, то есть имя, с которым зависимость объявлена, плюс счётчик шагов
 `ProgressIterator` (`number`, `total` и `value` как доля от 0 до 1). Именно
-этот объект получает `buildOnInitializing`, так что прогресс-бару с подписью
+этот объект получает `buildOnProgress`, так что прогресс-бару с подписью
 больше ничего не нужно:
 
 ```dart
 @override
-Widget buildOnInitializing(
+Widget buildOnProgress(
   BuildContext context,
   covariant ScopeAutoDependenciesProgress? progress,
 ) =>

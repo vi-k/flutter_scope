@@ -75,7 +75,7 @@ final class ScreenScope
   }
 
   @override
-  Widget buildOnInitializing(
+  Widget buildOnProgress(
     BuildContext context,
     covariant ScopeAutoDependenciesProgress? progress,
   ) {

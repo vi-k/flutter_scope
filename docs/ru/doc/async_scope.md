@@ -1,6 +1,6 @@
 # AsyncScope
 
-> Перевод `doc/async_scope.md` (blob `5ca536ec6345027ab559d6e52e7f73f230ce8869`).
+> Перевод `doc/async_scope.md` (blob `6cc130113ae6b6a29ac5b26f635d876a34b69aa6`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 Скоуп, всё содержимое которого — жизненный цикл: асинхронная инициализация и
@@ -19,7 +19,7 @@ AsyncScope(
   },
   dispose: () => connection.close(),
   waitingBuilder: (context) => const SizedBox.shrink(),
-  initBuilder: (context, progress) => Text('$progress'),
+  progressBuilder: (context, progress) => Text('$progress'),
   errorBuilder: (context, error, stackTrace, progress) => Text('$error'),
   builder: (context) => const HomeScreen(),
 );
@@ -27,7 +27,7 @@ AsyncScope(
 
 `AsyncScopeBase` — форма для наследования: те же члены переопределениями —
 `initAsync`, `disposeAsync`, `onMount`, `onUnmount`, `buildOnWaiting`,
-`buildOnInitializing`, `buildOnReady`, `buildOnError` — плюс `scopeKey`,
+`buildOnProgress`, `buildOnReady`, `buildOnError` — плюс `scopeKey`,
 `scopeKeyTimeout`, `initCancellationTimeout`, `disposeAsyncTimeout`,
 `waitForChildrenTimeout`, их колбэки `onTimeout` и `pauseAfterInitialization`.
 Под обоими лежит `AsyncScopeCore` — для скоупа, которому нужен свой элемент.
@@ -38,8 +38,8 @@ AsyncScope(
 
 | состояние | билдер | когда |
 | --- | --- | --- |
-| `AsyncScopeWaiting` | `buildOnWaiting`, а если он вернул `null` — `buildOnInitializing` | встал на дерево; ждёт `scopeKey` и первое событие |
-| `AsyncScopeProgress` | `buildOnInitializing` | `init` сообщил о прогрессе; значение в `progress` |
+| `AsyncScopeWaiting` | `buildOnWaiting`, а если он вернул `null` — `buildOnProgress` | встал на дерево; ждёт `scopeKey` и первое событие |
+| `AsyncScopeProgress` | `buildOnProgress` | `init` сообщил о прогрессе; значение в `progress` |
 | `AsyncScopeReady` | `buildOnReady` | `init` выдал `AsyncScopeReady` |
 | `AsyncScopeError` | `buildOnError` | `init` упал раньше, чем стал готов; вместе с ошибкой приходит достигнутый прогресс |
 
@@ -72,7 +72,7 @@ AsyncScope(
     yield AsyncScopeReady();
   },
   dispose: api.close,
-  initBuilder: (context, progress) => Center(child: Text('$progress')),
+  progressBuilder: (context, progress) => Center(child: Text('$progress')),
   errorBuilder: (context, error, stackTrace, progress) =>
       Center(child: Text('failed at $progress: $error')),
   builder: (context) => const HomeScreen(),
@@ -83,7 +83,7 @@ AsyncScope(
 
 **До первого события он `null`.** Скоуп находится в `AsyncScopeWaiting` с
 момента постановки на дерево и до первого `yield`, а если `buildOnWaiting`
-вернул `null`, ветка ожидания — это `buildOnInitializing(context, null)`. Пишите
+вернул `null`, ветка ожидания — это `buildOnProgress(context, null)`. Пишите
 билдер так, чтобы `null` значил «ещё ничего не сообщали»; то же он значит и в
 `buildOnError`, когда провал случился раньше любого прогресса.
 
@@ -124,7 +124,7 @@ init: (context) async* {
 
   yield AsyncScopeReady();
 },
-initBuilder: (context, progress) => switch (progress) {
+progressBuilder: (context, progress) => switch (progress) {
   final Progress progress => LinearProgressIndicator(value: progress.progress),
   _ => const LinearProgressIndicator(),
 },
@@ -136,7 +136,7 @@ initBuilder: (context, progress) => switch (progress) {
 ### Где тип возвращается
 
 `Scope` прогресс типизирует: `ScopeInitState<P, D>` несёт `P`, так что
-`buildOnInitializing` может объявить `covariant P? progress` и читать поля, а не
+`buildOnProgress` может объявить `covariant P? progress` и читать поля, а не
 звать `toString`. `ScopeAutoDependencies` этим и пользуется, сообщая
 `ScopeAutoDependenciesProgress` на каждую зависимость — путь, имя и счётчик
 шагов в одном объекте. См. тему `Scope`.

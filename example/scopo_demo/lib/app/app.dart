@@ -16,13 +16,13 @@ import 'theme_manager/theme_manager.dart';
 /// [FakeAnalytics].
 final class App extends Scope<App, AppDependencies, AppState> {
   final ScopeInitCallback<String, AppDependencies> init;
-  final ScopeProgressBuilder<String> initBuilder;
+  final ScopeProgressBuilder<String> progressBuilder;
   final Widget Function(BuildContext context) builder;
 
   const App({
     super.key,
     required this.init,
-    required this.initBuilder,
+    required this.progressBuilder,
     required this.builder,
   }) : super(pauseAfterInitialization: const Duration(milliseconds: 500));
 
@@ -80,11 +80,11 @@ final class App extends Scope<App, AppDependencies, AppState> {
   }
 
   @override
-  Widget buildOnInitializing(
+  Widget buildOnProgress(
     BuildContext context,
     covariant String? progress,
   ) =>
-      _wrap(child: initBuilder(context, progress));
+      _wrap(child: progressBuilder(context, progress));
 
   @override
   Widget buildOnError(

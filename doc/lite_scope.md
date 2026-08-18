@@ -94,7 +94,7 @@ There are two phases, and they are not the same thing.
 `AsyncScopeInitState`, exactly as in the `AsyncScope` topic, running *before*
 the state is created. Its default yields `AsyncScopeReady()` at once, which is
 why most scopes never override it. Override it when something has to be ready
-before `createState`, and then `buildOnInitializing` and `buildOnError` have to
+before `createState`, and then `buildOnProgress` and `buildOnError` have to
 be overridden too — their default implementations throw
 `UnimplementedError`, on the reasoning that a progress branch nobody wrote is a
 mistake rather than a blank screen.
@@ -104,18 +104,18 @@ the state exists, and the ready branch waits for it.
 
 `buildOnWaiting` covers the gap before either of them has produced anything —
 the frames spent waiting for a `scopeKey` and for the first event. Returning
-`null` from it is allowed only when `buildOnInitializing` is overridden, since
+`null` from it is allowed only when `buildOnProgress` is overridden, since
 something has to be on screen.
 
 That is why `buildOnWaiting` is the one builder a `LiteScope` must write, which
 is the other way round from `Scope` and the asynchronous families, where
-`buildOnInitializing` is the required one. The rule behind both is the same:
+`buildOnProgress` is the required one. The rule behind both is the same:
 **exactly one branch before the ready one has to be written, and it is the one
 the family is certain to reach.** A `Scope` always initializes a container, so
 it always has a progress branch and may skip the waiting one; a `LiteScope`
 initializes nothing of its own, so what it always has is the wait. Moving a
 screen from `Scope` to `LiteScope` therefore trades one required builder for
-another: `buildOnInitializing` and `buildOnError` become optional — keep them
+another: `buildOnProgress` and `buildOnError` become optional — keep them
 only if you override `init()` — and `buildOnWaiting` becomes required.
 
 `wrapState` wraps the ready branch alone, so a widget every branch needs is

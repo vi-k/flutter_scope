@@ -454,7 +454,7 @@ Widget _asyncScope(_Case c) => AsyncScope(
           await gate.future;
         }
       },
-      initBuilder: (context, progress) => const SizedBox.shrink(),
+      progressBuilder: (context, progress) => const SizedBox.shrink(),
       errorBuilder: (context, error, stackTrace, progress) => Text('$error'),
       builder: (context) => c.ready,
     );
@@ -481,7 +481,7 @@ Widget _asyncDataScope(_Case c) => AsyncDataScope<String>(
           await gate.future;
         }
       },
-      initBuilder: (context, progress) => const SizedBox.shrink(),
+      progressBuilder: (context, progress) => const SizedBox.shrink(),
       errorBuilder: (context, error, stackTrace, progress) => Text('$error'),
       builder: (context, data) => c.ready,
     );
@@ -498,7 +498,7 @@ Widget _asyncControllerScope(_Case c) => AsyncControllerScope<_Controller>(
       onWaitForChildrenTimeout: c.onWaitForChildrenTimeout,
       pauseAfterInitialization: c.pauseAfterInitialization,
       create: (context) => _Controller(c),
-      initBuilder: (context) => const SizedBox.shrink(),
+      progressBuilder: (context) => const SizedBox.shrink(),
       errorBuilder: (context, error, stackTrace) => Text('$error'),
       builder: (context, controller) => c.ready,
     );
@@ -556,7 +556,7 @@ final class _LiteFixture extends LiteScope<_LiteFixture, _LiteFixtureState> {
   Widget? buildOnWaiting(BuildContext context) => const SizedBox.shrink();
 
   @override
-  Widget buildOnInitializing(BuildContext context, Object? progress) =>
+  Widget buildOnProgress(BuildContext context, Object? progress) =>
       const SizedBox.shrink();
 
   @override
@@ -623,7 +623,7 @@ final class _ScopeFixture
   }
 
   @override
-  Widget buildOnInitializing(BuildContext context, Object? progress) =>
+  Widget buildOnProgress(BuildContext context, Object? progress) =>
       const SizedBox.shrink();
 
   @override

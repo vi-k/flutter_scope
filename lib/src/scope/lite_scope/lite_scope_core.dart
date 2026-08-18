@@ -144,7 +144,7 @@ abstract base class LiteScopeElementBase<
   Widget? buildOnWaiting();
 
   /// Builds a widget to display while the scope is initializing.
-  Widget buildOnInitializing(Object? progress);
+  Widget buildOnProgress(Object? progress);
 
   /// Builds a widget to display if an error occurs during initialization.
   Widget buildOnError(
@@ -223,8 +223,8 @@ abstract base class LiteScopeElementBase<
 
   @override
   Widget buildOnState(AsyncScopeState state) => switch (state) {
-        AsyncScopeWaiting() => buildOnWaiting() ?? buildOnInitializing(null),
-        AsyncScopeProgress() => buildOnInitializing(state.progress),
+        AsyncScopeWaiting() => buildOnWaiting() ?? buildOnProgress(null),
+        AsyncScopeProgress() => buildOnProgress(state.progress),
         AsyncScopeReady() => buildOnReady(),
         AsyncScopeError() =>
           buildOnError(state.error, state.stackTrace, state.progress),

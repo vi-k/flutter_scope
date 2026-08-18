@@ -27,7 +27,7 @@ void main() {
         [
           'buildOnWaiting',
           'init',
-          'buildOnInitializing: half',
+          'buildOnProgress: half',
           'state.initAsync',
           'state.build',
         ],
@@ -144,7 +144,7 @@ void main() {
       expect(seen, isNull);
     });
 
-    // `buildOnInitializing` and `buildOnError` are optional here, and rightly
+    // `buildOnProgress` and `buildOnError` are optional here, and rightly
     // so: a `LiteScope` initializes nothing of its own, so most of them have
     // no progress branch to build. Overriding `init()` is what gives them
     // one, and the defaults left behind then throw rather than show a blank
@@ -161,7 +161,7 @@ void main() {
           (error) => error.message,
           'message',
           allOf(
-            contains('buildOnInitializing'),
+            contains('buildOnProgress'),
             contains('init()'),
             contains('_HalfWritten'),
           ),
@@ -449,8 +449,8 @@ final class _Lite extends LiteScope<_Lite, _LiteState> {
   }
 
   @override
-  Widget buildOnInitializing(BuildContext context, Object? progress) {
-    log.add('buildOnInitializing: $progress');
+  Widget buildOnProgress(BuildContext context, Object? progress) {
+    log.add('buildOnProgress: $progress');
 
     return Text('initializing: $progress');
   }
@@ -556,7 +556,7 @@ final class _Full extends Scope<_Full, _FullDeps, _FullState> {
       _FullDeps().asStream();
 
   @override
-  Widget buildOnInitializing(BuildContext context, Object? progress) =>
+  Widget buildOnProgress(BuildContext context, Object? progress) =>
       const SizedBox.shrink();
 
   @override

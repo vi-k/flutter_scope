@@ -87,7 +87,7 @@ void main() {
             yield AsyncScopeReady();
           },
           dispose: () {},
-          initBuilder: (context, progress) => const SizedBox.shrink(),
+          progressBuilder: (context, progress) => const SizedBox.shrink(),
           errorBuilder: (context, error, stackTrace, progress) =>
               const SizedBox.shrink(),
           builder: (context) {

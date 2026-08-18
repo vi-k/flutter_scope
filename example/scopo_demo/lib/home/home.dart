@@ -83,7 +83,7 @@ final class Home extends Scope<Home, HomeDependencies, HomeState> {
       );
 
   @override
-  Widget buildOnInitializing(
+  Widget buildOnProgress(
     BuildContext context,
     covariant ScopeAutoDependenciesProgress? progress,
   ) =>

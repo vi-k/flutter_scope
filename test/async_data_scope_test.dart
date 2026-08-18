@@ -284,7 +284,8 @@ final class _Host extends StatelessWidget {
         child: AsyncDataScope<_Database>(
           init: init,
           dispose: (data) => dispose?.call(data),
-          initBuilder: (context, progress) => Text('initializing: $progress'),
+          progressBuilder: (context, progress) =>
+              Text('initializing: $progress'),
           errorBuilder: (context, error, stackTrace, progress) =>
               Text('error: $error ($progress)'),
           builder: (context, data) => Column(
@@ -326,7 +327,7 @@ final class _NullableHost extends StatelessWidget {
         child: AsyncDataScope<String?>(
           init: init,
           dispose: (data) {},
-          initBuilder: (context, progress) =>
+          progressBuilder: (context, progress) =>
               _NullableReader(onInitializing, onInitializingHasData),
           errorBuilder: (context, error, stackTrace, progress) =>
               const SizedBox.shrink(),
