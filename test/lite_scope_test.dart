@@ -322,7 +322,7 @@ void main() {
         );
         binding.buildOwner!.buildScope(binding.rootElement!);
 
-        // Lets `initAsync()` deliver `AsyncScopeReady` -- so `_initSucceeded`
+        // Lets `initScope()` deliver `AsyncScopeReady` -- so `_initSucceeded`
         // is set and the post-frame callback is scheduled -- without drawing a
         // frame.
         await binding.idle();
@@ -347,9 +347,9 @@ void main() {
           isNull,
           reason: 'the pending ready callback must not use the disposed model',
         );
-        // The ready state was never applied, but `initAsync()` did succeed, so
-        // `disposeAsync()` still has to run exactly once (see task 7).
-        expect(element.disposeAsyncCount, 1);
+        // The ready state was never applied, but `initScope()` did succeed, so
+        // `disposeScope()` still has to run exactly once (see task 7).
+        expect(element.disposeScopeCount, 1);
         expect(element.state, isA<AsyncScopeWaiting>());
       },
     );
@@ -650,12 +650,12 @@ void main() {
     // `async_scope_test.dart`, one layer down: `LiteScopeCoreState`
     // synchronizes its disposal with its own initialization through a
     // completer, and `_performAsyncInit()` runs on a future discarded by
-    // `initState()`. A failed `initAsync()` used to leave that completer
+    // `initState()`. A failed `initScope()` used to leave that completer
     // unsettled, so `close()` -- which reaches it through
-    // `LiteScopeElementBase.disposeAsync()` -- never came back.
+    // `LiteScopeElementBase.disposeScope()` -- never came back.
     for (final (kind, isAsync) in [('synchronously', false), ('async', true)]) {
       testWidgets(
-        'completes when the state initAsync throws $kind',
+        'completes when the state initScope throws $kind',
         (tester) async {
           // The failure surfaces as an uncaught error of the zone the build
           // ran in, exactly as for the scope-level initialization; a guarded
@@ -700,7 +700,7 @@ void main() {
             reason: 'close() must not wait for an initialization that failed',
           );
           expect(
-            element.createdState!.disposeAsyncCount,
+            element.createdState!.disposeStateAsyncCount,
             0,
             reason: 'an initialization that never happened is not disposed of',
           );
@@ -993,7 +993,7 @@ void main() {
         expect(
           initCount,
           0,
-          reason: 'the probe must observe the window: `initAsync()` cannot '
+          reason: 'the probe must observe the window: `initScope()` cannot '
               'have been called before the key was granted',
         );
 
@@ -1036,7 +1036,7 @@ void main() {
               'initialization once the key finally arrives',
         );
         expect(
-          element.disposeAsyncCount,
+          element.disposeScopeCount,
           0,
           reason: 'an initialization that never ran has nothing to release',
         );
@@ -1350,15 +1350,15 @@ final class _CloseScope
     extends LiteScopeCore<_CloseScope, _CloseScopeElement, _CloseScopeState> {
   final Stream<AsyncScopeInitState> Function() init;
 
-  /// Makes [_CloseScopeState.initAsync] fail, the way a plain user error in a
+  /// Makes [_CloseScopeState.initStateAsync] fail, the way a plain user error in a
   /// state initializer does.
   final bool failStateInit;
 
-  /// Whether that failure is raised from a future ([_CloseScopeState.initAsync]
+  /// Whether that failure is raised from a future ([_CloseScopeState.initStateAsync]
   /// returns a `FutureOr<void>`, so both are ordinary user code).
   final bool failStateInitAsync;
 
-  /// Makes [_CloseScopeState.disposeAsync] fail, the way a resource that
+  /// Makes [_CloseScopeState.disposeStateAsync] fail, the way a resource that
   /// refuses to be released does.
   final bool failStateDispose;
 
@@ -1387,7 +1387,7 @@ final class _CloseScope
   /// Not `child`: that name belongs to [ProxyWidget] and is not nullable.
   final Widget? body;
 
-  /// Parks [_CloseScopeState.disposeAsync] on this. A scope below another
+  /// Parks [_CloseScopeState.disposeStateAsync] on this. A scope below another
   /// one unregisters from it only once its own teardown is over, so a scope
   /// held here keeps its parent waiting -- which is the only way to make the
   /// parent's wait for its children expire.
@@ -1418,9 +1418,9 @@ final class _CloseScope
 
 final class _CloseScopeElement extends LiteScopeElementBase<_CloseScope,
     _CloseScopeElement, _CloseScopeState> {
-  /// How many times [disposeAsync] ran, to prove that a disposal racing the
-  /// ready state still releases what `initAsync()` acquired.
-  int disposeAsyncCount = 0;
+  /// How many times [disposeScope] ran, to prove that a disposal racing the
+  /// ready state still releases what `initScope()` acquired.
+  int disposeScopeCount = 0;
 
   /// The state built by `buildOnReady()`, kept here because the widget that
   /// owns it is private to the package and cannot be found by type.
@@ -1459,12 +1459,12 @@ final class _CloseScopeElement extends LiteScopeElementBase<_CloseScope,
   }
 
   @override
-  Stream<AsyncScopeInitState> initAsync() => widget.init();
+  Stream<AsyncScopeInitState> initScope() => widget.init();
 
   @override
-  Future<void> disposeAsync() async {
-    disposeAsyncCount++;
-    await super.disposeAsync();
+  Future<void> disposeScope() async {
+    disposeScopeCount++;
+    await super.disposeScope();
   }
 
   @override
@@ -1487,23 +1487,23 @@ final class _CloseScopeElement extends LiteScopeElementBase<_CloseScope,
 
 final class _CloseScopeState extends LiteScopeCoreState<_CloseScope,
     _CloseScopeElement, _CloseScopeState> {
-  /// How many times [disposeAsync] ran, to prove that a state whose
+  /// How many times [disposeStateAsync] ran, to prove that a state whose
   /// initialization failed is not disposed of.
-  int disposeAsyncCount = 0;
+  int disposeStateAsyncCount = 0;
 
   @override
-  FutureOr<void> initAsync() {
+  FutureOr<void> initStateAsync() {
     if (!params.failStateInit) return null;
     if (params.failStateInitAsync) {
-      return Future<void>.error(StateError('state initAsync failed'));
+      return Future<void>.error(StateError('state initStateAsync failed'));
     }
 
-    throw StateError('state initAsync failed');
+    throw StateError('state initStateAsync failed');
   }
 
   @override
-  FutureOr<void> disposeAsync() {
-    disposeAsyncCount++;
+  FutureOr<void> disposeStateAsync() {
+    disposeStateAsyncCount++;
     if (params.disposeGate case final gate?) {
       return gate.future;
     }
@@ -1512,7 +1512,7 @@ final class _CloseScopeState extends LiteScopeCoreState<_CloseScope,
     // A real asynchronous failure, delivered through an awaited future one
     // microtask later, so it takes the same propagation path a resource that
     // refuses to be released would.
-    return Future<void>.error(StateError('state disposeAsync failed'));
+    return Future<void>.error(StateError('state disposeStateAsync failed'));
   }
 
   @override

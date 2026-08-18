@@ -8,13 +8,13 @@ the widget tree.
 
 ```dart
 AsyncScope(
-  init: (context) async* {
+  initScope: (context) async* {
     yield AsyncScopeProgress('connecting');
     await connection.open();
 
     yield AsyncScopeReady();
   },
-  dispose: () => connection.close(),
+  disposeScope: () => connection.close(),
   waitingBuilder: (context) => const SizedBox.shrink(),
   progressBuilder: (context, progress) => Text('$progress'),
   errorBuilder: (context, error, stackTrace, progress) => Text('$error'),
@@ -23,9 +23,9 @@ AsyncScope(
 ```
 
 `AsyncScopeBase` is the subclassable form: the same members as overrides —
-`initAsync`, `disposeAsync`, `onMount`, `onUnmount`, `buildOnWaiting`,
+`initScope`, `disposeScope`, `onMount`, `onUnmount`, `buildOnWaiting`,
 `buildOnProgress`, `buildOnReady`, `buildOnError` — plus `scopeKey`,
-`scopeKeyTimeout`, `initCancellationTimeout`, `disposeAsyncTimeout`,
+`scopeKeyTimeout`, `initCancellationTimeout`, `disposeScopeTimeout`,
 `waitForChildrenTimeout`, their `onTimeout` callbacks and
 `pauseAfterInitialization`. `AsyncScopeCore` sits under both for a scope that
 needs its own element.
@@ -37,11 +37,11 @@ needs its own element.
 | state | builder | when |
 | --- | --- | --- |
 | `AsyncScopeWaiting` | `buildOnWaiting`, or `buildOnProgress` when it returns `null` | mounted; waiting for a `scopeKey` and for the first event |
-| `AsyncScopeProgress` | `buildOnProgress` | `init` reported progress; the value is `progress` |
-| `AsyncScopeReady` | `buildOnReady` | `init` yielded `AsyncScopeReady` |
-| `AsyncScopeError` | `buildOnError` | `init` failed before it was ready; the progress it had reached comes with it |
+| `AsyncScopeProgress` | `buildOnProgress` | `initScope` reported progress; the value is `progress` |
+| `AsyncScopeReady` | `buildOnReady` | `initScope` yielded `AsyncScopeReady` |
+| `AsyncScopeError` | `buildOnError` | `initScope` failed before it was ready; the progress it had reached comes with it |
 
-`init` is typed to yield `AsyncScopeInitState`, which is the `Progress`/`Ready`
+`initScope` is typed to yield `AsyncScopeInitState`, which is the `Progress`/`Ready`
 half of that hierarchy: a stream cannot report "waiting" or "failed" as values,
 because those two states belong to the scope rather than to the work.
 
@@ -60,7 +60,7 @@ inside it. A `String` is the common case; anything with a `toString` will do.
 
 ```dart
 AsyncScope(
-  init: (context) async* {
+  initScope: (context) async* {
     yield AsyncScopeProgress('connecting');
     await api.connect();
 
@@ -69,7 +69,7 @@ AsyncScope(
 
     yield AsyncScopeReady();
   },
-  dispose: api.close,
+  disposeScope: api.close,
   progressBuilder: (context, progress) => Center(child: Text('$progress')),
   errorBuilder: (context, error, stackTrace, progress) =>
       Center(child: Text('failed at $progress: $error')),
@@ -80,7 +80,7 @@ AsyncScope(
 Four things are worth knowing about the `progress` argument.
 
 **It is `null` before the first event.** The scope is `AsyncScopeWaiting` from
-the moment it is mounted until `init` yields, and if `buildOnWaiting` returns
+the moment it is mounted until `initScope` yields, and if `buildOnWaiting` returns
 `null` the waiting branch is `buildOnProgress(context, null)`. Write the
 builder so that `null` means "nothing reported yet" — that is also what it means
 in `buildOnError` when the failure came before any progress did.
@@ -97,7 +97,7 @@ progress value — is reported through `FlutterError.reportError` and does not
 change what is on screen. An initialization that goes on producing values after
 the scope is usable wants a `Listenable` under the scope, not this stream.
 
-**No progress at all is fine.** An `init` that yields only `AsyncScopeReady`
+**No progress at all is fine.** An `initScope` that yields only `AsyncScopeReady`
 never leaves `AsyncScopeWaiting`, so the scope shows `buildOnWaiting` — a
 spinner, usually — and then the ready branch.
 
@@ -171,7 +171,7 @@ and the scope says so rather than initializing everything a second time.
 **A failure after the scope is already ready** does not switch the screen to
 `buildOnError`. It is reported through `FlutterError.reportError` and the scope
 stays ready. That is deliberate: the widgets on screen are the ready ones,
-whatever `init` acquired still has to be released by `dispose`, and swapping the
+whatever `initScope` acquired still has to be released by `disposeScope`, and swapping the
 subtree for an error screen behind the user's back would strand both. A stream
 that keeps working after `AsyncScopeReady` is unusual, but it is exactly the
 case where the difference matters.
@@ -203,9 +203,9 @@ awaited:
 5. **The child scopes are awaited**, bounded by `waitForChildrenTimeout`
    (`ScopeConfig.defaultWaitForChildrenTimeout` by default). An expiry is
    reported through `FlutterError.reportError` and the disposal proceeds.
-6. **`disposeAsync`** — the scope's own teardown, awaited when it returns a
-   future, and bounded by `disposeAsyncTimeout`
-   (`ScopeConfig.defaultDisposeAsyncTimeout` by default). It runs only when the
+6. **`disposeScope`** — the scope's own teardown, awaited when it returns a
+   future, and bounded by `disposeScopeTimeout`
+   (`ScopeConfig.defaultDisposeScopeTimeout` by default). It runs only when the
    initialization succeeded: a scope that never became ready — still waiting,
    or failed — has nothing to release. A teardown that never completes is user
    code holding step 7 below, and with it the `scopeKey` of a scope that has
@@ -227,12 +227,12 @@ overlaps with the one it replaces.
 
 ### An initialization that fails owns its own mess
 
-Step 6 is the one to read twice: **`dispose` runs only when the initialization
+Step 6 is the one to read twice: **`disposeScope` runs only when the initialization
 succeeded.** A scope that failed halfway never reaches it, and there is no
 second hook that does — `onUnmount` runs, but it is handed nothing to work
 with.
 
-That is not an oversight. `dispose` is written against a scope that is finished,
+That is not an oversight. `disposeScope` is written against a scope that is finished,
 and a half-built one is a different thing with a different teardown; only the
 code that did the building knows how far it got. So it is the initialization's
 job to give back what it took before it failed:
@@ -279,13 +279,13 @@ leaks it when the scope leaves first.
 The flag is what keeps the guard quiet afterwards. `yield AsyncScopeReady()` is
 the handover, and a body ended at that `yield` never reaches the line below it:
 a `finally` that finds the flag still false is exactly the case where the scope
-never took the connection over and `dispose` will not be called for it. Once the
+never took the connection over and `disposeScope` will not be called for it. Once the
 flag is set, releasing it is the scope's job and the guard must not do it a
 second time.
 
 The flag can be trusted with that decision because of when the line below the
 `yield` runs: a generator is resumed when its consumer asks for the next event,
-and by then the scope has taken the one it was given — `dispose` is going to be
+and by then the scope has taken the one it was given — `disposeScope` is going to be
 called. There is no window where the flag says handed over and the scope
 disagrees, not even while the ready branch is still held back by
 `pauseAfterInitialization`, and the suite stands in that state to check.

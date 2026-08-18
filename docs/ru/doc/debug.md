@@ -1,6 +1,6 @@
 # debug
 
-> Перевод `doc/debug.md` (blob `7b4d1793993f44d7811542dab450297740736f31`).
+> Перевод `doc/debug.md` (blob `5ceb9084248106b29bff51a32030b108eaa6ee4c`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 Журнал и глобальные настройки пакета. Всё на этой странице статическое и живёт в
@@ -157,7 +157,7 @@ void main() {
   владелец освободит его `scopeKey`;
 - `ScopeConfig.defaultInitCancellationTimeout` — сколько разбор ждёт отмены
   инициализации;
-- `ScopeConfig.defaultDisposeAsyncTimeout` — сколько разбор ждёт `disposeAsync`,
+- `ScopeConfig.defaultDisposeScopeTimeout` — сколько разбор ждёт `disposeScope`,
   собственного освобождения скоупа;
 - `ScopeConfig.defaultWaitForChildrenTimeout` — сколько скоуп ждёт утилизации
   дочерних скоупов, прежде чем утилизироваться самому.
@@ -182,9 +182,9 @@ void main() {
 анимацией. А скоуп, снятый с дерева посреди паузы, её гасит.
 
 Любой скоуп может переопределить все четыре значения для себя параметрами
-`scopeKeyTimeout`, `initCancellationTimeout`, `disposeAsyncTimeout` и
+`scopeKeyTimeout`, `initCancellationTimeout`, `disposeScopeTimeout` и
 `waitForChildrenTimeout` и заметить истечение через колбэки
-`onScopeKeyTimeout`, `onInitCancellationTimeout`, `onDisposeAsyncTimeout` и
+`onScopeKeyTimeout`, `onInitCancellationTimeout`, `onDisposeScopeTimeout` и
 `onWaitForChildrenTimeout`. Чего скоуп не может для себя — снять ограничение:
 `null` там означает «взять значение по умолчанию», а не «ждать сколько
 понадобится». Снимают ограничение значениями `ScopeConfig` выше, и сразу для

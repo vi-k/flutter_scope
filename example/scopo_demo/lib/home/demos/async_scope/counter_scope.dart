@@ -99,7 +99,7 @@ final class CounterScopeElement
   }
 
   @override
-  Stream<AsyncScopeInitState> initAsync() async* {
+  Stream<AsyncScopeInitState> initScope() async* {
     console.log(widget.debugSource, '${widget.debugName}: initialize');
     await _model.init();
     yield AsyncScopeReady();
@@ -107,7 +107,7 @@ final class CounterScopeElement
   }
 
   @override
-  Future<void> disposeAsync() async {
+  Future<void> disposeScope() async {
     console.log(widget.debugSource, '${widget.debugName}: dispose');
     await _model.dispose();
     console.log(widget.debugSource, '${widget.debugName}: disposed');

@@ -65,11 +65,11 @@ abstract base class Scope<W extends Scope<W, D, S>, D extends ScopeDependencies,
   final void Function()? onInitCancellationTimeout;
 
   /// The timeout duration for the asynchronous teardown of this scope, before
-  /// it triggers [onDisposeAsyncTimeout].
-  final Duration? disposeAsyncTimeout;
+  /// it triggers [onDisposeScopeTimeout].
+  final Duration? disposeScopeTimeout;
 
-  /// A callback invoked when the [disposeAsyncTimeout] expires.
-  final void Function()? onDisposeAsyncTimeout;
+  /// A callback invoked when the [disposeScopeTimeout] expires.
+  final void Function()? onDisposeScopeTimeout;
 
   /// The timeout duration for waiting to dispose child scopes.
   final Duration? waitForChildrenTimeout;
@@ -89,8 +89,8 @@ abstract base class Scope<W extends Scope<W, D, S>, D extends ScopeDependencies,
     this.onScopeKeyTimeout,
     this.initCancellationTimeout,
     this.onInitCancellationTimeout,
-    this.disposeAsyncTimeout,
-    this.onDisposeAsyncTimeout,
+    this.disposeScopeTimeout,
+    this.onDisposeScopeTimeout,
     this.waitForChildrenTimeout,
     this.onWaitForChildrenTimeout,
     this.pauseAfterInitialization,
@@ -230,10 +230,10 @@ final class _ScopeElement<W extends Scope<W, D, S>, D extends ScopeDependencies,
   void onInitCancellationTimeout() => widget.onInitCancellationTimeout?.call();
 
   @override
-  Duration? get disposeAsyncTimeout => widget.disposeAsyncTimeout;
+  Duration? get disposeScopeTimeout => widget.disposeScopeTimeout;
 
   @override
-  void onDisposeAsyncTimeout() => widget.onDisposeAsyncTimeout?.call();
+  void onDisposeScopeTimeout() => widget.onDisposeScopeTimeout?.call();
 
   @override
   Duration? get waitForChildrenTimeout => widget.waitForChildrenTimeout;
@@ -287,11 +287,11 @@ abstract base class ScopeState<W extends Scope<W, D, S>,
 
   /// Initializes the scope asynchronously.
   @override
-  FutureOr<void> initAsync() {}
+  FutureOr<void> initStateAsync() {}
 
   /// Disposes the scope asynchronously.
   @override
-  FutureOr<void> disposeAsync() {}
+  FutureOr<void> disposeStateAsync() {}
 
   @override
   Widget build(BuildContext context);

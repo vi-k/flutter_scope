@@ -2,7 +2,7 @@
 
 A state class with the whole scope lifecycle behind it, and no dependency
 container in front of it. `initState` and `dispose` as usual, plus an
-asynchronous `initAsync` and `disposeAsync` that the scope awaits, plus
+asynchronous `initStateAsync` and `disposeStateAsync` that the scope awaits, plus
 `notifyDependents`, `close()`, `scopeKey` and the waiting for child scopes.
 
 This is the family for per-screen state that owns things worth releasing
@@ -29,7 +29,7 @@ final class ScreenScopeState
   final controller = ScrollController();
 
   @override
-  Future<void> disposeAsync() async => controller.dispose();
+  Future<void> disposeStateAsync() async => controller.dispose();
 
   @override
   Widget build(BuildContext context) =>
@@ -43,9 +43,9 @@ final class ScreenScopeState
 
 | member | what it is |
 | --- | --- |
-| `initAsync()` | asynchronous initialization, awaited before the state is shown as ready |
-| `onUnmount()` | synchronous teardown, always before `disposeAsync()` |
-| `disposeAsync()` | asynchronous teardown, awaited before the scope is gone |
+| `initStateAsync()` | asynchronous initialization, awaited before the state is shown as ready |
+| `onUnmount()` | synchronous teardown, always before `disposeStateAsync()` |
+| `disposeStateAsync()` | asynchronous teardown, awaited before the scope is gone |
 | `notifyDependents()` | rebuild the subscribed descendants, not the subtree |
 | `close()` | run the teardown while the scope is still on screen |
 
@@ -59,7 +59,7 @@ Reading `widget` throws an `UnsupportedError` saying so, which is what a `State`
 mixin written for ordinary widgets runs into.
 
 The ordinary `initState` of a `State` still works and still runs synchronously,
-and `initAsync` is where an `await` belongs. `disposeAsync` is what makes a
+and `initStateAsync` is where an `await` belongs. `disposeStateAsync` is what makes a
 parent scope — and `close()` — wait for the release to finish rather than fire
 and forget it.
 
@@ -79,10 +79,10 @@ void onUnmount() {
 }
 
 @override
-Future<void> disposeAsync() => _connection.close();   // may take its time
+Future<void> disposeStateAsync() => _connection.close();   // may take its time
 ```
 
-`onUnmount()` runs exactly once and always before `disposeAsync()`, whichever
+`onUnmount()` runs exactly once and always before `disposeStateAsync()`, whichever
 way the scope goes. The `BuildContext` is gone by the time it runs on a removed
 scope, so it may only touch what the state holds in its own fields.
 
@@ -99,7 +99,7 @@ be overridden too — their default implementations throw
 `UnimplementedError`, on the reasoning that a progress branch nobody wrote is a
 mistake rather than a blank screen.
 
-`LiteScopeState.initAsync()` on the **state** is the usual one: it runs after
+`LiteScopeState.initStateAsync()` on the **state** is the usual one: it runs after
 the state exists, and the ready branch waits for it.
 
 `buildOnWaiting` covers the gap before either of them has produced anything —
@@ -116,7 +116,7 @@ it always has a progress branch and may skip the waiting one; a `LiteScope`
 initializes nothing of its own, so what it always has is the wait. Moving a
 screen from `Scope` to `LiteScope` therefore trades one required builder for
 another: `buildOnProgress` and `buildOnError` become optional — keep them
-only if you override `init()` — and `buildOnWaiting` becomes required.
+only if you override `initScope()` — and `buildOnWaiting` becomes required.
 
 `wrapState` wraps the ready branch alone, so a widget every branch needs is
 built inside each builder instead.
@@ -173,7 +173,7 @@ disposal already running rather than installing a second barrier.
 
 The order is the one from the `AsyncScope` topic, with the state's own steps in
 it: `onUnmount()` of the state runs first, the pre-initialization is cancelled,
-the child scopes are awaited (`waitForChildrenTimeout`), `disposeAsync()` of
+the child scopes are awaited (`waitForChildrenTimeout`), `disposeStateAsync()` of
 the state runs, and the `scopeKey` is released last so that the next scope with
 that key starts only when this one is finished.
 
@@ -181,7 +181,7 @@ Flutter's own `dispose()` of the state sits outside that sequence, on either
 side of it depending on how the scope went: before all of it when the tree took
 the scope down, after all of it when the scope closed itself. That is the whole
 point of `close()` — release first, leave later — and it is why the teardown
-the scope guarantees is the `onUnmount()`/`disposeAsync()` pair rather than
+the scope guarantees is the `onUnmount()`/`disposeStateAsync()` pair rather than
 `dispose()`.
 
 A `LiteScope` is an `AsyncScopeParent` like every asynchronous scope: the

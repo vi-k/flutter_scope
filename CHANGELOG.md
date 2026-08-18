@@ -72,7 +72,7 @@
   loading branch for good. `AsyncScopeError` was reached only from the
   stream's own failures, so a throw raised while the stream was still being
   built — the `AsyncScopeCoordinator` lookup of a scope that asks for a
-  `scopeKey` and has no coordinator above it, or an `initAsync` that is not a
+  `scopeKey` and has no coordinator above it, or an `initScope` that is not a
   generator and throws — never reached the model: the scope stayed in
   `AsyncScopeWaiting` and went on showing `buildOnProgress`, which for a
   missing coordinator is the commonest mistake in the tree. It now shows
@@ -195,6 +195,32 @@
   `buildOnReady` already worked that way. The entries above that named the old
   spelling were rewritten to the new one: 0.10.0 has not shipped, so the section
   speaks the vocabulary the release will have. Released sections are untouched.
+* [breaking changes] The lifecycle hooks say what they initialize and what they
+  release, on both levels, because one name meant two things: `initAsync` was
+  the scope's own initialization on `AsyncScopeBase` and the state's own on
+  `LiteScopeState`, and `disposeAsync` was both teardowns at once. The scope's
+  half is `initScope` and `disposeScope` — `LiteScope.init()` joins them under
+  the first name — and the state's half is `initStateAsync` and
+  `disposeStateAsync`, where `Async` still earns its place beside Flutter's
+  synchronous `initState`. `onUnmount` keeps its prefix on both: it is called
+  when the scope goes, and it is not what takes it away. `initData`,
+  `disposeData`, `initDependencies` and `createController` are unchanged — they
+  already named what they prepare. The timeout that bounds the scope's teardown
+  follows the method: `disposeAsyncTimeout` is `disposeScopeTimeout`,
+  `onDisposeAsyncTimeout` is `onDisposeScopeTimeout`, and
+  `ScopeConfig.defaultDisposeAsyncTimeout` is `defaultDisposeScopeTimeout`.
+  `initCancellationTimeout` is untouched: it is named after an event rather than
+  after a method.
+* [breaking changes] A parameter of `AsyncScope`, `AsyncDataScope` or
+  `AsyncControllerScope` now carries the name of the method it stands in for:
+  `onMount`, `initScope`/`initData`, `onUnmount`, `disposeScope`/`disposeData`,
+  `createController`. The builders keep the shape they had — `waitingBuilder`,
+  `progressBuilder`, `errorBuilder`, `builder` — beside `buildOnWaiting`,
+  `buildOnProgress`, `buildOnError` and `buildOnReady`. **The callbacks are
+  constructor parameters only now**: a field cannot share a name with the method
+  it implements, so each is held in a private field. Nothing in this package,
+  its tests or its examples read them from outside, and the analyzer says so at
+  once for anyone who did.
 * The bookkeeping that decides which build a dependent's selectors belong to asks
   for a frame when nothing else will bring one. The reset runs in a post-frame
   callback, and a build is not always inside a frame — `runApp` builds the first
@@ -386,7 +412,7 @@
   reaches none of them. The `debug` topic says so.
 * Fix an initialization stream that ends without `AsyncScopeReady` leaving the
   scope on its loading branch for good, and silently. The model stayed
-  `AsyncScopeWaiting`, `disposeAsync` was never called, and the only trace was
+  `AsyncScopeWaiting`, `disposeScope` was never called, and the only trace was
   an `info` line in a logger that is off by default — nothing on screen and
   nothing in the console, which is the hardest kind of failure to look for. The
   scope now moves to `AsyncScopeError` with a `StateError` saying what a stream
@@ -399,7 +425,7 @@
   until the generator finishes, so a `dep.dispose` that never completed held not
   only the resources but the failure itself, and the scope showed its loading
   branch for ever. The wait is now bounded by
-  `ScopeConfig.defaultDisposeAsyncTimeout`, the way every other wait in the
+  `ScopeConfig.defaultDisposeScopeTimeout`, the way every other wait in the
   teardown is, and giving up is reported rather than passed over; a release that
   fails after it was abandoned is reported too. The `AsyncScope` topic now says
   what an `await` in a hand-written guard costs when it cannot finish.
@@ -410,7 +436,7 @@
   `initCancellationTimeout` and runs to the end. If that future ever
   completes, the generator is resumed with its `finally` still holding the
   controller to release; by then the element has given back everything it
-  held, the widget among it. Reading `disposeAsyncTimeout` there went through
+  held, the widget among it. Reading `disposeScopeTimeout` there went through
   that widget and raised a `_TypeError` where a release belonged, so the
   console got a report about a null instead of the release the family
   promises on every path. An abandoned release now runs unbounded, which is
@@ -464,14 +490,14 @@
   failure in one never skips the ones behind it, and only the first of them can
   be passed on — a throw carries one failure. The rest went to an `info`-level
   logger that is off by default, which is the same as losing them: a scope
-  whose wait for its children expired and whose own `disposeAsync` then fell
+  whose wait for its children expired and whose own `disposeScope` then fell
   over said nothing at all about the second failure. Every failure behind the
   first is now reported through `FlutterError.reportError`, which is the trade
   the rest of the teardown already makes for failures it cannot hand to a
   caller.
 * Fix the *first* failure being lost in the two halves of a `Scope` teardown.
   `ScopeState.onUnmount` runs before `ScopeDependencies.onUnmount`, and
-  `ScopeState.disposeAsync` before `ScopeDependencies.dispose`; in both pairs
+  `ScopeState.disposeStateAsync` before `ScopeDependencies.dispose`; in both pairs
   the state's failure was kept in a local while the container's was left to
   throw over the top of it, so the first — the one that explains what the
   second made of the same teardown — vanished without a trace. Both halves are
@@ -480,7 +506,7 @@
   `ScopeAutoDependencies` reports what its own children throw and never hands a
   failure up. The `Scope` and `AsyncScope` topics say what the order costs.
 * The dartdoc of the twelve timeout parameters said the opposite of what they
-  do. `scopeKeyTimeout`, `initCancellationTimeout`, `disposeAsyncTimeout` and
+  do. `scopeKeyTimeout`, `initCancellationTimeout`, `disposeScopeTimeout` and
   `waitForChildrenTimeout`, in all three asynchronous families, each promised
   that `null` "waits indefinitely" — and each is read as
   `value ?? ScopeConfig.defaultX`, which is three seconds. A teardown that was
@@ -536,11 +562,11 @@
   operator used on a null value`, naming neither. `maybeOf` still answers
   `null` there, the same as when there is no such scope at all, and the
   message says so.
-* The methods that carry a family's promise are sealed. `initAsync` on
+* The methods that carry a family's promise are sealed. `initScope` on
   `AsyncDataScopeElementBase` catches the value on its way past, and
   `initDataAsync` on `AsyncControllerScopeElementBase` is the whole of what the
   controller family guarantees; both are `@nonVirtual` now, and the controller
-  layer's `disposeAsync` is `@mustCallSuper`. They sat in the same class as the
+  layer's `disposeScope` is `@mustCallSuper`. They sat in the same class as the
   hooks a subclass is meant to write, so overriding one silently turned the
   guarantee off — `data` left empty for good, or a controller never released —
   with nothing from the compiler or the analyzer to say so.
@@ -551,7 +577,7 @@
   It is reported now, and the original is what the scope shows. `dispose()` is
   documented to run on the path where `init()` failed halfway, which makes
   that the path it is most likely to fail on.
-* The same release is bounded by `disposeAsyncTimeout`, which the
+* The same release is bounded by `disposeScopeTimeout`, which the
   `AsyncControllerScope` topic already promised for it. Nothing bounded it on
   the path where `init()` threw: a teardown that never finished never let the
   generator finish either, so the failure never reached the model and the
@@ -628,7 +654,7 @@
   `unmount` at all — and none ever would: the pass runs once and nothing comes
   back for a second attempt, so whatever a dependency drops only there lived on
   until the tree died with it. The two halves are now guarded apart, as they
-  already were in `disposeAsync`, and the first failure is passed on once both
+  already were in `disposeScope`, and the first failure is passed on once both
   have run.
 * Fix an asynchronous `NavigationNode.onPop` being asked twice and answering
   too late. Two quick back presses started two questions, and two answers of
@@ -668,13 +694,13 @@
   in the model, and then left the builder to fish it back out of
   `AsyncScope.of`. Subclasses of `AsyncScopeBase` take the same two arguments
   in `buildOnProgress` and `buildOnError`.
-* Fix a teardown held forever by a `disposeAsync` that never completes — the
+* Fix a teardown held forever by a `disposeScope` that never completes — the
   same hole one step further down, and user code on both sides of it. The
   release that follows it, and with it the `scopeKey` of a scope that had
   already left the tree, waited for it with no limit. Bounded now by
-  `disposeAsyncTimeout`, three seconds by default
-  (`ScopeConfig.defaultDisposeAsyncTimeout`, `null` to wait indefinitely), with
-  an `onDisposeAsyncTimeout` callback. On expiry the teardown is left to finish
+  `disposeScopeTimeout`, three seconds by default
+  (`ScopeConfig.defaultDisposeScopeTimeout`, `null` to wait indefinitely), with
+  an `onDisposeScopeTimeout` callback. On expiry the teardown is left to finish
   whenever it does, the expiry is reported, and the scope gives back what it
   was holding. A release that legitimately takes longer than the limit is
   therefore no longer waited out — raise the limit for such a scope, or drop it
@@ -698,7 +724,7 @@
   the log — and that is exactly where two scopes of the same type stand side by
   side over two different models.
 * `AsyncScope` and `AsyncDataScope` take the nine settings their base classes
-  declare: `scopeKeyTimeout`, `initCancellationTimeout`, `disposeAsyncTimeout`
+  declare: `scopeKeyTimeout`, `initCancellationTimeout`, `disposeScopeTimeout`
   and `waitForChildrenTimeout` with the callback beside each, and
   `pauseAfterInitialization`. The elements behind both widgets had always read
   them; only the constructors never passed them on, so the two closure forms
@@ -709,11 +735,11 @@
   `ScopeState`. It belongs to Flutter and lands on either side of a scope's
   teardown depending on how the scope went, so nothing a scope has to let go of
   can be released on that schedule. Overriding it is now an analyzer warning
-  that says so; the teardown goes in `onUnmount()` and `disposeAsync()`.
+  that says so; the teardown goes in `onUnmount()` and `disposeStateAsync()`.
 * [breaking changes] `ScopeDependencies.unmount` and `ScopeDependency.unmount`
   are now `onUnmount`, so that every hook a scope calls to drop what must stop
   reaching it goes by one name. The assignable callbacks keep the short verb
-  they always had: `dep.unmount`, and `AsyncScope(unmount:)`.
+  they always had: `dep.unmount`, and `AsyncScope(onUnmount:)`.
 * [breaking changes] The synchronous half of a teardown is now a step of the
   teardown rather than a tail of `Element.unmount`, and `LiteScopeState` /
   `ScopeState` gained `onUnmount()` to put it in. A scope leaves in one of two
@@ -722,7 +748,7 @@
   dependency's `unmount` never ran, and by the time the element did leave the
   tree the asynchronous half had already released it, so nothing was left to
   drop the subscription from. `onUnmount` now runs exactly once, always before
-  `disposeAsync`, whichever way the scope goes.
+  `disposeStateAsync`, whichever way the scope goes.
 
   `State.dispose` is not part of that order and cannot be: it belongs to
   Flutter, which calls it before the scope's teardown begins on removal, and
@@ -776,7 +802,7 @@
   notification is not that case.
 * Fix a failing cleanup hook taking the mandatory teardown with it. A scope
   hands control to code you wrote on its way out — `onUnmount`,
-  `onWaitForChildrenTimeout`, the state's `disposeAsync`, a dependency's
+  `onWaitForChildrenTimeout`, the state's `disposeStateAsync`, a dependency's
   `unmount` — and a failure there used to abandon everything behind it: the
   scope stayed registered with its parent, its `scopeKey` was never released,
   its model was never disposed of, and its dependencies kept whatever they had
@@ -871,15 +897,15 @@
   never released its `scopeKey`. The failure is now reported through
   `FlutterError.reportError` and the disposal runs to its end.
 * Fix a deadlock when an asynchronous initialization fails before it starts:
-  `initAsync()` raising on the spot, or the missing-`AsyncScopeCoordinator`
+  `initScope()` raising on the spot, or the missing-`AsyncScopeCoordinator`
   error of a scope with a `scopeKey`, left the scope waiting for its own
   initialization forever. It never unregistered from its parent, so the parent
   burned its whole `waitForChildrenTimeout` on a scope that was already gone,
   and neither of them was ever disposed of. The failure is still reported the
   same way, and a scope whose initialization never happened is still not
-  disposed of. The same failure in `LiteScopeCoreState.initAsync()` no longer
+  disposed of. The same failure in `LiteScopeCoreState.initStateAsync()` no longer
   keeps `close()` waiting forever either.
-* Fix a failure raised after `initAsync()` had already reached
+* Fix a failure raised after `initScope()` had already reached
   `AsyncScopeReady` crashing with `Bad state: Future already completed`
   instead of being reported: the stream's error handler completed the
   initialization completer a second time, and that crash replaced the failure
@@ -887,7 +913,7 @@
   reported through `FlutterError.reportError` (library `scopo`) and the scope
   stays ready — it is no longer flipped into `AsyncScopeError`, which would
   have replaced the widgets already on screen with `buildOnError` while
-  `disposeAsync()` still ran. The `already initialized` diagnostic now checks
+  `disposeScope()` still ran. The `already initialized` diagnostic now checks
   whether the initialization succeeded instead of the applied model state, so
   a second `AsyncScopeReady` arriving before the post-frame callback that
   applies the first one no longer re-runs the whole ready branch.
@@ -901,13 +927,13 @@
   entry is never dropped.
 * Fix a scope running its whole initialization after its disposal had already
   begun: a scope with a `scopeKey` awaits the coordinator before it subscribes
-  to `initAsync()`, and the disposal can only cancel an initialization through
+  to `initScope()`, and the disposal can only cancel an initialization through
   that subscription — so a disposal starting inside that window had nothing to
   cancel, and the `mounted` guard on the far side of the await says nothing
   about a `close()`, which keeps the element mounted on purpose. The scope
   went on to subscribe once the key was granted and to acquire resources it
   would never release, since a scope whose disposal has already passed the
-  `disposeAsync()` decision does not run it. The initialization now also stops
+  `disposeScope()` decision does not run it. The initialization now also stops
   when the disposal has begun; the normal path is unchanged.
 * Fix `close()` leaving an orphaned child entry behind: the post-frame
   callback that registers a scope with its parent was guarded by `mounted`
@@ -1002,7 +1028,7 @@
 * Guard the Ready-state model update against running after disposal has
   started (an element closed via close() stays mounted while its model is
   being disposed of).
-* Base the disposeAsync() decision on successful initialization instead of
+* Base the disposeScope() decision on successful initialization instead of
   the applied model state (resources are now disposed of when the element
   is removed in the init-completion frame).
 * Guard AsyncScope post-frame callbacks with `mounted`.

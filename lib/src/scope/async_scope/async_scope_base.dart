@@ -34,17 +34,17 @@ abstract base class AsyncScopeBase<W extends AsyncScopeBase<W>>
   /// and the teardown goes on without the initialization.
   final void Function()? onInitCancellationTimeout;
 
-  /// How long to wait for [disposeAsync]; `null` takes the default.
+  /// How long to wait for [disposeScope]; `null` takes the default.
   ///
-  /// Defaults to [ScopeConfig.defaultDisposeAsyncTimeout]. Removing the limit
+  /// Defaults to [ScopeConfig.defaultDisposeScopeTimeout]. Removing the limit
   /// altogether is done there, not here.
-  final Duration? disposeAsyncTimeout;
+  final Duration? disposeScopeTimeout;
 
-  /// Called when the wait for [disposeAsync] expires.
+  /// Called when the wait for [disposeScope] expires.
   ///
   /// The expiry is reported through [FlutterError.reportError] either way,
   /// and the release goes on without waiting for the teardown to finish.
-  final void Function()? onDisposeAsyncTimeout;
+  final void Function()? onDisposeScopeTimeout;
 
   /// How long to wait for the child scopes; `null` takes the default.
   ///
@@ -74,8 +74,8 @@ abstract base class AsyncScopeBase<W extends AsyncScopeBase<W>>
     this.onScopeKeyTimeout,
     this.initCancellationTimeout,
     this.onInitCancellationTimeout,
-    this.disposeAsyncTimeout,
-    this.onDisposeAsyncTimeout,
+    this.disposeScopeTimeout,
+    this.onDisposeScopeTimeout,
     this.waitForChildrenTimeout,
     this.onWaitForChildrenTimeout,
     this.pauseAfterInitialization,
@@ -93,15 +93,15 @@ abstract base class AsyncScopeBase<W extends AsyncScopeBase<W>>
   ///
   /// Yields [AsyncScopeProgress] any number of times and [AsyncScopeReady]
   /// once.
-  Stream<AsyncScopeInitState> initAsync(BuildContext context);
+  Stream<AsyncScopeInitState> initScope(BuildContext context);
 
   /// Called synchronously when the scope leaves the tree.
   void onUnmount() {}
 
-  /// Releases what [initAsync] acquired.
+  /// Releases what [initScope] acquired.
   ///
   /// Awaited, and called only when the initialization succeeded.
-  FutureOr<void> disposeAsync();
+  FutureOr<void> disposeScope();
 
   /// Built while waiting for a `scopeKey` and for the first event.
   ///
@@ -187,10 +187,10 @@ final class _AsyncScopeElement<W extends AsyncScopeBase<W>>
   void onInitCancellationTimeout() => widget.onInitCancellationTimeout?.call();
 
   @override
-  Duration? get disposeAsyncTimeout => widget.disposeAsyncTimeout;
+  Duration? get disposeScopeTimeout => widget.disposeScopeTimeout;
 
   @override
-  void onDisposeAsyncTimeout() => widget.onDisposeAsyncTimeout?.call();
+  void onDisposeScopeTimeout() => widget.onDisposeScopeTimeout?.call();
 
   @override
   Duration? get waitForChildrenTimeout => widget.waitForChildrenTimeout;
@@ -215,7 +215,7 @@ final class _AsyncScopeElement<W extends AsyncScopeBase<W>>
   }
 
   @override
-  Stream<AsyncScopeInitState> initAsync() => widget.initAsync(this);
+  Stream<AsyncScopeInitState> initScope() => widget.initScope(this);
 
   @override
   void onUnmount() {
@@ -224,7 +224,7 @@ final class _AsyncScopeElement<W extends AsyncScopeBase<W>>
   }
 
   @override
-  FutureOr<void> disposeAsync() => widget.disposeAsync();
+  FutureOr<void> disposeScope() => widget.disposeScope();
 
   @override
   Widget buildOnState(AsyncScopeState state) => switch (state) {

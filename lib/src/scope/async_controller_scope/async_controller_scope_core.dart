@@ -94,7 +94,7 @@ abstract base class AsyncControllerScopeElementBase<
       yield AsyncDataScopeReady(controller);
     } finally {
       // The criterion is the one `_performAsyncDispose` uses to decide whether
-      // to call `disposeAsync`, and it is that one on purpose: the controller
+      // to call `disposeScope`, and it is that one on purpose: the controller
       // has to be released exactly once, so the flag that releases it here and
       // the flag that releases it there must be the same fact rather than two
       // facts that agree.
@@ -128,7 +128,7 @@ abstract base class AsyncControllerScopeElementBase<
   /// The wait is bounded for the same reason the rest of the teardown is: a
   /// release that never finishes never lets the generator finish either, so
   /// the failure of `init()` would never reach the model and the scope would
-  /// show its loading branch for ever. `disposeAsyncTimeout` is the limit the
+  /// show its loading branch for ever. `disposeScopeTimeout` is the limit the
   /// `AsyncControllerScope` topic names for the wait on `dispose()`, and this
   /// is a wait on `dispose()`.
   Future<void> _releaseController(C controller) async {
@@ -139,7 +139,7 @@ abstract base class AsyncControllerScopeElementBase<
       // end, and the release is happening on a generator it abandoned. There
       // is nothing left for a limit to protect -- nobody is waiting for this,
       // the model is disposed of and the `scopeKey` is back -- and there is
-      // nothing left to read a limit from either: `disposeAsyncTimeout` goes
+      // nothing left to read a limit from either: `disposeScopeTimeout` goes
       // through `widget`, which the element cleared on its way out, so asking
       // raised a `_TypeError` where a release belonged. The wait goes on
       // unbounded, which is what an abandoned release deserves: it can hold
@@ -151,7 +151,7 @@ abstract base class AsyncControllerScopeElementBase<
       }
 
       final limit =
-          disposeAsyncTimeout ?? ScopeConfig.defaultDisposeAsyncTimeout;
+          disposeScopeTimeout ?? ScopeConfig.defaultDisposeScopeTimeout;
 
       if (limit == null) {
         await released;
@@ -160,7 +160,7 @@ abstract base class AsyncControllerScopeElementBase<
           released,
           limit,
           'its controller to be released',
-          onDisposeAsyncTimeout,
+          onDisposeScopeTimeout,
         );
       }
       // ignore: avoid_catching_errors
@@ -193,5 +193,5 @@ abstract base class AsyncControllerScopeElementBase<
   /// exists to keep hold of.
   @mustCallSuper
   @override
-  FutureOr<void> disposeAsync() => _controller?.performDispose();
+  FutureOr<void> disposeScope() => _controller?.performDispose();
 }

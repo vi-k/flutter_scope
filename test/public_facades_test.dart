@@ -28,7 +28,7 @@ void main() {
           'buildOnWaiting',
           'init',
           'buildOnProgress: half',
-          'state.initAsync',
+          'state.initStateAsync',
           'state.build',
         ],
         reason: 'every one of these is a separate line of forwarding in the '
@@ -39,11 +39,14 @@ void main() {
       );
 
       await tester.pumpWidget(_wrap(const SizedBox.shrink()));
-      await settle(tester, until: () => log.contains('state.disposeAsync'));
+      await settle(
+        tester,
+        until: () => log.contains('state.disposeStateAsync'),
+      );
 
       expect(
         log.sublist(5),
-        ['state.onUnmount', 'state.disposeAsync'],
+        ['state.onUnmount', 'state.disposeStateAsync'],
         reason: 'the teardown reaches the state through the facade too, and '
             'the synchronous half comes first',
       );
@@ -70,7 +73,10 @@ void main() {
       );
 
       await tester.pumpWidget(_wrap(const SizedBox.shrink()));
-      await settle(tester, until: () => log.contains('state.disposeAsync'));
+      await settle(
+        tester,
+        until: () => log.contains('state.disposeStateAsync'),
+      );
     });
 
     testWidgets('is found from below, by state and by parameters',
@@ -119,7 +125,10 @@ void main() {
       });
 
       await tester.pumpWidget(_wrap(const SizedBox.shrink()));
-      await settle(tester, until: () => log.contains('state.disposeAsync'));
+      await settle(
+        tester,
+        until: () => log.contains('state.disposeStateAsync'),
+      );
     });
 
     testWidgets('answers null from maybeOf where there is no such scope',
@@ -261,7 +270,10 @@ void main() {
       });
 
       await tester.pumpWidget(_wrap(const SizedBox.shrink()));
-      await settle(tester, until: () => log.contains('state.disposeAsync'));
+      await settle(
+        tester,
+        until: () => log.contains('state.disposeStateAsync'),
+      );
     });
 
     // `listen: true` is the whole difference between the two branches of
@@ -301,7 +313,10 @@ void main() {
       );
 
       await tester.pumpWidget(_wrap(const SizedBox.shrink()));
-      await settle(tester, until: () => log.contains('state.disposeAsync'));
+      await settle(
+        tester,
+        until: () => log.contains('state.disposeStateAsync'),
+      );
     });
 
     // `selectParam` is the narrow form: it subscribes to one parameter, and a
@@ -337,7 +352,10 @@ void main() {
       expect(_SelectParamReader.builds, 2, reason: 'and this one did');
 
       await tester.pumpWidget(_wrap(const SizedBox.shrink()));
-      await settle(tester, until: () => log.contains('state.disposeAsync'));
+      await settle(
+        tester,
+        until: () => log.contains('state.disposeStateAsync'),
+      );
     });
 
     testWidgets('answers null from maybeOf where there is no such scope',
@@ -435,7 +453,7 @@ final class _Lite extends LiteScope<_Lite, _LiteState> {
   }) : super(child: const SizedBox.shrink());
 
   @override
-  Stream<AsyncScopeInitState> init() async* {
+  Stream<AsyncScopeInitState> initScope() async* {
     log.add('init');
     yield AsyncScopeProgress('half');
     yield AsyncScopeReady();
@@ -477,8 +495,8 @@ final class _LiteState extends LiteScopeState<_Lite, _LiteState> {
   String get answer => 'answer';
 
   @override
-  FutureOr<void> initAsync() {
-    params.log.add('state.initAsync');
+  FutureOr<void> initStateAsync() {
+    params.log.add('state.initStateAsync');
   }
 
   @override
@@ -488,8 +506,8 @@ final class _LiteState extends LiteScopeState<_Lite, _LiteState> {
   }
 
   @override
-  FutureOr<void> disposeAsync() {
-    params.log.add('state.disposeAsync');
+  FutureOr<void> disposeStateAsync() {
+    params.log.add('state.disposeStateAsync');
   }
 
   @override
@@ -509,7 +527,7 @@ final class _HalfWritten extends LiteScope<_HalfWritten, _HalfWrittenState> {
       : super(child: const SizedBox.shrink());
 
   @override
-  Stream<AsyncScopeInitState> init() async* {
+  Stream<AsyncScopeInitState> initScope() async* {
     if (failing) {
       throw StateError('the pre-initialization fell over');
     }
@@ -587,8 +605,8 @@ final class _FullState extends ScopeState<_Full, _FullDeps, _FullState> {
   String get answer => 'answer';
 
   @override
-  FutureOr<void> disposeAsync() {
-    params.log.add('state.disposeAsync');
+  FutureOr<void> disposeStateAsync() {
+    params.log.add('state.disposeStateAsync');
   }
 
   @override

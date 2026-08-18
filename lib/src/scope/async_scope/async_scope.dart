@@ -2,22 +2,20 @@ part of '../scope.dart';
 
 /// {@category AsyncScope}
 final class AsyncScope extends AsyncScopeBase<AsyncScope> {
-  /// Called when the scope is mounted, before the initialization starts.
-  final void Function(BuildContext context)? mount;
-
-  /// The initialization.
+  /// What [onMount] was given, if anything.
   ///
-  /// Yields [AsyncScopeProgress] any number of times and [AsyncScopeReady]
-  /// once. Cancelled if the scope leaves the tree before it finishes.
-  final Stream<AsyncScopeInitState> Function(BuildContext context) init;
+  /// Private because the method it stands behind has the same name, and a
+  /// field cannot share a name with a method it implements.
+  final void Function(BuildContext context)? _onMount;
 
-  /// Called synchronously when the scope leaves the tree.
-  final void Function()? unmount;
+  /// What [initScope] was given.
+  final Stream<AsyncScopeInitState> Function(BuildContext context) _initScope;
 
-  /// Releases what [init] acquired.
-  ///
-  /// Awaited, and called only when the initialization succeeded.
-  final FutureOr<void> Function() dispose;
+  /// What [onUnmount] was given, if anything.
+  final void Function()? _onUnmount;
+
+  /// What [disposeScope] was given.
+  final FutureOr<void> Function() _disposeScope;
 
   /// Built while waiting for a `scopeKey` and for the first event.
   ///
@@ -44,6 +42,9 @@ final class AsyncScope extends AsyncScopeBase<AsyncScope> {
   final Widget Function(BuildContext context) builder;
 
   /// Creates an asynchronous scope.
+  ///
+  /// [onMount], [initScope], [onUnmount] and [disposeScope] are the methods
+  /// this widget stands in for, and the parameters carry their names.
   const AsyncScope({
     super.key,
     super.tag,
@@ -52,32 +53,37 @@ final class AsyncScope extends AsyncScopeBase<AsyncScope> {
     super.onScopeKeyTimeout,
     super.initCancellationTimeout,
     super.onInitCancellationTimeout,
-    super.disposeAsyncTimeout,
-    super.onDisposeAsyncTimeout,
+    super.disposeScopeTimeout,
+    super.onDisposeScopeTimeout,
     super.waitForChildrenTimeout,
     super.onWaitForChildrenTimeout,
     super.pauseAfterInitialization,
-    this.mount,
-    required this.init,
-    this.unmount,
-    required this.dispose,
+    void Function(BuildContext context)? onMount,
+    required Stream<AsyncScopeInitState> Function(BuildContext context)
+        initScope,
+    void Function()? onUnmount,
+    required FutureOr<void> Function() disposeScope,
     this.waitingBuilder,
     required this.progressBuilder,
     required this.builder,
     required this.errorBuilder,
-  });
+  })  : _onMount = onMount,
+        _initScope = initScope,
+        _onUnmount = onUnmount,
+        _disposeScope = disposeScope;
 
   @override
-  void onMount(BuildContext context) => mount?.call(context);
+  void onMount(BuildContext context) => _onMount?.call(context);
 
   @override
-  Stream<AsyncScopeInitState> initAsync(BuildContext context) => init(context);
+  Stream<AsyncScopeInitState> initScope(BuildContext context) =>
+      _initScope(context);
 
   @override
-  void onUnmount() => unmount?.call();
+  void onUnmount() => _onUnmount?.call();
 
   @override
-  FutureOr<void> disposeAsync() => dispose();
+  FutureOr<void> disposeScope() => _disposeScope();
 
   @override
   Widget? buildOnWaiting(BuildContext context) => waitingBuilder?.call(context);

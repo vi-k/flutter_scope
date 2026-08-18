@@ -3,32 +3,22 @@ part of '../scope.dart';
 /// {@category AsyncDataScope}
 final class AsyncDataScope<T extends Object?>
     extends AsyncDataScopeBase<AsyncDataScope<T>, T> {
-  /// Called when the scope is mounted, before the initialization starts.
-  final void Function(BuildContext context)? mount;
-
-  /// The initialization, ending with the value.
+  /// What [onMount] was given, if anything.
   ///
-  /// Yields [AsyncDataScopeProgress] any number of times and
-  /// [AsyncDataScopeReady] once, carrying the value. Cancelled if the scope
-  /// leaves the tree before it finishes.
+  /// Private because the method it stands behind has the same name, and a
+  /// field cannot share a name with a method it implements.
+  final void Function(BuildContext context)? _onMount;
+
+  /// What [initData] was given.
   final Stream<AsyncDataScopeInitState<Object, T>> Function(
     BuildContext context,
-  ) init;
+  ) _initData;
 
-  /// Called synchronously when the scope leaves the tree, and on the way out
-  /// of a `close()`.
-  ///
-  /// The value is `null` when the initialization never produced one. For a
-  /// nullable [T] that is the same `null` the initialization may have produced
-  /// itself, and the two cannot be told apart from here — read `hasData` off
-  /// the scope's context when the difference matters.
-  final void Function(T? data)? unmount;
+  /// What [onUnmount] was given, if anything.
+  final void Function(T? data)? _onUnmount;
 
-  /// Releases the value [init] produced.
-  ///
-  /// Awaited, and called only when the initialization succeeded — so the
-  /// value always exists here.
-  final FutureOr<void> Function(T data) dispose;
+  /// What [disposeData] was given.
+  final FutureOr<void> Function(T data) _disposeData;
 
   /// Built while waiting for a `scopeKey` and for the first event.
   ///
@@ -55,6 +45,9 @@ final class AsyncDataScope<T extends Object?>
   final Widget Function(BuildContext context, T data) builder;
 
   /// Creates an asynchronous scope producing a value.
+  ///
+  /// [onMount], [initData], [onUnmount] and [disposeData] are the methods this
+  /// widget stands in for, and the parameters carry their names.
   const AsyncDataScope({
     super.key,
     super.tag,
@@ -63,33 +56,38 @@ final class AsyncDataScope<T extends Object?>
     super.onScopeKeyTimeout,
     super.initCancellationTimeout,
     super.onInitCancellationTimeout,
-    super.disposeAsyncTimeout,
-    super.onDisposeAsyncTimeout,
+    super.disposeScopeTimeout,
+    super.onDisposeScopeTimeout,
     super.waitForChildrenTimeout,
     super.onWaitForChildrenTimeout,
     super.pauseAfterInitialization,
-    this.mount,
-    required this.init,
-    this.unmount,
-    required this.dispose,
+    void Function(BuildContext context)? onMount,
+    required Stream<AsyncDataScopeInitState<Object, T>> Function(
+      BuildContext context,
+    ) initData,
+    void Function(T? data)? onUnmount,
+    required FutureOr<void> Function(T data) disposeData,
     this.waitingBuilder,
     required this.progressBuilder,
     required this.builder,
     required this.errorBuilder,
-  });
+  })  : _onMount = onMount,
+        _initData = initData,
+        _onUnmount = onUnmount,
+        _disposeData = disposeData;
 
   @override
-  void onMount(BuildContext context) => mount?.call(context);
+  void onMount(BuildContext context) => _onMount?.call(context);
 
   @override
   Stream<AsyncDataScopeInitState<Object, T>> initData(BuildContext context) =>
-      init(context);
+      _initData(context);
 
   @override
-  void onUnmount(T? data) => unmount?.call(data);
+  void onUnmount(T? data) => _onUnmount?.call(data);
 
   @override
-  FutureOr<void> disposeData(T data) => dispose(data);
+  FutureOr<void> disposeData(T data) => _disposeData(data);
 
   @override
   Widget? buildOnWaiting(BuildContext context) => waitingBuilder?.call(context);

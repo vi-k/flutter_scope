@@ -83,10 +83,10 @@ void main() {
 
       await tester.pumpWidget(
         AsyncScope(
-          init: (context) async* {
+          initScope: (context) async* {
             yield AsyncScopeReady();
           },
-          dispose: () {},
+          disposeScope: () {},
           progressBuilder: (context, progress) => const SizedBox.shrink(),
           errorBuilder: (context, error, stackTrace, progress) =>
               const SizedBox.shrink(),

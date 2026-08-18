@@ -14,12 +14,12 @@ dependency container.
 
 ```dart
 AsyncDataScope<Database>(
-  init: (context) async* {
+  initData: (context) async* {
     yield AsyncDataScopeProgress('opening the database');
 
     yield AsyncDataScopeReady(await Database.open());
   },
-  dispose: (database) => database.close(),
+  disposeData: (database) => database.close(),
   progressBuilder: (context, progress) => Text('$progress'),
   errorBuilder: (context, error, stackTrace, progress) => Text('$error'),
   builder: (context, database) => DatabaseView(database: database),
@@ -40,9 +40,9 @@ and from that moment on:
 
 - **`builder`** receives it as its second argument — the ready branch never has
   to check for `null`;
-- **`dispose`** receives it too, and runs only if the initialization succeeded,
+- **`disposeData`** receives it too, and runs only if the initialization succeeded,
   so the argument always exists;
-- **`unmount`** receives `T?` instead: it fires the moment the scope leaves the
+- **`onUnmount`** receives `T?` instead: it fires the moment the scope leaves the
   tree, which may be long before there is a value, or after a failure;
 - **descendants** read it from the context (below).
 
@@ -54,7 +54,7 @@ what the type parameter is for; the progress is a caption.
 
 `AsyncDataScopeReady` is the handover, and until it happens the value belongs to
 the initialization alone. The scope has never seen it, so it cannot release it:
-`dispose` runs only when the initialization succeeded, and `unmount` is handed
+`disposeData` runs only when the initialization succeeded, and `onUnmount` is handed
 `null`.
 
 That is what makes this family's version of the trap easy to walk into — the
@@ -62,7 +62,7 @@ value exists, in a local variable, and looks as though the scope is looking
 after it:
 
 ```dart
-// Wrong: the database is open, and `dispose` will never be called with it.
+// Wrong: the database is open, and `disposeData` will never be called with it.
 init: (context) async* {
   final database = await Database.open();
 
@@ -121,7 +121,7 @@ is subscribed to the part it read and is rebuilt when that part changes. Handing
 the model to the builder would give it an unsubscribed reference and encourage
 reading the whole object where a selector would do.
 
-A value here is produced once, by `init`, and never replaced. There is nothing
+A value here is produced once, by `initData`, and never replaced. There is nothing
 to subscribe to and nothing to miss, and there is exactly one branch in which
 it exists at all — the ready one, which is what `builder` builds. Passing it is
 what makes that branch free of `data!` and `isInitialized`, and it is the same
@@ -152,15 +152,15 @@ the question at all: it is `null` on both sides of the moment the value
 arrives, since `null` is a value the initialization may legitimately produce.
 `hasData` is the difference, and `data` is the other way of asking: it throws
 while there is nothing and returns the `null` once there is. The same
-ambiguity reaches `unmount`/`onUnmount`, which is handed a `T?` and cannot tell
-the two apart on its own.
+ambiguity reaches `onUnmount`, which is handed a `T?` and cannot tell the two
+apart on its own.
 
 "Before the value arrives" is a shade earlier than `isInitialized`. The value
 is caught as it goes past; the state of the scope is applied at the end of the
 frame, or after the whole of `pauseAfterInitialization`, which is deliberately
 longer. In that window the scope is still building `progressBuilder` while `data`
 already answers — and that is the window the teardown of a scope that left
-early runs in, which is why `dispose` can be promised the value at all.
+early runs in, which is why `disposeData` can be promised the value at all.
 
 `select` is the cheap way in when only a part of the value matters:
 

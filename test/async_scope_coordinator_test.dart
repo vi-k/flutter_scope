@@ -403,7 +403,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('waitForChildren completes only after disposeAsync has finished',
+  testWidgets('waitForChildren completes only after disposeScope has finished',
       (tester) async {
     final gate = Completer<void>();
     late BuildContext context;
@@ -426,7 +426,7 @@ void main() {
     );
     await settle(tester, until: () => waited);
 
-    expect(waited, isFalse, reason: 'disposeAsync has not finished yet');
+    expect(waited, isFalse, reason: 'disposeScope has not finished yet');
     expect(_TestScopeElement.disposalOrder, isEmpty);
 
     gate.complete();
@@ -454,7 +454,7 @@ void main() {
 
     await tester.pumpWidget(build(withScope: true));
     await tester.pumpAndSettle();
-    // The scope leaves the tree and hangs in `disposeAsync`; the coordinator
+    // The scope leaves the tree and hangs in `disposeScope`; the coordinator
     // stays mounted and keeps waiting for it.
     await tester.pumpWidget(build(withScope: false));
 
@@ -699,7 +699,7 @@ void main() {
     (tester) async {
       // The one thing the key promises: the successor does not start while
       // the holder is still releasing what it holds. `exit()` runs in the
-      // `finally` of `_performAsyncDispose`, *after* `disposeAsync()`, and
+      // `finally` of `_performAsyncDispose`, *after* `disposeScope()`, and
       // this gate is what makes the difference observable — the holder sits
       // inside its disposal for as long as the test likes.
       final gate = Completer<void>();
@@ -735,7 +735,7 @@ void main() {
 
       // The holder leaves and the successor arrives in the same frame, so the
       // successor asks for the key while the holder is still inside
-      // `disposeAsync`.
+      // `disposeScope`.
       await tester.pumpWidget(build(holder: false, successor: true));
       await settle(tester, until: () => _TestScopeElement.initialized > 1);
 
@@ -932,7 +932,7 @@ void main() {
   // What proves the release is a later scope on the same key getting in and
   // initializing, with its own limit set far beyond anything this test can
   // advance: an expiry cannot be what let it in.
-  testWidgets('a scopeKey is given back by a scope stuck in initAsync',
+  testWidgets('a scopeKey is given back by a scope stuck in initScope',
       (tester) async {
     // Short enough to expire inside `settle`'s budget of real time.
     ScopeConfig.defaultInitCancellationTimeout =
@@ -965,11 +965,11 @@ void main() {
     expect(
       _TestScopeElement.initialized,
       1,
-      reason: 'it got the key and is parked inside `initAsync()`',
+      reason: 'it got the key and is parked inside `initScope()`',
     );
 
     // It leaves the tree while still parked. Nothing observable marks the
-    // moment the disposal gives up -- `disposeAsync()` is skipped on a scope
+    // moment the disposal gives up -- `disposeScope()` is skipped on a scope
     // that never initialized -- so the settle runs its whole budget.
     await tester.pumpWidget(build(hung: false, successor: false));
     await settle(tester, until: () => false);
@@ -1010,17 +1010,17 @@ void main() {
     await _tearDownTree(tester, scopes: 1);
   });
 
-  // The same hole one step further down the teardown. `disposeAsync()` is the
+  // The same hole one step further down the teardown. `disposeScope()` is the
   // scope's own release, and it is user code: one that never completes held
   // the block that gives the key back exactly as an uncancellable
   // initialization did.
   //
   // Proved the same way: the successor's own limit is a day, so it can only be
   // in because the key came back.
-  testWidgets('a scopeKey is given back by a scope stuck in disposeAsync',
+  testWidgets('a scopeKey is given back by a scope stuck in disposeScope',
       (tester) async {
     // Short enough to expire inside `settle`'s budget of real time.
-    ScopeConfig.defaultDisposeAsyncTimeout = const Duration(milliseconds: 50);
+    ScopeConfig.defaultDisposeScopeTimeout = const Duration(milliseconds: 50);
 
     // Never completed: this is the hang under test.
     final hang = Completer<void>();
@@ -1454,7 +1454,7 @@ Future<void> _tearDownTree(WidgetTester tester, {required int scopes}) async {
 /// The `StreamSubscription.cancel()` chain of
 /// `AsyncScopeElementBase._performAsyncDispose` only makes progress outside the
 /// test's fake-async zone, so `pumpAndSettle()` alone never reaches
-/// `disposeAsync()`. The same workaround is documented in
+/// `disposeScope()`. The same workaround is documented in
 /// `async_scope_test.dart` and `lite_scope_test.dart`.
 final class _TestScope extends AsyncScopeCore<_TestScope, _TestScopeElement> {
   final Object? testKey;
@@ -1469,14 +1469,14 @@ final class _TestScope extends AsyncScopeCore<_TestScope, _TestScopeElement> {
   /// user error in an overridden hook does.
   final bool throwOnKeyTimeout;
 
-  /// Holds [_TestScopeElement.disposeAsync] until it is completed.
+  /// Holds [_TestScopeElement.disposeScope] until it is completed.
   ///
   /// A gate keeps a disposal pending without leaving a timer behind, which a
   /// long [disposeDelay] would (the binding fails the test for a timer that
   /// outlives the widget tree).
   final Completer<void>? disposeGate;
 
-  /// Parks [_TestScopeElement.initAsync] on this until it is completed.
+  /// Parks [_TestScopeElement.initScope] on this until it is completed.
   ///
   /// A gate that is never completed is a generator that cannot be cancelled:
   /// the body is suspended at an `await`, so it never reaches the point where
@@ -1511,7 +1511,7 @@ final class _TestScopeElement
 
   static int initialized = 0;
 
-  /// How many scopes have finished their `disposeAsync()`.
+  /// How many scopes have finished their `disposeScope()`.
   ///
   /// The teardown is asynchronous and its last act is disposing of the model,
   /// so a test that ends before this counter moves ends on a scope that is
@@ -1552,7 +1552,7 @@ final class _TestScopeElement
   }
 
   @override
-  Stream<AsyncScopeInitState> initAsync() async* {
+  Stream<AsyncScopeInitState> initScope() async* {
     initialized++;
     if (widget.initGate case final gate?) {
       await gate.future;
@@ -1561,7 +1561,7 @@ final class _TestScopeElement
   }
 
   @override
-  FutureOr<void> disposeAsync() async {
+  FutureOr<void> disposeScope() async {
     if (widget.disposeGate case final gate?) {
       await gate.future;
     }

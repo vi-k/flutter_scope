@@ -34,7 +34,7 @@ final class ChildScreen extends LiteScope<ChildScreen, ChildScreenState> {
 final class ChildScreenState
     extends LiteScopeState<ChildScreen, ChildScreenState> {
   @override
-  Future<void> disposeAsync() async {
+  Future<void> disposeStateAsync() async {
     await Future<void>.delayed(const Duration(milliseconds: 1000));
   }
 

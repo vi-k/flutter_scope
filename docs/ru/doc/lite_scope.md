@@ -1,11 +1,11 @@
 # LiteScope
 
-> Перевод `doc/lite_scope.md` (blob `dd4ad185bd49ee85b0724fad3d2e0c5f738537ca`).
+> Перевод `doc/lite_scope.md` (blob `cb70c57bcb6ccbe343e4402170561782879d7ad8`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 Класс состояния, за которым стоит весь жизненный цикл скоупа, но перед которым
 нет контейнера зависимостей. `initState` и `dispose` как обычно, плюс
-асинхронные `initAsync` и `disposeAsync`, которых скоуп дожидается, плюс
+асинхронные `initStateAsync` и `disposeStateAsync`, которых скоуп дожидается, плюс
 `notifyDependents`, `close()`, `scopeKey` и ожидание дочерних скоупов.
 
 Это семейство для состояния экрана, владеющего тем, что стоит освобождать
@@ -32,7 +32,7 @@ final class ScreenScopeState
   final controller = ScrollController();
 
   @override
-  Future<void> disposeAsync() async => controller.dispose();
+  Future<void> disposeStateAsync() async => controller.dispose();
 
   @override
   Widget build(BuildContext context) =>
@@ -46,9 +46,9 @@ final class ScreenScopeState
 
 | член | что это |
 | --- | --- |
-| `initAsync()` | асинхронная инициализация; её дожидаются, прежде чем показать готовое состояние |
-| `onUnmount()` | синхронный разбор, всегда перед `disposeAsync()` |
-| `disposeAsync()` | асинхронный разбор; его дожидаются, прежде чем скоуп исчезнет |
+| `initStateAsync()` | асинхронная инициализация; её дожидаются, прежде чем показать готовое состояние |
+| `onUnmount()` | синхронный разбор, всегда перед `disposeStateAsync()` |
+| `disposeStateAsync()` | асинхронный разбор; его дожидаются, прежде чем скоуп исчезнет |
 | `notifyDependents()` | перестроить подписанных потомков, а не поддерево |
 | `close()` | запустить разбор, пока скоуп ещё на экране |
 
@@ -62,7 +62,7 @@ final class ScreenScopeState
 `State`, написанный для обычных виджетов.
 
 Обычный `initState` у `State` продолжает работать и остаётся синхронным, а
-`initAsync` — место для `await`. `disposeAsync` — то, что заставляет
+`initStateAsync` — место для `await`. `disposeStateAsync` — то, что заставляет
 родительский скоуп (и `close()`) дождаться конца освобождения, а не запустить
 его и забыть.
 
@@ -81,10 +81,10 @@ void onUnmount() {
 }
 
 @override
-Future<void> disposeAsync() => _connection.close();   // может занять время
+Future<void> disposeStateAsync() => _connection.close();   // может занять время
 ```
 
-`onUnmount()` выполняется ровно один раз и всегда до `disposeAsync()`, каким бы
+`onUnmount()` выполняется ровно один раз и всегда до `disposeStateAsync()`, каким бы
 способом скоуп ни уходил. На снятом скоупе `BuildContext` к этому моменту уже
 нет, поэтому трогать там можно только то, что состояние держит в собственных
 полях.
@@ -102,7 +102,7 @@ Future<void> disposeAsync() => _connection.close();   // может занять
 `UnimplementedError`, исходя из того, что ненаписанная ветка прогресса — это
 ошибка, а не пустой экран.
 
-`LiteScopeState.initAsync()` на **состоянии** — обычная: она выполняется, когда
+`LiteScopeState.initStateAsync()` на **состоянии** — обычная: она выполняется, когда
 состояние уже существует, и готовая ветка её дожидается.
 
 `buildOnWaiting` закрывает промежуток до того, как хоть одна из них что-то
@@ -119,7 +119,7 @@ Future<void> disposeAsync() => _connection.close();   // может занять
 своего, значит наверняка у него есть ожидание. Поэтому перенос экрана со
 `Scope` на `LiteScope` меняет один обязательный билдер на другой:
 `buildOnProgress` и `buildOnError` становятся необязательными — оставляйте
-их, только если переопределяете `init()`, — а `buildOnWaiting` становится
+их, только если переопределяете `initScope()`, — а `buildOnWaiting` становится
 обязательным.
 
 `wrapState` оборачивает только готовую ветку, поэтому виджет, нужный всем
@@ -179,14 +179,14 @@ await ScreenScope.of(context).close();
 Порядок — тот же, что в теме `AsyncScope`, со вставленными шагами состояния:
 первым выполняется `onUnmount()` состояния, предварительная инициализация
 отменяется, дожидаются дочерних скоупов (`waitForChildrenTimeout`), выполняется
-`disposeAsync()` состояния, и последним освобождается `scopeKey`, чтобы
+`disposeStateAsync()` состояния, и последним освобождается `scopeKey`, чтобы
 следующий скоуп с этим ключом стартовал, только когда этот закончил.
 
 Собственный `dispose()` состояния стоит вне этой последовательности — по одну
 или по другую её сторону, смотря как скоуп ушёл: до всего, если скоуп сняли с
 дерева, и после всего, если он закрылся сам. В этом и смысл `close()` —
 сначала отпустить, уйти потом, — и поэтому разбор, который скоуп гарантирует,
-это пара `onUnmount()`/`disposeAsync()`, а не `dispose()`.
+это пара `onUnmount()`/`disposeStateAsync()`, а не `dispose()`.
 
 `LiteScope` — такой же `AsyncScopeParent`, как любой асинхронный скоуп: скоупы
 под ним встают к нему на учёт, и он дожидается их, прежде чем разбирать себя.

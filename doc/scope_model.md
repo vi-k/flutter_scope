@@ -167,7 +167,7 @@ gone — so an assertion refuses it. Give the widget a different `Widget.key`
 instead, and the framework builds a new element for the new mode.
 
 The disposal here is synchronous. When releasing the object needs an `await`,
-this family is the wrong one: `LiteScope` gives a state with `disposeAsync`,
+this family is the wrong one: `LiteScope` gives a state with `disposeStateAsync`,
 and `Scope` gives a dependency container whose `dispose` is awaited — and both
 make a parent wait for their child scopes before tearing themselves down.
 

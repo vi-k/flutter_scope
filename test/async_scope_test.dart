@@ -71,7 +71,7 @@ void main() {
     testWidgets(
       'does not throw when the element is removed before the post-frame '
       'callback that applies the ready state runs, and still runs '
-      'disposeAsync for the resources initAsync acquired',
+      'disposeScope for the resources initScope acquired',
       (tester) async {
         final binding = tester.binding;
 
@@ -79,7 +79,7 @@ void main() {
         // of `pumpWidget`, for the same reason as above: this callback
         // (`addPostFrameCallback((_) { _model.update(state); })` in the
         // `AsyncScopeReady` branch of `_performAsyncInit`) is only
-        // scheduled once `initAsync()` completes, which -- unlike the
+        // scheduled once `initScope()` completes, which -- unlike the
         // `_registerWithParent` callback -- does not happen synchronously
         // during the first `performRebuild()`. `pumpWidget`/`pump` would
         // drain it within the very same call that schedules it, so we drive
@@ -102,7 +102,7 @@ void main() {
 
         // `TestWidgetsFlutterBinding.idle()` runs `FakeAsync.elapse
         // (Duration.zero)`: it flushes pending microtasks/zero-duration
-        // timers *without* drawing a frame. This lets `initAsync()`
+        // timers *without* drawing a frame. This lets `initScope()`
         // (`Stream.value(AsyncScopeReady())`) deliver its value and the
         // `AsyncScopeReady` branch run -- scheduling the post-frame
         // callback and calling `scheduleFrame()` -- while leaving that
@@ -147,13 +147,13 @@ void main() {
         expect(tester.takeException(), isNull);
 
         // Guarding this callback with `mounted` must not come at the cost
-        // of skipping `disposeAsync()`: since the callback never runs,
+        // of skipping `disposeScope()`: since the callback never runs,
         // `model.state` never becomes `AsyncScopeReady`, so
         // `_performAsyncDispose` cannot rely on `model.state` to decide
-        // whether `initAsync()` succeeded -- it must track that
-        // separately. `initAsync()` did complete successfully here (it
-        // acquired whatever `disposeAsync()` is meant to release), so
-        // `disposeAsync()` must still run exactly once despite the
+        // whether `initScope()` succeeded -- it must track that
+        // separately. `initScope()` did complete successfully here (it
+        // acquired whatever `disposeScope()` is meant to release), so
+        // `disposeScope()` must still run exactly once despite the
         // element having been removed in the same frame that would have
         // applied the ready state.
         expect(element.disposeCount, 1);
@@ -174,7 +174,7 @@ void main() {
   // about a stall. What proves it is that the parent's `waitForChildren` came
   // back on its own (the timeout is set far beyond the budget `settle` can
   // advance, so an expiry cannot be what released it) and that the parent got
-  // to `disposeAsync()` at all.
+  // to `disposeScope()` at all.
   group('AsyncScope failed initialization', () {
     testWidgets(
       'never starts the asynchronous phase when the synchronous init failed',
@@ -373,13 +373,13 @@ void main() {
           Directionality(
             textDirection: TextDirection.ltr,
             child: AsyncScope(
-              init: (context) async* {
+              initScope: (context) async* {
                 yield AsyncScopeProgress('connecting');
                 await gate.future;
 
                 throw StateError('init failed');
               },
-              dispose: () {},
+              disposeScope: () {},
               progressBuilder: (context, progress) =>
                   Text('initializing: $progress'),
               errorBuilder: (context, error, stackTrace, progress) =>
@@ -422,11 +422,11 @@ void main() {
           Directionality(
             textDirection: TextDirection.ltr,
             child: AsyncScope(
-              init: (context) async* {
+              initScope: (context) async* {
                 yield AsyncScopeProgress('step');
                 throw StateError('init failed');
               },
-              dispose: () {},
+              disposeScope: () {},
               progressBuilder: (context, progress) =>
                   const Text('initializing'),
               errorBuilder: (context, error, stackTrace, progress) =>
@@ -458,7 +458,7 @@ void main() {
     );
 
     testWidgets(
-      'a scope whose initAsync throws synchronously still finishes disposing '
+      'a scope whose initScope throws synchronously still finishes disposing '
       'of itself, so its parent does not wait for it in vain',
       (tester) async {
         late _WaitingParentScopeElement parent;
@@ -647,8 +647,8 @@ void main() {
                 // the tree rather than in the work.
                 child: AsyncScope(
                   scopeKey: 'k',
-                  init: (context) => Stream.value(AsyncScopeReady()),
-                  dispose: () {},
+                  initScope: (context) => Stream.value(AsyncScopeReady()),
+                  disposeScope: () {},
                   progressBuilder: (context, progress) => const Text('init'),
                   errorBuilder: (context, error, stackTrace, progress) =>
                       const Text('error'),
@@ -706,8 +706,8 @@ void main() {
           Directionality(
             textDirection: TextDirection.ltr,
             child: AsyncScope(
-              init: (context) => const Stream<AsyncScopeInitState>.empty(),
-              dispose: () {},
+              initScope: (context) => const Stream<AsyncScopeInitState>.empty(),
+              disposeScope: () {},
               progressBuilder: (context, progress) => const Text('init'),
               errorBuilder: (context, error, stackTrace, progress) =>
                   Text('error: $error'),
@@ -743,14 +743,14 @@ void main() {
   });
 
   // Both tests below cover the same defect: an event that arrives *after*
-  // `initAsync()` has already reached `AsyncScopeReady` used to complete
+  // `initScope()` has already reached `AsyncScopeReady` used to complete
   // `_initCompleter` a second time. The `Bad state: Future already completed`
   // that raised replaced the failure being reported, so the real one never
   // reached anybody.
   //
   // The assertions are about effects, never about timings: what proves the
   // defect is which error the app receives, which state the scope is left in,
-  // and whether `disposeAsync()` still runs.
+  // and whether `disposeScope()` still runs.
   group('the model of a scope', () {
     testWidgets('is one object rather than a wrapper made on every read',
         (tester) async {
@@ -1115,7 +1115,7 @@ void main() {
 /// The `StreamSubscription.cancel()` chain of
 /// `AsyncScopeElementBase._performAsyncDispose` only makes progress outside the
 /// test's fake-async zone, so `pumpAndSettle()` alone never reaches
-/// `disposeAsync()`. The same workaround is documented in
+/// `disposeScope()`. The same workaround is documented in
 /// `async_scope_coordinator_test.dart` and `lite_scope_test.dart`.
 /// A scope that can be moved between parents with a [GlobalKey], and can hold
 /// its own disposal open so that the parent awaiting it can be observed
@@ -1130,14 +1130,14 @@ final class _MovableScope
 
 final class _MovableScopeElement
     extends AsyncScopeElementBase<_MovableScope, _MovableScopeElement> {
-  /// Awaited by [disposeAsync], so a test can keep the disposal — and with it
+  /// Awaited by [disposeScope], so a test can keep the disposal — and with it
   /// the parent that waits for this scope — open for as long as it likes.
   Future<void>? disposalGate;
 
   _MovableScopeElement(super.widget);
 
   @override
-  Future<void> disposeAsync() async {
+  Future<void> disposeScope() async {
     if (disposalGate case final gate?) {
       await gate;
     }
@@ -1165,7 +1165,7 @@ final class _RaisingOnCancelScopeElement extends AsyncScopeElementBase<
   _RaisingOnCancelScopeElement(super.widget);
 
   @override
-  Stream<AsyncScopeInitState> initAsync() async* {
+  Stream<AsyncScopeInitState> initScope() async* {
     try {
       yield AsyncScopeProgress('step');
       // Short enough for the disposal to catch the generator here, and
@@ -1207,10 +1207,10 @@ final class _RegisterRaceScopeElement extends AsyncScopeElementBase<
 }
 
 /// Minimal [AsyncScopeCore] used to test the `_model.update(state)`
-/// post-frame callback scheduled once `initAsync()` completes
+/// post-frame callback scheduled once `initScope()` completes
 /// (async_scope_core.dart, in `_performAsyncInit`'s `AsyncScopeReady`
-/// case), and the corresponding `disposeAsync()` call in
-/// `_performAsyncDispose`. Uses the default `initAsync()`
+/// case), and the corresponding `disposeScope()` call in
+/// `_performAsyncDispose`. Uses the default `initScope()`
 /// (`Stream.value(AsyncScopeReady())`) and default `pauseAfterInitialization`
 /// (`null`), so it takes the immediate `scheduleFrame()` +
 /// `addPostFrameCallback` branch rather than the delayed one.
@@ -1229,7 +1229,7 @@ final class _ReadyRaceScopeElement
   _ReadyRaceScopeElement(super.widget);
 
   @override
-  FutureOr<void> disposeAsync() {
+  FutureOr<void> disposeScope() {
     disposeCount++;
   }
 
@@ -1266,7 +1266,7 @@ final class _WaitingParentScopeElement extends AsyncScopeElementBase<
   void onWaitForChildrenTimeout() => timedOut = true;
 
   @override
-  FutureOr<void> disposeAsync() {
+  FutureOr<void> disposeScope() {
     disposed = true;
   }
 
@@ -1319,13 +1319,13 @@ final class _SyncInitAsyncScopeElement extends AsyncScopeElementBase<
   }
 
   @override
-  Stream<AsyncScopeInitState> initAsync() {
+  Stream<AsyncScopeInitState> initScope() {
     asyncInitStarts++;
     return Stream.value(AsyncScopeReady());
   }
 
   @override
-  FutureOr<void> disposeAsync() {
+  FutureOr<void> disposeScope() {
     disposeCount++;
   }
 
@@ -1336,8 +1336,8 @@ final class _SyncInitAsyncScopeElement extends AsyncScopeElementBase<
 /// A scope whose initialization fails before `_subscription` exists.
 ///
 /// With a [testKey] and no [AsyncScopeCoordinator] above it, the coordinator
-/// lookup fails first and `initAsync()` is never even called; without one,
-/// `initAsync()` itself throws synchronously.
+/// lookup fails first and `initScope()` is never even called; without one,
+/// `initScope()` itself throws synchronously.
 final class _FailingInitScope
     extends AsyncScopeCore<_FailingInitScope, _FailingInitScopeElement> {
   final Object? testKey;
@@ -1361,11 +1361,11 @@ final class _FailingInitScopeElement
   // Deliberately not `async*`: the point is a plain user error raised while
   // the stream is being built, before there is anything to subscribe to.
   @override
-  Stream<AsyncScopeInitState> initAsync() =>
-      throw StateError('initAsync failed');
+  Stream<AsyncScopeInitState> initScope() =>
+      throw StateError('initScope failed');
 
   @override
-  FutureOr<void> disposeAsync() {
+  FutureOr<void> disposeScope() {
     disposeCount++;
   }
 
@@ -1373,7 +1373,7 @@ final class _FailingInitScopeElement
   Widget buildOnState(AsyncScopeState state) => const SizedBox.shrink();
 }
 
-/// A scope whose `initAsync()` raises *after* it has reached
+/// A scope whose `initScope()` raises *after* it has reached
 /// [AsyncScopeReady] -- the shape of a stream that keeps working once the
 /// scope is usable and then fails.
 final class _ErrorAfterReadyScope extends AsyncScopeCore<_ErrorAfterReadyScope,
@@ -1392,13 +1392,13 @@ final class _ErrorAfterReadyScopeElement extends AsyncScopeElementBase<
   _ErrorAfterReadyScopeElement(super.widget);
 
   @override
-  Stream<AsyncScopeInitState> initAsync() async* {
+  Stream<AsyncScopeInitState> initScope() async* {
     yield AsyncScopeReady();
     throw StateError('failed after ready');
   }
 
   @override
-  FutureOr<void> disposeAsync() {
+  FutureOr<void> disposeScope() {
     disposeCount++;
   }
 
@@ -1406,7 +1406,7 @@ final class _ErrorAfterReadyScopeElement extends AsyncScopeElementBase<
   Widget buildOnState(AsyncScopeState state) => const SizedBox.shrink();
 }
 
-/// A scope whose `initAsync()` emits [AsyncScopeReady] twice, both events
+/// A scope whose `initScope()` emits [AsyncScopeReady] twice, both events
 /// arriving before the post-frame callback that applies the first one to the
 /// model -- the case the `already initialized` diagnostic exists for.
 final class _TwiceReadyScope
@@ -1424,13 +1424,13 @@ final class _TwiceReadyScopeElement
   _TwiceReadyScopeElement(super.widget);
 
   @override
-  Stream<AsyncScopeInitState> initAsync() async* {
+  Stream<AsyncScopeInitState> initScope() async* {
     yield AsyncScopeReady();
     yield AsyncScopeReady();
   }
 
   @override
-  FutureOr<void> disposeAsync() {
+  FutureOr<void> disposeScope() {
     disposeCount++;
   }
 

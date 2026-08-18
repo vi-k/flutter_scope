@@ -276,7 +276,7 @@ void main() {
         Directionality(
           textDirection: TextDirection.ltr,
           child: AsyncControllerScope<_TestController>(
-            create: (context) {
+            createController: (context) {
               created++;
 
               return controller = _TestController();
@@ -336,7 +336,7 @@ void main() {
     // bounded it: the generator never finished, so the failure of `init()`
     // never reached the model and the scope showed its loading branch for
     // ever -- while `doc/async_controller_scope.md` promises the wait for
-    // `dispose()` is bounded by `disposeAsyncTimeout`.
+    // `dispose()` is bounded by `disposeScopeTimeout`.
     testWidgets('gives up on a hanging dispose and still shows the failure',
         (tester) async {
       final hang = Completer<void>();
@@ -346,7 +346,7 @@ void main() {
       await tester.pumpWidget(
         _Host(
           controller: controller,
-          disposeAsyncTimeout: const Duration(milliseconds: 50),
+          disposeScopeTimeout: const Duration(milliseconds: 50),
         ),
       );
       bool errorShown() => find.textContaining('error:').evaluate().isNotEmpty;
@@ -385,12 +385,12 @@ final class _Reader extends StatelessWidget {
 
 final class _Host extends StatelessWidget {
   final _TestController controller;
-  final Duration? disposeAsyncTimeout;
+  final Duration? disposeScopeTimeout;
   final Duration? initCancellationTimeout;
 
   const _Host({
     required this.controller,
-    this.disposeAsyncTimeout,
+    this.disposeScopeTimeout,
     this.initCancellationTimeout,
   });
 
@@ -399,7 +399,7 @@ final class _Host extends StatelessWidget {
         textDirection: TextDirection.ltr,
         child: _TestScope(
           controller: controller,
-          disposeAsyncTimeout: disposeAsyncTimeout,
+          disposeScopeTimeout: disposeScopeTimeout,
           initCancellationTimeout: initCancellationTimeout,
         ),
       );
@@ -412,7 +412,7 @@ final class _TestScope
 
   const _TestScope({
     required this.controller,
-    super.disposeAsyncTimeout,
+    super.disposeScopeTimeout,
     super.initCancellationTimeout,
   });
 

@@ -392,8 +392,8 @@ it is awaited:
    dependency a child is still using. The wait is bounded by
    `waitForChildrenTimeout` (`ScopeConfig.defaultWaitForChildrenTimeout` by
    default).
-4. `ScopeState.disposeAsync` — the state's own asynchronous teardown, bounded
-   by `disposeAsyncTimeout` (`ScopeConfig.defaultDisposeAsyncTimeout` by
+4. `ScopeState.disposeStateAsync` — the state's own asynchronous teardown, bounded
+   by `disposeScopeTimeout` (`ScopeConfig.defaultDisposeScopeTimeout` by
    default), so that a teardown which never completes cannot hold the release
    of the `scopeKey` in step 6.
 5. `ScopeDependencies.dispose` — for a `ScopeAutoDependencies`, this walks the
@@ -432,23 +432,23 @@ halves without saying which is which. Read in that order:
    is there a state at all.
 2. **The state.** `createState()`, then `initState()` — where `dependencies`
    are already in place, which is the whole point of the family — then
-   `initAsync()`, the state's own asynchronous half. `onInitialized()` runs
+   `initStateAsync()`, the state's own asynchronous half. `onInitialized()` runs
    right after that succeeds, and `isInitialized` reports it.
 
 The teardown mirrors that pair, and so does what happens when either half
 fails:
 
-| what runs | ready, then gone | `initDependencies` failed | state `initAsync` failed |
+| what runs | ready, then gone | `initDependencies` failed | state `initStateAsync` failed |
 | --- | --- | --- | --- |
 | `ScopeState.initState` | yes | **no state exists** | yes |
 | `ScopeState.onUnmount` | yes | — | **yes** |
 | `dep.unmount` | yes, every dependency | yes, every dependency | yes, every dependency |
-| `ScopeState.disposeAsync` | yes | — | **no** |
+| `ScopeState.disposeStateAsync` | yes | — | **no** |
 | `dep.dispose` | yes, in reverse | yes, in reverse | yes, in reverse |
 
 On the ordinary path the four run interleaved, state before dependencies in
 each half: `ScopeState.onUnmount`, then `dep.unmount`, then
-`ScopeState.disposeAsync`, then `dep.dispose`. Both halves walk a group the
+`ScopeState.disposeStateAsync`, then `dep.dispose`. Both halves walk a group the
 same way, in reverse of the declaration order: a later dependency is built on
 top of an earlier one, so it stops reaching the world before that one lets go
 of anything.
@@ -456,13 +456,13 @@ of anything.
 **When `initDependencies` failed, the state is the part that never existed.**
 `createState()` runs when the ready branch is built, and a scope that failed
 never builds it — so there is nothing for `ScopeState.onUnmount` and
-`ScopeState.disposeAsync` to run on. Do not put the release of something taken
+`ScopeState.disposeStateAsync` to run on. Do not put the release of something taken
 during `initDependencies` in either of them: on the path where it matters most
 they are not there to run.
 
-**When the state's `initAsync` failed, the state exists and is unmounted, but
+**When the state's `initStateAsync` failed, the state exists and is unmounted, but
 not disposed of.** `onUnmount()` runs — it is the synchronous half, and a state
-that got as far as `initState()` may already hold a subscription. `disposeAsync()`
+that got as far as `initState()` may already hold a subscription. `disposeStateAsync()`
 does not: it is written against a state that finished initializing, and this one
 did not. It is the same rule the `AsyncScope` topic states for `dispose` there,
 one level down, and it holds for the same reason — only the code that was doing
@@ -485,7 +485,7 @@ round to it.
 Read across the families, that is one rule rather than three, though it is easy
 to read it as three. **A hook you wrote for a finished thing does not run on
 one that never finished; a thing the scope holds on your behalf is given back
-whatever happened.** `ScopeState.disposeAsync` here and `dispose` in the
+whatever happened.** `ScopeState.disposeStateAsync` here and `dispose` in the
 `AsyncScope` and `AsyncDataScope` topics are the first kind, and they are
 skipped. `dep.dispose` here, and `ScopeController.dispose` in the
 `AsyncControllerScope` topic — where the table says `init()` threw → disposed —
@@ -513,8 +513,8 @@ ScopeDependency buildDependencies(BuildContext context) => sequential('', [
     ]);
 ```
 
-The same goes for the state's own half: an `initAsync()` that takes something
-and then throws has to release it before it throws, because `disposeAsync()`
+The same goes for the state's own half: an `initStateAsync()` that takes something
+and then throws has to release it before it throws, because `disposeStateAsync()`
 will not be called to do it.
 
 ## Access from the subtree

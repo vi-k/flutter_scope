@@ -125,7 +125,7 @@ final class CounterState extends LiteScopeState<CounterScope, CounterState> {
   late final CounterController counterController;
 
   @override
-  Future<void> initAsync() async {
+  Future<void> initStateAsync() async {
     _debugSource = CounterScope.paramsOf(context).debugSource;
     _debugName = CounterScope.paramsOf(context).debugName;
 
@@ -141,7 +141,7 @@ final class CounterState extends LiteScopeState<CounterScope, CounterState> {
   }
 
   @override
-  Future<void> disposeAsync() async {
+  Future<void> disposeStateAsync() async {
     console.log(_debugSource, '$_debugName: dispose state');
 
     await Future<void>.delayed(const Duration(seconds: 1));

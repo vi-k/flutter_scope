@@ -26,11 +26,11 @@ abstract base class LiteScope<W extends LiteScope<W, S>,
   final void Function()? onInitCancellationTimeout;
 
   /// The timeout duration for the asynchronous teardown of this scope, before
-  /// it triggers [onDisposeAsyncTimeout].
-  final Duration? disposeAsyncTimeout;
+  /// it triggers [onDisposeScopeTimeout].
+  final Duration? disposeScopeTimeout;
 
-  /// A callback invoked when the [disposeAsyncTimeout] expires.
-  final void Function()? onDisposeAsyncTimeout;
+  /// A callback invoked when the [disposeScopeTimeout] expires.
+  final void Function()? onDisposeScopeTimeout;
 
   /// The timeout duration for waiting to dispose child scopes.
   final Duration? waitForChildrenTimeout;
@@ -50,8 +50,8 @@ abstract base class LiteScope<W extends LiteScope<W, S>,
     this.onScopeKeyTimeout,
     this.initCancellationTimeout,
     this.onInitCancellationTimeout,
-    this.disposeAsyncTimeout,
-    this.onDisposeAsyncTimeout,
+    this.disposeScopeTimeout,
+    this.onDisposeScopeTimeout,
     this.waitForChildrenTimeout,
     this.onWaitForChildrenTimeout,
     this.pauseAfterInitialization,
@@ -67,12 +67,12 @@ abstract base class LiteScope<W extends LiteScope<W, S>,
   /// Override this method if you need to perform pre-initialization before the
   /// state is created. In that case, also override the [buildOnProgress]
   /// and [buildOnError] methods.
-  Stream<AsyncScopeInitState> init() => Stream.value(AsyncScopeReady());
+  Stream<AsyncScopeInitState> initScope() => Stream.value(AsyncScopeReady());
 
   /// Waiting builder.
   ///
   /// A builder waiting for access to the widget (see [scopeKey]) and the first
-  /// [init] event.
+  /// [initScope] event.
   ///
   /// **Required, and the only builder here that is** — which is the other way
   /// round from the families that initialize something, where
@@ -81,7 +81,7 @@ abstract base class LiteScope<W extends LiteScope<W, S>,
   /// is the branch that scope is certain to reach. A [LiteScope] initializes
   /// nothing of its own, so the branch it always has is this one — the frames
   /// spent waiting for a `scopeKey` and for the first event — while
-  /// [buildOnProgress] and [buildOnError] belong to an [init] most scopes
+  /// [buildOnProgress] and [buildOnError] belong to an [initScope] most scopes
   /// never override.
   ///
   /// Returning `null` is allowed only when [buildOnProgress] is
@@ -91,7 +91,7 @@ abstract base class LiteScope<W extends LiteScope<W, S>,
 
   /// Pre-initialization builder.
   ///
-  /// Reached only by a scope that overrides [init], which is why it is
+  /// Reached only by a scope that overrides [initScope], which is why it is
   /// optional: a scope that pre-initializes nothing has no progress to build.
   /// The default throws rather than returning a blank screen — a branch
   /// nobody wrote is a mistake, and a scope that shows nothing while it
@@ -107,7 +107,7 @@ abstract base class LiteScope<W extends LiteScope<W, S>,
 
   /// Error builder.
   ///
-  /// Reached only by a scope that overrides [init], and optional for the same
+  /// Reached only by a scope that overrides [initScope], and optional for the same
   /// reason as [buildOnProgress]: an initialization that does not exist
   /// cannot fail.
   ///
@@ -246,10 +246,10 @@ final class _LiteScopeElement<W extends LiteScope<W, S>,
   void onInitCancellationTimeout() => widget.onInitCancellationTimeout?.call();
 
   @override
-  Duration? get disposeAsyncTimeout => widget.disposeAsyncTimeout;
+  Duration? get disposeScopeTimeout => widget.disposeScopeTimeout;
 
   @override
-  void onDisposeAsyncTimeout() => widget.onDisposeAsyncTimeout?.call();
+  void onDisposeScopeTimeout() => widget.onDisposeScopeTimeout?.call();
 
   @override
   Duration? get waitForChildrenTimeout => widget.waitForChildrenTimeout;
@@ -261,7 +261,7 @@ final class _LiteScopeElement<W extends LiteScope<W, S>,
   Duration? get pauseAfterInitialization => widget.pauseAfterInitialization;
 
   @override
-  Stream<AsyncScopeInitState> initAsync() => widget.init();
+  Stream<AsyncScopeInitState> initScope() => widget.initScope();
 
   @override
   Widget? buildOnWaiting() => widget.buildOnWaiting(this);
@@ -302,11 +302,11 @@ abstract base class LiteScopeState<W extends LiteScope<W, S>,
 
   /// Initializes the scope asynchronously.
   @override
-  FutureOr<void> initAsync() {}
+  FutureOr<void> initStateAsync() {}
 
   /// Disposes of the scope asynchronously.
   @override
-  FutureOr<void> disposeAsync() {}
+  FutureOr<void> disposeStateAsync() {}
 
   @override
   Widget build(BuildContext context);

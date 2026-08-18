@@ -9,7 +9,7 @@ import 'utils/settle.dart';
 /// Cleanup is a promise, and a hook the user wrote is not part of it.
 ///
 /// Every scope family hands control to user code on its way out — `onUnmount`,
-/// the expiry callbacks, the state's own `disposeAsync`, a dependency's
+/// the expiry callbacks, the state's own `disposeScope`, a dependency's
 /// `unmount`. A failure there used to take the mandatory teardown with it: the
 /// registration with the parent, the `scopeKey`, the model and the dependencies
 /// all stayed alive, and the failure was the only trace left.
@@ -138,7 +138,7 @@ void main() {
       await tester.pumpWidget(build(holder: true, successor: false));
       await tester.pumpAndSettle();
 
-      // Nothing marks the moment the teardown gives up -- `disposeAsync` is
+      // Nothing marks the moment the teardown gives up -- `disposeScope` is
       // skipped on a scope that never initialized -- so the settle runs its
       // whole budget.
       await tester.pumpWidget(build(holder: false, successor: false));
@@ -174,10 +174,10 @@ void main() {
       );
     });
 
-    // `disposeAsync` is the scope's own release, and it is user code twice
+    // `disposeScope` is the scope's own release, and it is user code twice
     // over: it can hang, and the expiry of the wait for it can fail. Neither
     // may keep the key of a scope that has already left the tree.
-    testWidgets('releases its scopeKey after a failing onDisposeAsyncTimeout',
+    testWidgets('releases its scopeKey after a failing onDisposeScopeTimeout',
         (tester) async {
       final disposed = <String>[];
       final errors = <Object>[];
@@ -193,9 +193,9 @@ void main() {
                     label: 'holder',
                     scopeKey: 'shared',
                     disposeGate: hang,
-                    disposeAsyncTimeout: const Duration(milliseconds: 50),
-                    onDisposeAsyncTimeout: () =>
-                        throw StateError('onDisposeAsyncTimeout failed'),
+                    disposeScopeTimeout: const Duration(milliseconds: 50),
+                    onDisposeScopeTimeout: () =>
+                        throw StateError('onDisposeScopeTimeout failed'),
                     disposed: disposed,
                   ),
                 if (successor)
@@ -268,7 +268,7 @@ void main() {
           _Async(
             label: 'holder',
             disposeGate: hang,
-            disposeAsyncTimeout: const Duration(milliseconds: 50),
+            disposeScopeTimeout: const Duration(milliseconds: 50),
             disposed: disposed,
           ),
         ),
@@ -437,7 +437,7 @@ void main() {
             .map((details) => details.exception)
             .whereType<StateError>()
             .map((error) => error.message),
-        contains('disposeAsync of parent failed'),
+        contains('disposeScope of parent failed'),
         reason: 'the second has no caller left to raise at, so a report is '
             'the only way out it has',
       );
@@ -783,10 +783,10 @@ final class _Async extends AsyncScopeBase<_Async> {
   final bool failOnDispose;
   final List<String> disposed;
 
-  /// Holds [disposeAsync] open, so this scope can keep its parent waiting.
+  /// Holds [disposeScope] open, so this scope can keep its parent waiting.
   final Completer<void>? disposeGate;
 
-  /// Parks [initAsync] on this, so this scope cannot be cancelled.
+  /// Parks [initScope] on this, so this scope cannot be cancelled.
   final Completer<void>? initGate;
 
   const _Async({
@@ -800,15 +800,15 @@ final class _Async extends AsyncScopeBase<_Async> {
     super.scopeKeyTimeout,
     super.initCancellationTimeout,
     super.onInitCancellationTimeout,
-    super.disposeAsyncTimeout,
-    super.onDisposeAsyncTimeout,
+    super.disposeScopeTimeout,
+    super.onDisposeScopeTimeout,
     super.waitForChildrenTimeout,
     super.onWaitForChildrenTimeout,
     Widget? child,
   }) : super(child: child ?? const SizedBox.shrink());
 
   @override
-  Stream<AsyncScopeInitState> initAsync(BuildContext context) async* {
+  Stream<AsyncScopeInitState> initScope(BuildContext context) async* {
     if (initGate case final gate?) {
       await gate.future;
     }
@@ -823,13 +823,13 @@ final class _Async extends AsyncScopeBase<_Async> {
   }
 
   @override
-  Future<void> disposeAsync() async {
+  Future<void> disposeScope() async {
     if (disposeGate case final gate?) {
       await gate.future;
     }
     disposed.add(label);
     if (failOnDispose) {
-      throw StateError('disposeAsync of $label failed');
+      throw StateError('disposeScope of $label failed');
     }
   }
 
@@ -1017,7 +1017,7 @@ final class _DepScopeState
   }
 
   @override
-  FutureOr<void> disposeAsync() {
+  FutureOr<void> disposeStateAsync() {
     if (params.failOnStateDispose) {
       throw StateError('the state failed to dispose of itself');
     }
@@ -1116,7 +1116,7 @@ final class _PlainDepScopeState
   }
 
   @override
-  FutureOr<void> disposeAsync() {
+  FutureOr<void> disposeStateAsync() {
     if (params.failOnStateDispose) {
       throw StateError('the state failed to dispose of itself');
     }

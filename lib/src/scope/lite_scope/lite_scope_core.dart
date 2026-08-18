@@ -138,7 +138,7 @@ abstract base class LiteScopeElementBase<
   //
 
   @override
-  Stream<AsyncScopeInitState> initAsync();
+  Stream<AsyncScopeInitState> initScope();
 
   /// Builds a widget to display while waiting.
   Widget? buildOnWaiting();
@@ -175,7 +175,7 @@ abstract base class LiteScopeElementBase<
 
   @override
   @mustCallSuper
-  Future<void> disposeAsync() async {
+  Future<void> disposeScope() async {
     if (_state case final state?) {
       await state._performAsyncDispose();
     }
@@ -370,13 +370,13 @@ abstract base class LiteScopeCoreState<
   //
 
   /// Initializes the scope asynchronously.
-  FutureOr<void> initAsync() {}
+  FutureOr<void> initStateAsync() {}
 
-  /// Lets go of whatever cannot wait for [disposeAsync].
+  /// Lets go of whatever cannot wait for [disposeStateAsync].
   ///
   /// Cancel subscriptions and detach listeners here — everything that must
   /// stop reaching a scope on its way out. It runs exactly once, always before
-  /// [disposeAsync], whether the scope was removed from the tree or closed
+  /// [disposeStateAsync], whether the scope was removed from the tree or closed
   /// with [close].
   ///
   /// **[State.dispose] is not part of that order.** It belongs to Flutter, not
@@ -392,9 +392,9 @@ abstract base class LiteScopeCoreState<
   void onUnmount() {}
 
   /// Disposes of the scope asynchronously.
-  FutureOr<void> disposeAsync() {}
+  FutureOr<void> disposeStateAsync() {}
 
-  /// Sealed on purpose: put the teardown in [onUnmount] and [disposeAsync].
+  /// Sealed on purpose: put the teardown in [onUnmount] and [disposeStateAsync].
   ///
   /// [State.dispose] belongs to Flutter and lands on either side of a scope's
   /// teardown depending on how the scope went — before all of it when the tree
@@ -424,7 +424,7 @@ abstract base class LiteScopeCoreState<
   /// initialization actually worked is [_initSucceeded].
   final _initCompleter = Completer<void>();
 
-  /// Whether [initAsync] has completed successfully.
+  /// Whether [initStateAsync] has completed successfully.
   bool _initSucceeded = false;
 
   late final E _scopeElement;
@@ -462,7 +462,7 @@ abstract base class LiteScopeCoreState<
 
   Future<void> _performAsyncInit() async {
     try {
-      final result = initAsync();
+      final result = initStateAsync();
       if (result is Future<void>) {
         await result;
         _completeInit();
@@ -497,12 +497,12 @@ abstract base class LiteScopeCoreState<
     }
 
     // Nothing was initialized, so there is nothing to dispose of -- the same
-    // rule `AsyncScopeElementBase` applies to its own `disposeAsync`.
+    // rule `AsyncScopeElementBase` applies to its own `disposeStateAsync`.
     if (!_initSucceeded) {
       return;
     }
 
-    final result = disposeAsync();
+    final result = disposeStateAsync();
     if (result is Future<void>) {
       await result;
     }

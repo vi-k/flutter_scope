@@ -3,8 +3,11 @@ part of '../scope.dart';
 /// {@category AsyncControllerScope}
 final class AsyncControllerScope<C extends ScopeController>
     extends AsyncControllerScopeBase<AsyncControllerScope<C>, C> {
-  /// Creates the controller this scope owns.
-  final C Function(BuildContext context) create;
+  /// What [createController] was given.
+  ///
+  /// Private because the method it stands behind has the same name, and a
+  /// field cannot share a name with a method it implements.
+  final C Function(BuildContext context) _createController;
 
   /// Built while waiting for a `scopeKey` and for the controller.
   ///
@@ -25,6 +28,9 @@ final class AsyncControllerScope<C extends ScopeController>
   final Widget Function(BuildContext context, C controller) builder;
 
   /// Creates a scope owning a controller.
+  ///
+  /// [createController] is the method this widget stands in for, and the
+  /// parameter carries its name.
   const AsyncControllerScope({
     super.key,
     super.tag,
@@ -33,20 +39,20 @@ final class AsyncControllerScope<C extends ScopeController>
     super.onScopeKeyTimeout,
     super.initCancellationTimeout,
     super.onInitCancellationTimeout,
-    super.disposeAsyncTimeout,
-    super.onDisposeAsyncTimeout,
+    super.disposeScopeTimeout,
+    super.onDisposeScopeTimeout,
     super.waitForChildrenTimeout,
     super.onWaitForChildrenTimeout,
     super.pauseAfterInitialization,
-    required this.create,
+    required C Function(BuildContext context) createController,
     this.waitingBuilder,
     required this.progressBuilder,
     required this.builder,
     required this.errorBuilder,
-  });
+  }) : _createController = createController;
 
   @override
-  C createController(BuildContext context) => create(context);
+  C createController(BuildContext context) => _createController(context);
 
   @override
   Widget? buildOnWaiting(BuildContext context) => waitingBuilder?.call(context);

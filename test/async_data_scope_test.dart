@@ -282,8 +282,8 @@ final class _Host extends StatelessWidget {
   Widget build(BuildContext context) => Directionality(
         textDirection: TextDirection.ltr,
         child: AsyncDataScope<_Database>(
-          init: init,
-          dispose: (data) => dispose?.call(data),
+          initData: init,
+          disposeData: (data) => dispose?.call(data),
           progressBuilder: (context, progress) =>
               Text('initializing: $progress'),
           errorBuilder: (context, error, stackTrace, progress) =>
@@ -325,8 +325,8 @@ final class _NullableHost extends StatelessWidget {
   Widget build(BuildContext context) => Directionality(
         textDirection: TextDirection.ltr,
         child: AsyncDataScope<String?>(
-          init: init,
-          dispose: (data) {},
+          initData: init,
+          disposeData: (data) {},
           progressBuilder: (context, progress) =>
               _NullableReader(onInitializing, onInitializingHasData),
           errorBuilder: (context, error, stackTrace, progress) =>

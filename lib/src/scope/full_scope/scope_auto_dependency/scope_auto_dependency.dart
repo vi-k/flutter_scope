@@ -161,13 +161,13 @@ abstract base class ScopeAutoDependencies<T extends ScopeAutoDependencies<T, C>,
   /// the same reason, and says so in
   /// `AsyncControllerScopeElementBase._releaseController`.
   ///
-  /// The limit is [ScopeConfig.defaultDisposeAsyncTimeout] rather than the
-  /// `disposeAsyncTimeout` of the scope: a container knows nothing of the
+  /// The limit is [ScopeConfig.defaultDisposeScopeTimeout] rather than the
+  /// `disposeScopeTimeout` of the scope: a container knows nothing of the
   /// widget that owns it, and works without one. The timer comes from
   /// [Zone.root] because a timer of the current zone would still be pending
   /// when a widget test ends, which is what `flutter_test` ends a test on.
   Future<void> _disposeBounded() async {
-    final limit = ScopeConfig.defaultDisposeAsyncTimeout;
+    final limit = ScopeConfig.defaultDisposeScopeTimeout;
     // ignore: discarded_futures
     final released = dispose();
 

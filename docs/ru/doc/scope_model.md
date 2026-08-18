@@ -1,6 +1,6 @@
 # ScopeModel
 
-> Перевод `doc/scope_model.md` (blob `5f10a1d629991e0335ef325ecbea7e5d60d6c7f2`).
+> Перевод `doc/scope_model.md` (blob `c377c4fce24382f6ec45e6a5daf721527058c286`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 Скоуп, который владеет одним обычным объектом Dart и отдаёт его своему
@@ -172,7 +172,7 @@ ScopeModel.value(value: cart, builder: (context) => const CartScreen());
 режим.
 
 Утилизация здесь синхронная. Когда для освобождения объекта нужен `await`, это
-не то семейство: `LiteScope` даёт состояние с `disposeAsync`, а `Scope` —
+не то семейство: `LiteScope` даёт состояние с `disposeStateAsync`, а `Scope` —
 контейнер зависимостей, чей `dispose` дожидаются; и оба заставляют родителя
 подождать свои дочерние скоупы, прежде чем разбирать себя.
 

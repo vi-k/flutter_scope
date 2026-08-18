@@ -18,7 +18,7 @@ void main() {
     testWidgets('really waits for a teardown that takes its time',
         (tester) async {
       addTearDown(ScopeConfig.reset);
-      ScopeConfig.defaultDisposeAsyncTimeout = null;
+      ScopeConfig.defaultDisposeScopeTimeout = null;
 
       final log = <String>[];
       final slow = Completer<void>();
@@ -32,8 +32,8 @@ void main() {
                   if (first)
                     AsyncScope(
                       scopeKey: 'shared',
-                      init: (context) => Stream.value(AsyncScopeReady()),
-                      dispose: () async {
+                      initScope: (context) => Stream.value(AsyncScopeReady()),
+                      disposeScope: () async {
                         await slow.future;
                         log.add('disposed');
                       },
@@ -47,8 +47,8 @@ void main() {
                     AsyncScope(
                       scopeKey: 'shared',
                       scopeKeyTimeout: const Duration(days: 1),
-                      init: (context) => Stream.value(AsyncScopeReady()),
-                      dispose: () {},
+                      initScope: (context) => Stream.value(AsyncScopeReady()),
+                      disposeScope: () {},
                       progressBuilder: (context, progress) =>
                           const SizedBox.shrink(),
                       errorBuilder: (context, error, stackTrace, progress) =>
@@ -110,7 +110,7 @@ void main() {
       ScopeConfig.pauseAfterInitializationEnabled = false;
       ScopeConfig.defaultScopeKeyTimeout = null;
       ScopeConfig.defaultWaitForChildrenTimeout = Duration.zero;
-      ScopeConfig.defaultDisposeAsyncTimeout = const Duration(days: 1);
+      ScopeConfig.defaultDisposeScopeTimeout = const Duration(days: 1);
       ScopeConfig.defaultInitCancellationTimeout = null;
 
       ScopeConfig.reset();
@@ -122,7 +122,7 @@ void main() {
         const Duration(seconds: 3),
       );
       expect(
-        ScopeConfig.defaultDisposeAsyncTimeout,
+        ScopeConfig.defaultDisposeScopeTimeout,
         const Duration(seconds: 3),
       );
       expect(

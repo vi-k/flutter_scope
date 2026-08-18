@@ -11,7 +11,7 @@ import 'utils/settle.dart';
 /// The container promises that whatever a dependency has already taken is given
 /// back. Cancellation is the one way in which that promise hangs on a single
 /// line: an initialization that never succeeded leaves the scope with
-/// `_initSucceeded` false, so the teardown skips `disposeAsync()` — and with it
+/// `_initSucceeded` false, so the teardown skips `disposeScope()` — and with it
 /// the pass that disposes of the dependencies. The only thing left to release a
 /// half-built tree is the `finally` of [ScopeAutoDependencies.init], reached by
 /// cancelling the subscription to it.
@@ -23,7 +23,7 @@ import 'utils/settle.dart';
 /// order the four stages of the disposal run in.
 ///
 /// The second group is the same promise one layer up, where a hand-written
-/// `initAsync` guards its own steps instead of handing them to a container.
+/// `initScope` guards its own steps instead of handing them to a container.
 void main() {
   tearDown(ScopeConfig.reset);
 
@@ -52,7 +52,7 @@ void main() {
       expect(
         deps.released,
         ['a'],
-        reason: 'the scope never became ready, so its own disposeAsync is '
+        reason: 'the scope never became ready, so its own disposeScope is '
             'skipped and this is the only pass that releases the tree',
       );
     });
@@ -131,7 +131,7 @@ void main() {
     });
   });
 
-  // A hand-written `initAsync` gives back what it took by guarding its own
+  // A hand-written `initScope` gives back what it took by guarding its own
   // steps, and the topics show how. What shape that guard has to be is the
   // whole of it: a cancellation raises nothing, so the two shapes that look
   // equivalent are not.
@@ -153,7 +153,7 @@ void main() {
         ['took'],
         reason: 'cancelling an `async*` resumes its body and ends it at the '
             'next yield -- nothing is thrown, so the catch never runs; and '
-            'the scope never became ready, so `disposeAsync` does not run '
+            'the scope never became ready, so `disposeScope` does not run '
             'either. What the initialization took is held by nobody',
       );
     });
@@ -196,18 +196,18 @@ void main() {
       );
 
       await tester.pumpWidget(_wrap(const SizedBox.shrink()));
-      await settle(tester, until: () => log.contains('disposeAsync'));
+      await settle(tester, until: () => log.contains('disposeScope'));
 
       expect(
         log,
-        ['took', 'handed over', 'disposeAsync'],
+        ['took', 'handed over', 'disposeScope'],
         reason: 'and from there it is the scope that releases it',
       );
     });
 
     // The narrowest state the two can be caught in. `pauseAfterInitialization`
     // holds the ready branch back, so the scope has registered the
-    // initialization -- `disposeAsync` will run -- while the screen still shows
+    // initialization -- `disposeScope` will run -- while the screen still shows
     // the loading one. If the flag beside the `yield` could disagree with that,
     // this is where it would: the guard would release what the scope is about to
     // release too.
@@ -233,11 +233,11 @@ void main() {
       await settle(tester, until: () => log.contains('handed over'));
 
       await tester.pumpWidget(_wrap(const SizedBox.shrink()));
-      await settle(tester, until: () => log.contains('disposeAsync'));
+      await settle(tester, until: () => log.contains('disposeScope'));
 
       expect(
         log,
-        ['took', 'handed over', 'disposeAsync'],
+        ['took', 'handed over', 'disposeScope'],
         reason: 'released once, by the scope -- the guard kept quiet, and it '
             'was right to',
       );
@@ -357,7 +357,7 @@ final class _Guarded extends AsyncScopeBase<_Guarded> {
   Duration? get pauseAfterInitialization => pause;
 
   @override
-  Stream<AsyncScopeInitState> initAsync(BuildContext context) async* {
+  Stream<AsyncScopeInitState> initScope(BuildContext context) async* {
     log.add('took');
 
     if (!guardIsFinally) {
@@ -390,7 +390,7 @@ final class _Guarded extends AsyncScopeBase<_Guarded> {
   }
 
   @override
-  Future<void> disposeAsync() async => log.add('disposeAsync');
+  Future<void> disposeScope() async => log.add('disposeScope');
 
   @override
   Widget buildOnProgress(BuildContext context, Object? progress) =>

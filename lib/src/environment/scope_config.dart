@@ -49,7 +49,7 @@ abstract final class ScopeConfig {
   /// If `null`, then there is no timeout and the wait is unbounded.
   ///
   /// If zero, then the timeout expires immediately.
-  static Duration? defaultDisposeAsyncTimeout = _timeout;
+  static Duration? defaultDisposeScopeTimeout = _timeout;
 
   /// Timeout for waiting for an initialization to be cancelled.
   ///
@@ -83,7 +83,7 @@ abstract final class ScopeConfig {
     pauseAfterInitializationEnabled = _pauseAfterInitializationEnabled;
     defaultScopeKeyTimeout = _timeout;
     defaultWaitForChildrenTimeout = _timeout;
-    defaultDisposeAsyncTimeout = _timeout;
+    defaultDisposeScopeTimeout = _timeout;
     defaultInitCancellationTimeout = _timeout;
   }
 }

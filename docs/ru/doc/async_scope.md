@@ -1,6 +1,6 @@
 # AsyncScope
 
-> Перевод `doc/async_scope.md` (blob `6cc130113ae6b6a29ac5b26f635d876a34b69aa6`).
+> Перевод `doc/async_scope.md` (blob `a5f9b9d3da990ef272f64a4c95d0a9c9a95e97c2`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 Скоуп, всё содержимое которого — жизненный цикл: асинхронная инициализация и
@@ -11,13 +11,13 @@
 
 ```dart
 AsyncScope(
-  init: (context) async* {
+  initScope: (context) async* {
     yield AsyncScopeProgress('connecting');
     await connection.open();
 
     yield AsyncScopeReady();
   },
-  dispose: () => connection.close(),
+  disposeScope: () => connection.close(),
   waitingBuilder: (context) => const SizedBox.shrink(),
   progressBuilder: (context, progress) => Text('$progress'),
   errorBuilder: (context, error, stackTrace, progress) => Text('$error'),
@@ -26,9 +26,9 @@ AsyncScope(
 ```
 
 `AsyncScopeBase` — форма для наследования: те же члены переопределениями —
-`initAsync`, `disposeAsync`, `onMount`, `onUnmount`, `buildOnWaiting`,
+`initScope`, `disposeScope`, `onMount`, `onUnmount`, `buildOnWaiting`,
 `buildOnProgress`, `buildOnReady`, `buildOnError` — плюс `scopeKey`,
-`scopeKeyTimeout`, `initCancellationTimeout`, `disposeAsyncTimeout`,
+`scopeKeyTimeout`, `initCancellationTimeout`, `disposeScopeTimeout`,
 `waitForChildrenTimeout`, их колбэки `onTimeout` и `pauseAfterInitialization`.
 Под обоими лежит `AsyncScopeCore` — для скоупа, которому нужен свой элемент.
 
@@ -39,11 +39,11 @@ AsyncScope(
 | состояние | билдер | когда |
 | --- | --- | --- |
 | `AsyncScopeWaiting` | `buildOnWaiting`, а если он вернул `null` — `buildOnProgress` | встал на дерево; ждёт `scopeKey` и первое событие |
-| `AsyncScopeProgress` | `buildOnProgress` | `init` сообщил о прогрессе; значение в `progress` |
-| `AsyncScopeReady` | `buildOnReady` | `init` выдал `AsyncScopeReady` |
-| `AsyncScopeError` | `buildOnError` | `init` упал раньше, чем стал готов; вместе с ошибкой приходит достигнутый прогресс |
+| `AsyncScopeProgress` | `buildOnProgress` | `initScope` сообщил о прогрессе; значение в `progress` |
+| `AsyncScopeReady` | `buildOnReady` | `initScope` выдал `AsyncScopeReady` |
+| `AsyncScopeError` | `buildOnError` | `initScope` упал раньше, чем стал готов; вместе с ошибкой приходит достигнутый прогресс |
 
-Тип `init` — поток `AsyncScopeInitState`, то есть половина иерархии
+Тип `initScope` — поток `AsyncScopeInitState`, то есть половина иерархии
 `Progress`/`Ready`: поток не может сообщить «жду» или «упал» значением, потому
 что эти два состояния принадлежат скоупу, а не работе.
 
@@ -62,7 +62,7 @@ AsyncScope(
 
 ```dart
 AsyncScope(
-  init: (context) async* {
+  initScope: (context) async* {
     yield AsyncScopeProgress('connecting');
     await api.connect();
 
@@ -71,7 +71,7 @@ AsyncScope(
 
     yield AsyncScopeReady();
   },
-  dispose: api.close,
+  disposeScope: api.close,
   progressBuilder: (context, progress) => Center(child: Text('$progress')),
   errorBuilder: (context, error, stackTrace, progress) =>
       Center(child: Text('failed at $progress: $error')),
@@ -99,7 +99,7 @@ post-frame-колбэке, поэтому значение прогресса, �
 не влияет. Инициализации, которая продолжает выдавать значения после того, как
 скоуп стал пригоден, нужен `Listenable` под скоупом, а не этот поток.
 
-**Не сообщать прогресс вовсе — нормально.** `init`, выдающий только
+**Не сообщать прогресс вовсе — нормально.** `initScope`, выдающий только
 `AsyncScopeReady`, не выходит из `AsyncScopeWaiting`, так что скоуп показывает
 `buildOnWaiting` — обычно спиннер, — а затем готовую ветку.
 
@@ -174,7 +174,7 @@ if (scope.isInitialized) { … }
 **Провал после того, как скоуп уже готов**, не переключает экран на
 `buildOnError`. О нём сообщают через `FlutterError.reportError`, а скоуп
 остаётся готовым. Это сознательно: на экране виджеты готовой ветки, всё, что
-захватил `init`, всё равно должен освободить `dispose`, а подмена поддерева
+захватил `initScope`, всё равно должен освободить `disposeScope`, а подмена поддерева
 экраном ошибки за спиной у пользователя бросила бы и то и другое. Поток,
 продолжающий работу после `AsyncScopeReady`, — случай нечастый, но именно в нём
 разница и важна.
@@ -205,9 +205,9 @@ if (scope.isInitialized) { … }
 5. **Дожидаются дочерних скоупов**, с ограничением `waitForChildrenTimeout` (по
    умолчанию `ScopeConfig.defaultWaitForChildrenTimeout`). Истечение репортят
    через `FlutterError.reportError`, и разбор идёт дальше.
-6. **`disposeAsync`** — собственный разбор скоупа; если он вернул future, его
-   дожидаются с ограничением `disposeAsyncTimeout` (по умолчанию
-   `ScopeConfig.defaultDisposeAsyncTimeout`). Шаг выполняется, только если
+6. **`disposeScope`** — собственный разбор скоупа; если он вернул future, его
+   дожидаются с ограничением `disposeScopeTimeout` (по умолчанию
+   `ScopeConfig.defaultDisposeScopeTimeout`). Шаг выполняется, только если
    инициализация удалась: скоупу, который так и не стал готовым — всё ещё ждал
    или упал, — освобождать нечего. Разбор, который никогда не завершится, — это
    пользовательский код, держащий шаг 7 ниже, а с ним и `scopeKey` скоупа,
@@ -229,12 +229,12 @@ if (scope.isInitialized) { … }
 
 ### Упавшая инициализация убирает за собой сама
 
-Шаг 6 стоит прочитать дважды: **`dispose` выполняется, только если
+Шаг 6 стоит прочитать дважды: **`disposeScope` выполняется, только если
 инициализация удалась.** Скоуп, упавший на полпути, до него не доходит, и
 второго хука, который дошёл бы, нет: `onUnmount` отрабатывает, но ему нечего
 передать.
 
-Это не недосмотр. `dispose` пишут для законченного скоупа, а недостроенный —
+Это не недосмотр. `disposeScope` пишут для законченного скоупа, а недостроенный —
 другая вещь с другим разбором, и как далеко он успел зайти, знает только тот
 код, который его строил. Значит, отдавать взятое до провала — дело самой
 инициализации:
@@ -281,12 +281,12 @@ dispose: () => connection.close(),
 Флаг нужен, чтобы дальше защита молчала. `yield AsyncScopeReady()` — это и есть
 передача, и тело, законченное на этом `yield`, до следующей строки не доходит:
 `finally`, увидевший флаг всё ещё опущенным, — ровно тот случай, когда скоуп
-соединение себе не забрал и `dispose` для него вызван не будет. А когда флаг
+соединение себе не забрал и `disposeScope` для него вызван не будет. А когда флаг
 поднят, отдавать — дело скоупа, и защита не должна делать это второй раз.
 
 Доверять флагу это решение можно из-за того, когда выполняется строка под
 `yield`: генератор возобновляют, когда потребитель просит следующее событие, а к
-этому времени скоуп уже забрал то, что ему дали, — `dispose` будет вызван. Окна,
+этому времени скоуп уже забрал то, что ему дали, — `disposeScope` будет вызван. Окна,
 в котором флаг говорит «передано», а скоуп с этим не согласен, нет — даже пока
 ветка готовности придержана `pauseAfterInitialization`; сьюта в этом состоянии
 стоит и проверяет.

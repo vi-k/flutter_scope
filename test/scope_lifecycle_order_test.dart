@@ -19,13 +19,13 @@ void main() {
         Directionality(
           textDirection: TextDirection.ltr,
           child: AsyncScope(
-            mount: (context) => order.add('onMount'),
-            init: (context) {
+            onMount: (context) => order.add('onMount'),
+            initScope: (context) {
               order.add('init');
 
               return Stream.value(AsyncScopeReady());
             },
-            dispose: () {},
+            disposeScope: () {},
             progressBuilder: (context, progress) => const SizedBox.shrink(),
             errorBuilder: (context, error, stackTrace, progress) =>
                 const SizedBox.shrink(),
@@ -50,13 +50,13 @@ void main() {
         Directionality(
           textDirection: TextDirection.ltr,
           child: AsyncDataScope<String>(
-            mount: (context) => order.add('onMount'),
-            init: (context) {
+            onMount: (context) => order.add('onMount'),
+            initData: (context) {
               order.add('init');
 
               return Stream.value(AsyncDataScopeReady('data'));
             },
-            dispose: (data) {},
+            disposeData: (data) {},
             progressBuilder: (context, progress) => const SizedBox.shrink(),
             errorBuilder: (context, error, stackTrace, progress) =>
                 const SizedBox.shrink(),
@@ -78,9 +78,9 @@ void main() {
           child: _Ancestor(
             value: 'above',
             child: AsyncScope(
-              mount: (context) => seen = _Ancestor.of(context),
-              init: (context) => Stream.value(AsyncScopeReady()),
-              dispose: () {},
+              onMount: (context) => seen = _Ancestor.of(context),
+              initScope: (context) => Stream.value(AsyncScopeReady()),
+              disposeScope: () {},
               progressBuilder: (context, progress) => const SizedBox.shrink(),
               errorBuilder: (context, error, stackTrace, progress) =>
                   const SizedBox.shrink(),
@@ -117,7 +117,12 @@ void main() {
 
       expect(
         _order,
-        ['state.onUnmount', 'dep.unmount', 'state.disposeAsync', 'dep.dispose'],
+        [
+          'state.onUnmount',
+          'dep.unmount',
+          'state.disposeStateAsync',
+          'dep.dispose',
+        ],
       );
     });
 
@@ -131,7 +136,12 @@ void main() {
 
       expect(
         _order,
-        ['state.onUnmount', 'dep.unmount', 'state.disposeAsync', 'dep.dispose'],
+        [
+          'state.onUnmount',
+          'dep.unmount',
+          'state.disposeStateAsync',
+          'dep.dispose',
+        ],
         reason: 'a closed scope lets go of the same things in the same order',
       );
     });
@@ -158,7 +168,7 @@ void main() {
     });
 
     // The two halves of a `Scope` initialize separately -- the container
-    // through `initDependencies`, the state through its own `initAsync` --
+    // through `initDependencies`, the state through its own `initScope` --
     // and a failure of each leaves a different amount of the teardown behind.
     // The `full_scope` topic states both as a table; these two pin it.
     testWidgets('drops the state entirely when initDependencies failed',
@@ -183,7 +193,7 @@ void main() {
         _order,
         ['dep.unmount', 'dep.dispose'],
         reason: 'the ready branch was never built, so `createState()` never '
-            'ran and there is no state for `onUnmount`/`disposeAsync` to run '
+            'ran and there is no state for `onUnmount`/`disposeScope` to run '
             'on -- while the dependencies, which did exist, are still given '
             'back, by the container tearing itself down from inside its own '
             'initialization',
@@ -191,7 +201,7 @@ void main() {
     });
 
     testWidgets(
-        'unmounts but does not dispose of a state whose initAsync '
+        'unmounts but does not dispose of a state whose initScope '
         'failed', (tester) async {
       _DepState.failing = true;
       addTearDown(() => _DepState.failing = false);
@@ -213,7 +223,7 @@ void main() {
         _order,
         ['state.onUnmount', 'dep.unmount', 'dep.dispose'],
         reason: 'the state exists and may already hold a subscription, so the '
-            'synchronous half runs; `disposeAsync` is written against a state '
+            'synchronous half runs; `disposeScope` is written against a state '
             'that finished initializing and this one did not, so it is '
             'skipped -- the same rule as for the scope itself, one level down',
       );
@@ -224,9 +234,9 @@ void main() {
         Directionality(
           textDirection: TextDirection.ltr,
           child: AsyncScope(
-            init: (context) => Stream.value(AsyncScopeReady()),
-            unmount: () => _order.add('onUnmount'),
-            dispose: () => _order.add('disposeAsync'),
+            initScope: (context) => Stream.value(AsyncScopeReady()),
+            onUnmount: () => _order.add('onUnmount'),
+            disposeScope: () => _order.add('disposeScope'),
             progressBuilder: (context, progress) => const SizedBox.shrink(),
             errorBuilder: (context, error, stackTrace, progress) =>
                 const SizedBox.shrink(),
@@ -237,9 +247,9 @@ void main() {
       await tester.pumpAndSettle();
 
       await tester.pumpWidget(const SizedBox.shrink());
-      await settle(tester, until: () => _order.contains('disposeAsync'));
+      await settle(tester, until: () => _order.contains('disposeScope'));
 
-      expect(_order, ['onUnmount', 'disposeAsync']);
+      expect(_order, ['onUnmount', 'disposeScope']);
     });
   });
 }
@@ -314,9 +324,9 @@ final class _DepState extends ScopeState<_DepScope, _Deps, _DepState> {
   }
 
   @override
-  FutureOr<void> initAsync() {
+  FutureOr<void> initStateAsync() {
     if (failing) {
-      throw StateError('state initAsync failed');
+      throw StateError('state initStateAsync failed');
     }
   }
 
@@ -327,7 +337,8 @@ final class _DepState extends ScopeState<_DepScope, _Deps, _DepState> {
   }
 
   @override
-  Future<void> disposeAsync() async => _order.add('state.disposeAsync');
+  Future<void> disposeStateAsync() async =>
+      _order.add('state.disposeStateAsync');
 
   /// Sized, not shrunk: `close()` captures a screenshot of the subtree, and a
   /// zero-sized one cannot be captured.

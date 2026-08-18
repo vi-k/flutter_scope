@@ -211,7 +211,7 @@ void main() {
 
       // The scope's own teardown is user code, and a teardown that never
       // finishes must not hold the scope's registration and key for ever.
-      testWidgets("disposeAsyncTimeout bounds the scope's own teardown",
+      testWidgets("disposeScopeTimeout bounds the scope's own teardown",
           (tester) async {
         final never = Completer<void>();
         final log = <String>[];
@@ -224,8 +224,8 @@ void main() {
                 label: 'stuck',
                 log: log,
                 disposeGate: never,
-                disposeAsyncTimeout: const Duration(milliseconds: 50),
-                onDisposeAsyncTimeout: () => expired = true,
+                disposeScopeTimeout: const Duration(milliseconds: 50),
+                onDisposeScopeTimeout: () => expired = true,
               ),
             ),
           ),
@@ -384,8 +384,8 @@ final class _Case {
   final void Function()? onScopeKeyTimeout;
   final Duration? initCancellationTimeout;
   final void Function()? onInitCancellationTimeout;
-  final Duration? disposeAsyncTimeout;
-  final void Function()? onDisposeAsyncTimeout;
+  final Duration? disposeScopeTimeout;
+  final void Function()? onDisposeScopeTimeout;
   final Duration? waitForChildrenTimeout;
   final void Function()? onWaitForChildrenTimeout;
   final Duration? pauseAfterInitialization;
@@ -405,8 +405,8 @@ final class _Case {
     this.onScopeKeyTimeout,
     this.initCancellationTimeout,
     this.onInitCancellationTimeout,
-    this.disposeAsyncTimeout,
-    this.onDisposeAsyncTimeout,
+    this.disposeScopeTimeout,
+    this.onDisposeScopeTimeout,
     this.waitForChildrenTimeout,
     this.onWaitForChildrenTimeout,
     this.pauseAfterInitialization,
@@ -438,18 +438,18 @@ Widget _asyncScope(_Case c) => AsyncScope(
       onScopeKeyTimeout: c.onScopeKeyTimeout,
       initCancellationTimeout: c.initCancellationTimeout,
       onInitCancellationTimeout: c.onInitCancellationTimeout,
-      disposeAsyncTimeout: c.disposeAsyncTimeout,
-      onDisposeAsyncTimeout: c.onDisposeAsyncTimeout,
+      disposeScopeTimeout: c.disposeScopeTimeout,
+      onDisposeScopeTimeout: c.onDisposeScopeTimeout,
       waitForChildrenTimeout: c.waitForChildrenTimeout,
       onWaitForChildrenTimeout: c.onWaitForChildrenTimeout,
       pauseAfterInitialization: c.pauseAfterInitialization,
-      init: (context) async* {
+      initScope: (context) async* {
         if (c.initGate case final gate?) {
           await gate.future;
         }
         yield AsyncScopeReady();
       },
-      dispose: () async {
+      disposeScope: () async {
         if (c.disposeGate case final gate?) {
           await gate.future;
         }
@@ -465,18 +465,18 @@ Widget _asyncDataScope(_Case c) => AsyncDataScope<String>(
       onScopeKeyTimeout: c.onScopeKeyTimeout,
       initCancellationTimeout: c.initCancellationTimeout,
       onInitCancellationTimeout: c.onInitCancellationTimeout,
-      disposeAsyncTimeout: c.disposeAsyncTimeout,
-      onDisposeAsyncTimeout: c.onDisposeAsyncTimeout,
+      disposeScopeTimeout: c.disposeScopeTimeout,
+      onDisposeScopeTimeout: c.onDisposeScopeTimeout,
       waitForChildrenTimeout: c.waitForChildrenTimeout,
       onWaitForChildrenTimeout: c.onWaitForChildrenTimeout,
       pauseAfterInitialization: c.pauseAfterInitialization,
-      init: (context) async* {
+      initData: (context) async* {
         if (c.initGate case final gate?) {
           await gate.future;
         }
         yield AsyncDataScopeReady(c.label);
       },
-      dispose: (data) async {
+      disposeData: (data) async {
         if (c.disposeGate case final gate?) {
           await gate.future;
         }
@@ -492,12 +492,12 @@ Widget _asyncControllerScope(_Case c) => AsyncControllerScope<_Controller>(
       onScopeKeyTimeout: c.onScopeKeyTimeout,
       initCancellationTimeout: c.initCancellationTimeout,
       onInitCancellationTimeout: c.onInitCancellationTimeout,
-      disposeAsyncTimeout: c.disposeAsyncTimeout,
-      onDisposeAsyncTimeout: c.onDisposeAsyncTimeout,
+      disposeScopeTimeout: c.disposeScopeTimeout,
+      onDisposeScopeTimeout: c.onDisposeScopeTimeout,
       waitForChildrenTimeout: c.waitForChildrenTimeout,
       onWaitForChildrenTimeout: c.onWaitForChildrenTimeout,
       pauseAfterInitialization: c.pauseAfterInitialization,
-      create: (context) => _Controller(c),
+      createController: (context) => _Controller(c),
       progressBuilder: (context) => const SizedBox.shrink(),
       errorBuilder: (context, error, stackTrace) => Text('$error'),
       builder: (context, controller) => c.ready,
@@ -537,15 +537,15 @@ final class _LiteFixture extends LiteScope<_LiteFixture, _LiteFixtureState> {
           onScopeKeyTimeout: c.onScopeKeyTimeout,
           initCancellationTimeout: c.initCancellationTimeout,
           onInitCancellationTimeout: c.onInitCancellationTimeout,
-          disposeAsyncTimeout: c.disposeAsyncTimeout,
-          onDisposeAsyncTimeout: c.onDisposeAsyncTimeout,
+          disposeScopeTimeout: c.disposeScopeTimeout,
+          onDisposeScopeTimeout: c.onDisposeScopeTimeout,
           waitForChildrenTimeout: c.waitForChildrenTimeout,
           onWaitForChildrenTimeout: c.onWaitForChildrenTimeout,
           pauseAfterInitialization: c.pauseAfterInitialization,
         );
 
   @override
-  Stream<AsyncScopeInitState> init() async* {
+  Stream<AsyncScopeInitState> initScope() async* {
     if (c.initGate case final gate?) {
       await gate.future;
     }
@@ -584,7 +584,7 @@ final class _LiteFixtureState
   }
 
   @override
-  Future<void> disposeAsync() async {
+  Future<void> disposeStateAsync() async {
     if (params.c.disposeGate case final gate?) {
       await gate.future;
     }
@@ -605,8 +605,8 @@ final class _ScopeFixture
           onScopeKeyTimeout: c.onScopeKeyTimeout,
           initCancellationTimeout: c.initCancellationTimeout,
           onInitCancellationTimeout: c.onInitCancellationTimeout,
-          disposeAsyncTimeout: c.disposeAsyncTimeout,
-          onDisposeAsyncTimeout: c.onDisposeAsyncTimeout,
+          disposeScopeTimeout: c.disposeScopeTimeout,
+          onDisposeScopeTimeout: c.onDisposeScopeTimeout,
           waitForChildrenTimeout: c.waitForChildrenTimeout,
           onWaitForChildrenTimeout: c.onWaitForChildrenTimeout,
           pauseAfterInitialization: c.pauseAfterInitialization,
@@ -659,7 +659,7 @@ final class _ScopeFixtureState
   }
 
   @override
-  Future<void> disposeAsync() async {
+  Future<void> disposeStateAsync() async {
     if (params.c.disposeGate case final gate?) {
       await gate.future;
     }

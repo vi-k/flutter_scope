@@ -1,6 +1,6 @@
 # AsyncControllerScope
 
-> Перевод `doc/async_controller_scope.md` (blob `44ca1fb6fc9ff074c1aef31dd878279b105dbaad`).
+> Перевод `doc/async_controller_scope.md` (blob `57c97a7760022e761fc4f4c5448a172fa47c13bd`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 Скоуп, всё содержимое которого — контроллер: объект со своим жизненным циклом,
@@ -12,7 +12,7 @@
 
 ```dart
 AsyncControllerScope<PlayerController>(
-  create: (context) => PlayerController(api: ScopeModel.of<Api>(context, listen: false)),
+  createController: (context) => PlayerController(api: ScopeModel.of<Api>(context, listen: false)),
   progressBuilder: (context) => const SizedBox.shrink(),
   errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
   builder: (context, controller) => const PlayerView(),
@@ -129,7 +129,7 @@ await controller.performDispose();
 
 Зависший контроллер не может ничего запереть: ожидание отменённой инициализации
 ограничено `initCancellationTimeout`, ожидание `dispose()` —
-`disposeAsyncTimeout`, см. тему `debug`.
+`disposeScopeTimeout`, см. тему `debug`.
 
 ## Чтение контроллера из поддерева
 

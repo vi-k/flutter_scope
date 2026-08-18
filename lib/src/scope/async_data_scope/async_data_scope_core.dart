@@ -71,7 +71,7 @@ abstract base class AsyncDataScopeElementBase<
   Stream<AsyncDataScopeInitState<Object, T>> initDataAsync();
 
   @override
-  FutureOr<void> disposeAsync() {}
+  FutureOr<void> disposeScope() {}
 
   @override
   Widget buildOnState(AsyncScopeState state);
@@ -114,7 +114,7 @@ abstract base class AsyncDataScopeElementBase<
   /// for good, and the analyzer would say nothing about it.
   @nonVirtual
   @override
-  Stream<AsyncScopeInitState> initAsync() => initDataAsync().map(
+  Stream<AsyncScopeInitState> initScope() => initDataAsync().map(
         (state) {
           switch (state) {
             case AsyncDataScopeProgress(:final progress):

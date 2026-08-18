@@ -108,18 +108,18 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
   /// Called when the wait for the `scopeKey` expires.
   void onScopeKeyTimeout() {}
 
-  /// How long to wait for [initAsync] to be cancelled; `null` takes the
+  /// How long to wait for [initScope] to be cancelled; `null` takes the
   /// default.
   Duration? get initCancellationTimeout => null;
 
-  /// Called when the wait for the cancellation of [initAsync] expires.
+  /// Called when the wait for the cancellation of [initScope] expires.
   void onInitCancellationTimeout() {}
 
-  /// How long to wait for [disposeAsync]; `null` takes the default.
-  Duration? get disposeAsyncTimeout => null;
+  /// How long to wait for [disposeScope]; `null` takes the default.
+  Duration? get disposeScopeTimeout => null;
 
-  /// Called when the wait for [disposeAsync] expires.
-  void onDisposeAsyncTimeout() {}
+  /// Called when the wait for [disposeScope] expires.
+  void onDisposeScopeTimeout() {}
 
   /// How long to wait for the child scopes; `null` takes the default.
   Duration? get waitForChildrenTimeout => null;
@@ -128,10 +128,10 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
   void onWaitForChildrenTimeout() {}
 
   /// The initialization; ready at once by default.
-  Stream<AsyncScopeInitState> initAsync() => Stream.value(AsyncScopeReady());
+  Stream<AsyncScopeInitState> initScope() => Stream.value(AsyncScopeReady());
 
-  /// Releases what [initAsync] acquired; awaited.
-  FutureOr<void> disposeAsync() {}
+  /// Releases what [initScope] acquired; awaited.
+  FutureOr<void> disposeScope() {}
 
   /// Builds the branch belonging to [state].
   Widget buildOnState(AsyncScopeState state);
@@ -162,7 +162,7 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
   /// Therefore, we use [_initCompleter] for synchronization.
   final _initCompleter = Completer<void>();
 
-  /// Whether [initAsync] has definitively completed successfully (reached
+  /// Whether [initScope] has definitively completed successfully (reached
   /// [AsyncScopeReady]).
   ///
   /// This is tracked separately from `model.state`, because the
@@ -171,9 +171,9 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
   /// `mounted`-guarded delayed callback, for [pauseAfterInitialization]):
   /// if the element is removed from the tree before that callback runs,
   /// `model.state` never becomes [AsyncScopeReady], even though
-  /// [initAsync] itself already succeeded and may have acquired resources
-  /// that [disposeAsync] must release. [_performAsyncDispose] uses this
-  /// flag instead of `model.state` to decide whether [disposeAsync] must
+  /// [initScope] itself already succeeded and may have acquired resources
+  /// that [disposeScope] must release. [_performAsyncDispose] uses this
+  /// flag instead of `model.state` to decide whether [disposeScope] must
   /// run, so that scenario doesn't leak.
   bool _initSucceeded = false;
 
@@ -537,7 +537,7 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
 
     // Everything below either hands `_initCompleter` over to the subscription
     // that completes it, or completes it itself. A failure in between -- the
-    // coordinator lookup, or `initAsync()` raising while the stream is being
+    // coordinator lookup, or `initScope()` raising while the stream is being
     // built -- would otherwise leave the completer unsettled forever: this
     // future is discarded, so nothing retries and nothing else settles it,
     // while `_performAsyncDispose` waits for it before it may unregister the
@@ -594,7 +594,7 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
         // this side of the `await` -- and a scope closed with `close()` stays
         // mounted on purpose, so `mounted` says nothing about a disposal that
         // has already begun. Without this, a scope on its way out would
-        // subscribe to `initAsync()` here and run it to completion, acquiring
+        // subscribe to `initScope()` here and run it to completion, acquiring
         // resources for a scope that no longer exists; `_performAsyncDispose`
         // is meanwhile parked on `_initCompleter`, past the point where it
         // could have cancelled anything.
@@ -619,7 +619,7 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
       }
 
       _log.i('initialize…');
-      _subscription = initAsync().asyncMap((state) {
+      _subscription = initScope().asyncMap((state) {
         // `_initSucceeded`, not `_model.state`: the model only becomes
         // `AsyncScopeReady` inside the post-frame (or delayed) callback
         // scheduled below, so a second `AsyncScopeReady` that arrives before
@@ -678,8 +678,8 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
           // A failure that arrives *after* [AsyncScopeReady] -- a stream that
           // keeps working once the scope is usable and then raises, or the
           // `already initialized` diagnostic above -- reaches a scope that is
-          // initialized: [disposeAsync] will have to release what
-          // [initAsync] acquired, and the widgets built for the ready state
+          // initialized: [disposeScope] will have to release what
+          // [initScope] acquired, and the widgets built for the ready state
           // are the ones on screen. Flipping the model into [AsyncScopeError]
           // now would swap them for `buildOnError` behind the user's back,
           // and completing [_initCompleter] a second time would raise `Bad
@@ -727,7 +727,7 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
           // fixed for -- and the comment there names it in the same words.
           final error = StateError(
             '$W was initialized by a stream that ended without '
-            'AsyncScopeReady. That is how an `initAsync` says it is done, so '
+            'AsyncScopeReady. That is how an `initScope` says it is done, so '
             'a stream ending without it leaves the scope nothing to show and '
             'nothing to release.',
           );
@@ -771,7 +771,7 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
 
       // The same state the stream's own failures land in, for the same
       // reason. A failure raised here -- the coordinator lookup, an
-      // `initAsync()` that throws while the stream is being built -- is an
+      // `initScope()` that throws while the stream is being built -- is an
       // initialization that failed before it was ready, which is what
       // [AsyncScopeError] means and what `buildOnError` is for. Left out, as
       // it was, the model stayed [AsyncScopeWaiting] and the scope went on
@@ -823,7 +823,7 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
     // Four stages, each guarded on its own rather than chained: every one of
     // them reaches user code, and a failure in one is never a reason to skip
     // the ones after it. [unmountScope] drops what must stop reaching the
-    // scope at once, preparing gives up on the waits, `disposeAsync()`
+    // scope at once, preparing gives up on the waits, `disposeScope()`
     // releases what the scope acquired, and the `finally` gives back what the
     // scope was lent -- its place with the parent, its `scopeKey`, its model.
     // The first failure is passed on once all four are over, so the caller
@@ -869,14 +869,14 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
       try {
         if (_initSucceeded) {
           _log.i('dispose…');
-          final result = disposeAsync();
+          final result = disposeScope();
           if (result is Future<void>) {
             // The same bound as the cancellation above, for the same reason:
             // this is user code, the block below gives back what the scope was
             // lent, and a release that never finishes must not be able to keep
             // the key of a scope that is already gone.
             final limit =
-                disposeAsyncTimeout ?? ScopeConfig.defaultDisposeAsyncTimeout;
+                disposeScopeTimeout ?? ScopeConfig.defaultDisposeScopeTimeout;
 
             if (limit == null) {
               await result;
@@ -885,7 +885,7 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
                 result,
                 limit,
                 'its own teardown',
-                onDisposeAsyncTimeout,
+                onDisposeScopeTimeout,
               );
             }
           }

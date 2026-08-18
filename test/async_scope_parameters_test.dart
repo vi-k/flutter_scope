@@ -36,8 +36,8 @@ void main() {
           textDirection: TextDirection.ltr,
           child: AsyncScope(
             pauseAfterInitialization: const Duration(seconds: 1),
-            init: (context) => Stream.value(AsyncScopeReady()),
-            dispose: () {},
+            initScope: (context) => Stream.value(AsyncScopeReady()),
+            disposeScope: () {},
             progressBuilder: (context, progress) => const Text('init'),
             errorBuilder: (context, error, stackTrace, progress) =>
                 Text('$error'),
@@ -75,8 +75,8 @@ void main() {
             child: present
                 ? AsyncScope(
                     pauseAfterInitialization: const Duration(seconds: 5),
-                    init: (context) => Stream.value(AsyncScopeReady()),
-                    dispose: () {},
+                    initScope: (context) => Stream.value(AsyncScopeReady()),
+                    disposeScope: () {},
                     progressBuilder: (context, progress) => const Text('init'),
                     errorBuilder: (context, error, stackTrace, progress) =>
                         Text('$error'),
@@ -100,7 +100,7 @@ void main() {
 
     // Passes all nine parameters at once, so the whole surface is pinned by
     // compilation, and asserts the two that this scenario can observe.
-    testWidgets('gives up on a hanging dispose after disposeAsyncTimeout', (
+    testWidgets('gives up on a hanging dispose after disposeScopeTimeout', (
       tester,
     ) async {
       final hang = Completer<void>();
@@ -116,13 +116,13 @@ void main() {
                       onScopeKeyTimeout: () {},
                       initCancellationTimeout: const Duration(days: 1),
                       onInitCancellationTimeout: () {},
-                      disposeAsyncTimeout: const Duration(milliseconds: 50),
-                      onDisposeAsyncTimeout: () => expired = true,
+                      disposeScopeTimeout: const Duration(milliseconds: 50),
+                      onDisposeScopeTimeout: () => expired = true,
                       waitForChildrenTimeout: const Duration(days: 1),
                       onWaitForChildrenTimeout: () {},
                       pauseAfterInitialization: const Duration(milliseconds: 1),
-                      init: (context) => Stream.value(AsyncScopeReady()),
-                      dispose: () => hang.future,
+                      initScope: (context) => Stream.value(AsyncScopeReady()),
+                      disposeScope: () => hang.future,
                       progressBuilder: (context, progress) =>
                           const Text('init'),
                       errorBuilder: (context, error, stackTrace, progress) =>
@@ -163,9 +163,9 @@ void main() {
           textDirection: TextDirection.ltr,
           child: AsyncDataScope<String>(
             pauseAfterInitialization: const Duration(seconds: 1),
-            init: (context) =>
+            initData: (context) =>
                 Stream.value(AsyncDataScopeReady<Object, String>('value')),
-            dispose: (data) {},
+            disposeData: (data) {},
             progressBuilder: (context, progress) => const Text('init'),
             errorBuilder: (context, error, stackTrace, progress) =>
                 Text('$error'),
@@ -188,7 +188,7 @@ void main() {
       expect(find.text('ready: value'), findsOneWidget);
     });
 
-    testWidgets('gives up on a hanging dispose after disposeAsyncTimeout', (
+    testWidgets('gives up on a hanging dispose after disposeScopeTimeout', (
       tester,
     ) async {
       final hang = Completer<void>();
@@ -204,15 +204,15 @@ void main() {
                       onScopeKeyTimeout: () {},
                       initCancellationTimeout: const Duration(days: 1),
                       onInitCancellationTimeout: () {},
-                      disposeAsyncTimeout: const Duration(milliseconds: 50),
-                      onDisposeAsyncTimeout: () => expired = true,
+                      disposeScopeTimeout: const Duration(milliseconds: 50),
+                      onDisposeScopeTimeout: () => expired = true,
                       waitForChildrenTimeout: const Duration(days: 1),
                       onWaitForChildrenTimeout: () {},
                       pauseAfterInitialization: const Duration(milliseconds: 1),
-                      init: (context) => Stream.value(
+                      initData: (context) => Stream.value(
                         AsyncDataScopeReady<Object, String>('value'),
                       ),
-                      dispose: (data) => hang.future,
+                      disposeData: (data) => hang.future,
                       progressBuilder: (context, progress) =>
                           const Text('init'),
                       errorBuilder: (context, error, stackTrace, progress) =>

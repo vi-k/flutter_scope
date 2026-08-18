@@ -1795,7 +1795,7 @@ void main() {
     test(
       'a disposer that never finishes does not hold the failure back',
       () async {
-        ScopeConfig.defaultDisposeAsyncTimeout =
+        ScopeConfig.defaultDisposeScopeTimeout =
             const Duration(milliseconds: 50);
         addTearDown(ScopeConfig.reset);
 

@@ -172,7 +172,7 @@ abstract base class ScopeElementBase<
   //
 
   @override
-  Stream<AsyncScopeInitState> initAsync() => initDependencies().map(
+  Stream<AsyncScopeInitState> initScope() => initDependencies().map(
         (state) {
           switch (state) {
             case ScopeProgress(:final progress):
@@ -227,7 +227,7 @@ abstract base class ScopeElementBase<
   }
 
   @override
-  Future<void> disposeAsync() async {
+  Future<void> disposeScope() async {
     AsyncError? failure;
 
     // The state releases what it owns first, the dependencies after it -- and
@@ -235,7 +235,7 @@ abstract base class ScopeElementBase<
     // to let go of its own is still a state whose dependencies are holding
     // theirs, and this is the only place left to give those back.
     try {
-      await super.disposeAsync();
+      await super.disposeScope();
       // ignore: avoid_catching_errors
     } on Object catch (error, stackTrace) {
       failure = AsyncError(error, stackTrace);
@@ -293,11 +293,11 @@ abstract base class ScopeCoreState<
 
   /// Initializes the scope asynchronously.
   @override
-  FutureOr<void> initAsync() {}
+  FutureOr<void> initStateAsync() {}
 
   /// Disposes the scope asynchronously.
   @override
-  FutureOr<void> disposeAsync() {}
+  FutureOr<void> disposeStateAsync() {}
 
   @override
   Widget build(BuildContext context);

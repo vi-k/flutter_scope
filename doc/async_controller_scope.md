@@ -9,7 +9,7 @@ has to be *shown*.
 
 ```dart
 AsyncControllerScope<PlayerController>(
-  create: (context) => PlayerController(api: ScopeModel.of<Api>(context, listen: false)),
+  createController: (context) => PlayerController(api: ScopeModel.of<Api>(context, listen: false)),
   progressBuilder: (context) => const SizedBox.shrink(),
   errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
   builder: (context, controller) => const PlayerView(),
@@ -128,7 +128,7 @@ teardown is still waiting for.
 
 A controller that hangs cannot hold anything hostage: the wait for a cancelled
 initialization is bounded by `initCancellationTimeout` and the wait for
-`dispose()` by `disposeAsyncTimeout` — see the `debug` topic.
+`dispose()` by `disposeScopeTimeout` — see the `debug` topic.
 
 ## Reading the controller from the subtree
 

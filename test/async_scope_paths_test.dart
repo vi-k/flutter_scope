@@ -25,8 +25,8 @@ void main() {
                     AsyncScope(
                       key: const ValueKey('holder'),
                       scopeKey: 'k',
-                      init: (context) => Stream.value(AsyncScopeReady()),
-                      dispose: () => gate.future,
+                      initScope: (context) => Stream.value(AsyncScopeReady()),
+                      disposeScope: () => gate.future,
                       progressBuilder: (context, progress) =>
                           const Text('holder: init'),
                       errorBuilder: (context, error, stackTrace, progress) =>
@@ -37,8 +37,8 @@ void main() {
                     AsyncScope(
                       key: const ValueKey('successor'),
                       scopeKey: 'k',
-                      init: (context) => Stream.value(AsyncScopeReady()),
-                      dispose: () {},
+                      initScope: (context) => Stream.value(AsyncScopeReady()),
+                      disposeScope: () {},
                       waitingBuilder: (context) => const Text('waiting'),
                       progressBuilder: (context, progress) =>
                           const Text('initializing'),
@@ -89,8 +89,8 @@ void main() {
                 AsyncScope(
                   key: const ValueKey('holder'),
                   scopeKey: 'k',
-                  init: (context) => Stream.value(AsyncScopeReady()),
-                  dispose: () => gate.future,
+                  initScope: (context) => Stream.value(AsyncScopeReady()),
+                  disposeScope: () => gate.future,
                   progressBuilder: (context, progress) =>
                       const Text('holder: init'),
                   errorBuilder: (context, error, stackTrace, progress) =>
@@ -113,8 +113,8 @@ void main() {
                 AsyncScope(
                   key: const ValueKey('successor'),
                   scopeKey: 'k',
-                  init: (context) => Stream.value(AsyncScopeReady()),
-                  dispose: () {},
+                  initScope: (context) => Stream.value(AsyncScopeReady()),
+                  disposeScope: () {},
                   // No waitingBuilder: `buildOnWaiting()` answers null and the
                   // initializing branch is built with a null progress instead.
                   progressBuilder: (context, progress) =>
@@ -235,7 +235,7 @@ final class _PausedScopeElement
   Duration? get pauseAfterInitialization => widget.pause;
 
   @override
-  Stream<AsyncScopeInitState> initAsync() async* {
+  Stream<AsyncScopeInitState> initScope() async* {
     yield AsyncScopeProgress('almost');
     yield AsyncScopeReady();
   }

@@ -1,6 +1,6 @@
 # scopo
 
-> Перевод `README.md` (blob `afaa0ef4b2a6f967ab9c6ecca472a4a3386f2dcf`).
+> Перевод `README.md` (blob `f2c18304cb4ebec94d934a5b3a4c9834e91db783`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 [![pub version](https://img.shields.io/pub/v/scopo)](https://pub.dev/packages/scopo)
@@ -340,13 +340,13 @@ class ConnectionGate extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => AsyncScope(
-        init: (context) async* {
+        initScope: (context) async* {
           yield AsyncScopeProgress('connecting');
           await connection.open();
 
           yield AsyncScopeReady();
         },
-        dispose: () => connection.close(),
+        disposeScope: () => connection.close(),
         progressBuilder: (context, progress) => Text('$progress'),
         errorBuilder: (context, error, stackTrace, progress) => Text('$error'),
         builder: (context) => const HomeScreen(),
@@ -358,8 +358,8 @@ class ConnectionGate extends StatelessWidget {
 
 ### AsyncDataScope
 
-`AsyncScope` плюс одно значение: данные, полученные в `init`, передаются в
-`builder` и в `dispose`. Потомки читают их через
+`AsyncScope` плюс одно значение: данные, полученные в `initData`, передаются в
+`builder` и в `disposeData`. Потомки читают их через
 `AsyncDataScope.of<Database>(context, listen: false).data`.
 
 ```dart
@@ -368,12 +368,12 @@ class DatabaseGate extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => AsyncDataScope<Database>(
-        init: (context) async* {
+        initData: (context) async* {
           yield AsyncDataScopeProgress('opening the database');
 
           yield AsyncDataScopeReady(await Database.open());
         },
-        dispose: (database) => database.close(),
+        disposeData: (database) => database.close(),
         progressBuilder: (context, progress) => Text('$progress'),
         errorBuilder: (context, error, stackTrace, progress) => Text('$error'),
         builder: (context, database) => DatabaseView(database: database),
@@ -440,15 +440,16 @@ final class PlayerController extends ScopeController {
 }
 ```
 
-`AsyncControllerScope<C>` — то же самое с колбэком `create` вместо наследования.
+`AsyncControllerScope<C>` — то же самое с колбэком `createController` вместо
+наследования.
 
 **Подробнее:** тема [AsyncControllerScope](https://github.com/vi-k/scopo/blob/main/doc/async_controller_scope.md).
 
 ### LiteScope
 
 `Scope` без контейнера зависимостей: состояние создаётся без асинхронной фазы
-зависимостей и всё равно получает полный жизненный цикл скоупа — `initAsync`,
-`disposeAsync`, `notifyDependents`, `close`, `scopeKey` и ожидание дочерних
+зависимостей и всё равно получает полный жизненный цикл скоупа — `initStateAsync`,
+`disposeStateAsync`, `notifyDependents`, `close`, `scopeKey` и ожидание дочерних
 скоупов. Хорошо подходит для состояния экрана, владеющего объектами, которые
 надо освобождать.
 
@@ -474,7 +475,7 @@ final class ScreenScopeState
 
   /// Его дожидаются до того, как скоуп уйдёт с дерева.
   @override
-  Future<void> disposeAsync() async => controller.dispose();
+  Future<void> disposeStateAsync() async => controller.dispose();
 
   @override
   Widget build(BuildContext context) =>

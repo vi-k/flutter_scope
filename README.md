@@ -331,13 +331,13 @@ class ConnectionGate extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => AsyncScope(
-        init: (context) async* {
+        initScope: (context) async* {
           yield AsyncScopeProgress('connecting');
           await connection.open();
 
           yield AsyncScopeReady();
         },
-        dispose: () => connection.close(),
+        disposeScope: () => connection.close(),
         progressBuilder: (context, progress) => Text('$progress'),
         errorBuilder: (context, error, stackTrace, progress) => Text('$error'),
         builder: (context) => const HomeScreen(),
@@ -349,8 +349,8 @@ class ConnectionGate extends StatelessWidget {
 
 ### AsyncDataScope
 
-`AsyncScope` plus one value: the data produced by `init` is passed to `builder`
-and to `dispose`. Descendants read it with
+`AsyncScope` plus one value: the data produced by `initData` is passed to
+`builder` and to `disposeData`. Descendants read it with
 `AsyncDataScope.of<Database>(context, listen: false).data`.
 
 ```dart
@@ -359,12 +359,12 @@ class DatabaseGate extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => AsyncDataScope<Database>(
-        init: (context) async* {
+        initData: (context) async* {
           yield AsyncDataScopeProgress('opening the database');
 
           yield AsyncDataScopeReady(await Database.open());
         },
-        dispose: (database) => database.close(),
+        disposeData: (database) => database.close(),
         progressBuilder: (context, progress) => Text('$progress'),
         errorBuilder: (context, error, stackTrace, progress) => Text('$error'),
         builder: (context, database) => DatabaseView(database: database),
@@ -431,16 +431,16 @@ final class PlayerController extends ScopeController {
 }
 ```
 
-`AsyncControllerScope<C>` is the same thing with a `create` callback instead of
-a subclass.
+`AsyncControllerScope<C>` is the same thing with a `createController` callback
+instead of a subclass.
 
 **In depth:** the topic [AsyncControllerScope](https://github.com/vi-k/scopo/blob/main/doc/async_controller_scope.md).
 
 ### LiteScope
 
 `Scope` without the dependency container: the state is created without an async
-dependency phase, and still gets the full scope lifecycle — `initAsync`,
-`disposeAsync`, `notifyDependents`, `close`, `scopeKey`, and waiting for child
+dependency phase, and still gets the full scope lifecycle — `initStateAsync`,
+`disposeStateAsync`, `notifyDependents`, `close`, `scopeKey`, and waiting for child
 scopes. A good fit for per-screen state that owns disposable objects.
 
 ```dart
@@ -465,7 +465,7 @@ final class ScreenScopeState
 
   /// Awaited before the scope leaves the tree.
   @override
-  Future<void> disposeAsync() async => controller.dispose();
+  Future<void> disposeStateAsync() async => controller.dispose();
 
   @override
   Widget build(BuildContext context) =>

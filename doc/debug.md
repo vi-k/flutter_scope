@@ -157,8 +157,8 @@ defaults live in `ScopeConfig`:
   `scopeKey` to be released by the previous owner;
 - `ScopeConfig.defaultInitCancellationTimeout` — how long a teardown waits for
   the initialization to be cancelled;
-- `ScopeConfig.defaultDisposeAsyncTimeout` — how long a teardown waits for
-  `disposeAsync`, the scope's own release;
+- `ScopeConfig.defaultDisposeScopeTimeout` — how long a teardown waits for
+  `disposeScope`, the scope's own release;
 - `ScopeConfig.defaultWaitForChildrenTimeout` — how long a scope waits for its
   child scopes to be disposed of before disposing of itself.
 
@@ -181,9 +181,9 @@ the user sees, so a widget test drives it with `pump(duration)` like any other
 animation. The scope puts it out when it is taken down mid-pause.
 
 Every scope can override all four defaults for itself with the
-`scopeKeyTimeout`, `initCancellationTimeout`, `disposeAsyncTimeout` and
+`scopeKeyTimeout`, `initCancellationTimeout`, `disposeScopeTimeout` and
 `waitForChildrenTimeout` parameters, and observe an expiry through the
-`onScopeKeyTimeout`, `onInitCancellationTimeout`, `onDisposeAsyncTimeout` and
+`onScopeKeyTimeout`, `onInitCancellationTimeout`, `onDisposeScopeTimeout` and
 `onWaitForChildrenTimeout` callbacks. What a scope cannot do for itself is
 remove the limit: `null` there means "take the default", not "wait as long as it
 takes". Removing a limit is what the `ScopeConfig` values above are for, and it
