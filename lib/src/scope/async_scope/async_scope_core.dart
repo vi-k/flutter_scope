@@ -194,7 +194,7 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
   /// everything it was holding -- its place with the parent, its `scopeKey`,
   /// its model, and the widget it reads every parameter from. Code reached on
   /// that path has to know it is on its own.
-  bool _disposalIsOver = false;
+  bool _disposalFinished = false;
 
   /// The [pauseAfterInitialization] delay, while it is running.
   ///
@@ -513,7 +513,7 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
     });
 
     _asyncScopeParentEntry = (parentScope ?? coordinator)?._registerChild(
-      widget.toStringShort(showHashCode: true),
+      reportName,
     );
   }
 
@@ -564,9 +564,7 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
         // the key, and every later scope on it would wait for an entry nobody
         // completes.
         final coordinator = AsyncScopeCoordinator._elementOf(this);
-        final entry = AccessEntry(
-          widget.toStringShort(showHashCode: true),
-        );
+        final entry = AccessEntry(reportName);
         _asyncScopeEntry = entry;
         _acquiredCoordinator = coordinator;
         _log.d(() => 'wait for access to [$scopeKey]');
@@ -928,7 +926,7 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
       _model.dispose();
 
       _widget = null;
-      _disposalIsOver = true;
+      _disposalFinished = true;
     }
 
     if (failure case final failure?) {

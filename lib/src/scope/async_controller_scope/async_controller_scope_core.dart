@@ -144,7 +144,7 @@ abstract base class AsyncControllerScopeElementBase<
       // raised a `_TypeError` where a release belonged. The wait goes on
       // unbounded, which is what an abandoned release deserves: it can hold
       // nothing up.
-      if (_disposalIsOver) {
+      if (_disposalFinished) {
         await released;
 
         return;

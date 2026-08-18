@@ -38,14 +38,14 @@ final class KeyedAccessQueues {
 
 /// A place in the queue of one key.
 final class AccessEntry {
-  final String _debugName;
+  final String _reportName;
   _AccessQueue? _queue;
   final _completer = Completer<void>();
   final _cancelCompleter = Completer<void>();
   bool _isWaiting = false;
 
-  /// Creates an entry named [_debugName] in the log and in timeout reports.
-  AccessEntry(this._debugName);
+  /// Creates an entry named [_reportName] in the log and in timeout reports.
+  AccessEntry(this._reportName);
 
   /// Whether the entry has been let through.
   bool get isCompleted => _completer.isCompleted;
@@ -77,7 +77,7 @@ final class AccessEntry {
   }
 
   @override
-  String toString() => '$_debugName'
+  String toString() => '$_reportName'
       ' ${isCompleted ? 'completed' : //
           isWaiting ? 'waiting' : //
               isCancelled ? 'cancelled' : 'not completed'}';
@@ -123,7 +123,7 @@ final class _AccessQueue {
     } on TimeoutException catch (_, stackTrace) {
       onTimeout?.call(
         TimeoutException(
-          "${entry._debugName} couldn't wait to get access to [$key]:"
+          "${entry._reportName} couldn't wait to get access to [$key]:"
           ' $previous',
           timeout,
         ),
@@ -166,8 +166,8 @@ final class ChildRegistry {
   int get childrenCount => _children.length;
 
   /// Registers a child and returns the entry it completes when it is done.
-  ChildEntry registerChild(String debugName) {
-    final entry = ChildEntry._(debugName, this);
+  ChildEntry registerChild(String reportName) {
+    final entry = ChildEntry._(reportName, this);
     _children.add(entry);
 
     return entry;
@@ -232,11 +232,11 @@ final class ChildRegistry {
 
 /// A child registered in a [ChildRegistry].
 final class ChildEntry {
-  final String _debugName;
+  final String _reportName;
   ChildRegistry? _registry;
   final _completer = Completer<void>();
 
-  ChildEntry._(this._debugName, this._registry);
+  ChildEntry._(this._reportName, this._registry);
 
   /// Leaves the registry, completing the wait this entry was holding up.
   ///
@@ -258,7 +258,7 @@ final class ChildEntry {
   }
 
   @override
-  String toString() => '$_debugName'
+  String toString() => '$_reportName'
       ' ${_completer.isCompleted ? 'completed' : 'not completed'}';
 }
 

@@ -93,6 +93,6 @@ mixin AsyncScopeParent on Diagnosticable {
     );
   }
 
-  ChildEntry _registerChild(String debugName) =>
-      _childRegistry.registerChild(debugName);
+  ChildEntry _registerChild(String reportName) =>
+      _childRegistry.registerChild(reportName);
 }

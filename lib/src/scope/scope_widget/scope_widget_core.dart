@@ -166,7 +166,7 @@ abstract base class ScopeWidgetElementBase<W extends ScopeWidgetCore<W, E>,
   /// Taken from [_notifyPending] at the top of [performRebuild] and put down
   /// at the bottom of it, so it describes one rebuild and cannot be changed
   /// from inside that rebuild.
-  bool _isNotifyOnlyRebuild = false;
+  bool _rebuildIsNotifyOnly = false;
 
   /// Whether [performRebuild] is running on this element right now.
   ///
@@ -175,7 +175,7 @@ abstract base class ScopeWidgetElementBase<W extends ScopeWidgetCore<W, E>,
   /// is the same in release as in debug.
   bool _isRebuilding = false;
 
-  /// Whether the element must rebuild anyway, ignoring [_isNotifyOnlyRebuild].
+  /// Whether the element must rebuild anyway, ignoring [_rebuildIsNotifyOnly].
   bool _forceRebuild = true;
 
   /// How far the one-shot [init] hook got.
@@ -456,7 +456,7 @@ abstract base class ScopeWidgetElementBase<W extends ScopeWidgetCore<W, E>,
   @override
   void performRebuild() {
     // Taken once, here, and put down at the end: everything this rebuild does
-    // reads `_isNotifyOnlyRebuild`, and `notifyDependents()` writes only to
+    // reads `_rebuildIsNotifyOnly`, and `notifyDependents()` writes only to
     // `_notifyPending`. Reading the same field for both let a notification
     // made from inside `build()` turn the rebuild that was already running
     // into a notify-only one -- `updateChild` then kept a child from an
@@ -473,7 +473,7 @@ abstract base class ScopeWidgetElementBase<W extends ScopeWidgetCore<W, E>,
       if (_notifyPending) {
         _notifyPending = false;
         notifyClients(widget);
-        _isNotifyOnlyRebuild = !autoSelfDependence && !_forceRebuild;
+        _rebuildIsNotifyOnly = !autoSelfDependence && !_forceRebuild;
       }
 
       super.performRebuild();
@@ -481,13 +481,13 @@ abstract base class ScopeWidgetElementBase<W extends ScopeWidgetCore<W, E>,
       endScopeRebuild();
       _isRebuilding = false;
       _forceRebuild = false;
-      _isNotifyOnlyRebuild = false;
+      _rebuildIsNotifyOnly = false;
     }
   }
 
   @override
   Element? updateChild(Element? child, Widget? newWidget, Object? newSlot) =>
-      _isNotifyOnlyRebuild
+      _rebuildIsNotifyOnly
           ? child
           : super.updateChild(child, newWidget, newSlot);
 
@@ -540,7 +540,7 @@ abstract base class ScopeWidgetElementBase<W extends ScopeWidgetCore<W, E>,
     // returned was thrown away unlooked at. For a scope notified once a frame
     // that is the whole widget graph of its subtree, built and dropped, once
     // a frame.
-    if (_isNotifyOnlyRebuild) {
+    if (_rebuildIsNotifyOnly) {
       if (_builtChild case final builtChild?) {
         return builtChild;
       }

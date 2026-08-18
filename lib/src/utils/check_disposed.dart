@@ -6,9 +6,9 @@
 /// Usage:
 ///
 /// ```dart
-/// throwWhenDisposed(object, object.isDisposed, 'dispose');
+/// throwIfDisposed(object, object.isDisposed, 'dispose');
 /// ```
-void throwWhenDisposed(
+void throwIfDisposed(
   Object object,
   bool isDisposed,
   String disposeMethod,
@@ -25,7 +25,7 @@ void throwWhenDisposed(
 
 /// Assert that the [object] has not yet been disposed.
 ///
-/// See [throwWhenDisposed] for details.
+/// See [throwIfDisposed] for details.
 ///
 /// Usage:
 ///
@@ -35,10 +35,10 @@ void throwWhenDisposed(
 bool debugAssertNotDisposed(
   Object object,
   bool isDisposed,
-  String method,
+  String disposeMethod,
 ) {
   assert(() {
-    throwWhenDisposed(object, isDisposed, method);
+    throwIfDisposed(object, isDisposed, disposeMethod);
     return true;
   }());
 

@@ -140,7 +140,7 @@ final class CompositeListenableSubscription {
   ///
   /// Throws an exception if this composite was disposed
   void add(ListenableSubscription subscription) {
-    throwWhenDisposed(this, _isDisposed, 'cancel');
+    throwIfDisposed(this, _isDisposed, 'cancel');
     _subscriptions.add(subscription);
   }
 
