@@ -122,22 +122,29 @@ class HomeAppBar extends AppBar {
       : super(
           title: const Text('scopo demo'),
           actions: [
-            IconButton(
-              tooltip: 'Long tap for the system theme',
-              onPressed: () {
-                ThemeManager.of(context, listen: false).toggleBrightness();
-              },
+            // The long press hangs on a `GestureDetector` rather than on
+            // `IconButton.onLongPress`: that parameter arrived in Flutter 3.29
+            // and the package floor is 3.27. Nothing competes for the gesture
+            // — an `IconButton` with no long press of its own never puts a
+            // long-press recognizer into the arena.
+            GestureDetector(
               onLongPress: () {
                 ThemeManager.of(context, listen: false).resetBrightness();
               },
-              icon: Icon(
-                switch (ThemeManager.select(
-                  context,
-                  (m) => m.brightness,
-                )) {
-                  Brightness.dark => Icons.light_mode,
-                  Brightness.light => Icons.dark_mode,
+              child: IconButton(
+                tooltip: 'Long tap for the system theme',
+                onPressed: () {
+                  ThemeManager.of(context, listen: false).toggleBrightness();
                 },
+                icon: Icon(
+                  switch (ThemeManager.select(
+                    context,
+                    (m) => m.brightness,
+                  )) {
+                    Brightness.dark => Icons.light_mode,
+                    Brightness.light => Icons.dark_mode,
+                  },
+                ),
               ),
             ),
           ],

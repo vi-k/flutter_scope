@@ -5,10 +5,10 @@ packages:
     dependency: "direct main"
     description:
       name: ansi_escape_codes
-      sha256: "4782c8108bba9ef04653625facb38d171dceebc187a298e663428952b63f5405"
+      sha256: "99dee3a935e8a489224045387a8691449f2cdc39c7917a945c7220e2197998c6"
       url: "https://pub.dev"
     source: hosted
-    version: "3.1.2"
+    version: "4.0.1"
   async:
     dependency: transitive
     description:

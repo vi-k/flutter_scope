@@ -17,7 +17,7 @@ final class HomeDependencies
   HomeDependencies();
 
   @override
-  ScopeDependency buildDependencies(_) => sequential('', [
+  ScopeDependency buildDependencies(void context) => sequential('', [
         dep('httpClient', (dep) async {
           httpClient = FakeUserHttpClient();
           await httpClient.init();

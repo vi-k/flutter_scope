@@ -141,7 +141,7 @@ final class CounterScope
   }
 
   @override
-  Widget buildOnReady(BuildContext context, CounterModel value) {
+  Widget buildOnReady(BuildContext context, CounterModel data) {
     Widget body = Center(
       child: BlinkingBox(
         blinkingColor:
