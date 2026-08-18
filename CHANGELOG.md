@@ -141,6 +141,16 @@
   again — twice per rebuild, to every listener above the node — for a page that
   had not changed. While `child` and `isRoot` are the same objects, nothing is
   handed over anew.
+* `logger_builder` is `^0.6.1`, up from `^0.5.0`. Nothing in this package had to
+  change for it — the surface it uses is the same — and what arrives with it is
+  worth knowing: a level logger can no longer be registered on the `all`/`off`
+  thresholds, a sublogger holds its parent strongly (so a logger nobody kept no
+  longer stops passing `level`, `publisher` and `transformer` down), a level
+  registered on a sublogger takes the parent's publisher for that level rather
+  than its common one, and a synchronous publisher that logs into the level it
+  publishes for is caught instead of overflowing the stack. The `meta` constraint
+  it relaxed to `^1.15.0` is also what used to hold this package's Flutter floor
+  at 3.29.0; the floor stays there for now, and is a decision of its own.
 * The bookkeeping that decides which build a dependent's selectors belong to asks
   for a frame when nothing else will bring one. The reset runs in a post-frame
   callback, and a build is not always inside a frame — `runApp` builds the first
