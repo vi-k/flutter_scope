@@ -150,7 +150,21 @@
   than its common one, and a synchronous publisher that logs into the level it
   publishes for is caught instead of overflowing the stack. The `meta` constraint
   it relaxed to `^1.15.0` is also what used to hold this package's Flutter floor
-  at 3.29.0; the floor stays there for now, and is a decision of its own.
+  at 3.29.0; on the strength of it the floor came back down, which is the entry
+  below.
+* [breaking changes] The Flutter floor is `>=3.27.0`, down from the `>=3.29.0`
+  raised earlier in this same release. Nothing here ever needed 3.29 — the floor
+  went up because `logger_builder` asked for `meta ^1.16.0` while the
+  `flutter_test` of 3.27 pins `meta` to 1.15.0 — and 0.6.1 gave that constraint
+  up. `ansi_escape_codes` sat in the same trap and is now `^4.0.1`, which is
+  where it let `meta` back down; `fake_async` and `leak_tracker_flutter_testing`
+  are asked for a patch lower, `^1.3.1` and `^3.0.8`, the versions 3.27 pins.
+  All three are dev dependencies, so nothing a consumer resolves changed except
+  the floor itself. `sdk: ^3.6.0` is untouched and now reaches something real:
+  3.27.0 carries exactly Dart 3.6.0, so the language version the formatter reads
+  is the floor's own and not one above it. Tests, formatter, dartdoc, publish dry
+  run, translations and both example suites are run on 3.27.0, and CI pins the
+  same number.
 * The bookkeeping that decides which build a dependent's selectors belong to asks
   for a frame when nothing else will bring one. The reset runs in a post-frame
   callback, and a build is not always inside a frame — `runApp` builds the first
@@ -758,7 +772,10 @@
   who took the constraint at its word. The suite is now run on 3.29.0 itself
   before a release. The Dart constraint stays `^3.6.0` — the code needs nothing
   newer, and raising it would switch `dart format` to the tall style and
-  reformat the package for no gain.
+  reformat the package for no gain. Superseded later in this same release: once
+  `logger_builder` 0.6.1 and `ansi_escape_codes` 4.0.1 let `meta` back down to
+  `^1.15.0`, nothing external held 3.29 any more and the floor returned to
+  `>=3.27.0`.
 * `meta` is no longer a dependency: nothing under `lib/` imports it. A single
   test utility does, so it is a dev dependency now.
 * [breaking changes] An expired `waitForChildren` now drops the children it
@@ -964,9 +981,11 @@
 * Add `repository`, `issue_tracker` and `topics` to pubspec.
 * [breaking changes] Tighten the SDK constraints to Flutter `>=3.27.0` (was
   `>=1.17.0`) and Dart `^3.6.0` (was `^3.2.0`) — the floor the package
-  actually requires, since it calls `Color.withValues`. Superseded later in this
-  same release: the floor of 0.10.0 is Flutter `>=3.29.0`, and the entry above
-  says why `>=3.27.0` never resolved.
+  actually requires, since it calls `Color.withValues`. This is where 0.10.0
+  ends up after a detour: the floor went to `>=3.29.0` in the middle of the
+  release because `>=3.27.0` would not resolve, and came back once the
+  dependency that stopped it gave up the constraint. The two entries above say
+  why it moved and what moving it back cost.
 * Switch analysis to flutter_lints in the package and demo.
 * Rewrite README; sync the pub.dev example; real `debug`/`Scope` doc pages.
 
