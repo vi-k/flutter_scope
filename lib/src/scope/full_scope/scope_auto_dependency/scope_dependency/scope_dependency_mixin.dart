@@ -10,7 +10,7 @@ mixin ScopeDependencyMixin implements ScopeDependency {
   ScopeDependencyState get state => _state;
   ScopeDependencyState _state = const ScopeDependencyInitial();
 
-  /// Whether [runDispose] has already run to its end.
+  /// Whether [dispose] has already run to its end.
   ///
   /// The state used to answer this on its own, because a disposal that was
   /// over always said [ScopeDependencyDisposed]. It cannot any more: a
@@ -44,9 +44,15 @@ mixin ScopeDependencyMixin implements ScopeDependency {
     }
   }
 
+  /// The initialization step itself, run and accounted for by [init].
+  Stream<String> _runInit();
+
+  /// The release step itself, run and accounted for by [dispose].
+  Stream<String> _runDispose();
+
   /// Automates the initialization process.
   ///
-  /// Runs [init], handles the errors and sets the matching state.
+  /// Runs [_runInit], handles the errors and sets the matching state.
   ///
   /// Initialization succeeds not when there are no errors, but only when the
   /// generator IS NOT CANCELLED. That is, the initiator may leave the stream
@@ -54,7 +60,7 @@ mixin ScopeDependencyMixin implements ScopeDependency {
   /// [ScopeDependencyInitialized]; or it may end the stream without any error
   /// at all, and the initialization then ends in [ScopeDependencyCancelled].
   ///
-  /// [init] may report several errors, because a group of dependencies rather
+  /// [_runInit] may report several errors, because a group of dependencies rather
   /// than a single one can hide behind it. Errors that were already handled,
   /// that is the errors of the child dependencies, are ignored. An error of
   /// this dependency leads to [ScopeDependencyFailed] and is wrapped into a
@@ -62,12 +68,12 @@ mixin ScopeDependencyMixin implements ScopeDependency {
   /// such error is kept in the state, on the assumption that one dependency
   /// has no reason to report several.
   @override
-  Stream<String> runInit() async* {
+  Stream<String> init() async* {
     assert(_state is ScopeDependencyInitial);
 
     try {
       yield* runStreamGuarded(
-        init,
+        _runInit,
         _handleInitializationPostCancelError,
         debugName: name,
       ).handleError(_handleInitializationError);
@@ -97,10 +103,10 @@ mixin ScopeDependencyMixin implements ScopeDependency {
   /// (`_ScopeDependencyImpl.disposalRequired`). The groups now behave the same
   /// way.
   @override
-  Stream<String> runDispose() async* {
+  Stream<String> dispose() async* {
     try {
       yield* runStreamGuarded(
-        dispose,
+        _runDispose,
         _handleDisposalPostCancelError,
         debugName: name,
       ).handleError(_handleDisposalError);

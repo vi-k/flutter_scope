@@ -1,6 +1,6 @@
 # ScopeNotifier
 
-> Перевод `doc/scope_notifier.md` (blob `0aaf65df738ca5e42f36f4860f7e2aada57c5efb`).
+> Перевод `doc/scope_notifier.md` (blob `ea9122a4090ff7c293128e7470d1db1aa0a8f914`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 `ScopeModel` для `Listenable`. Всё из той темы остаётся в силе — `create` и
@@ -117,11 +117,12 @@ base class PlayerState extends ScopeStateNotifier<Player> {
   PlayerState(super.initialState);
 
   @override
-  bool equals(Player previous, Player current) => previous.id == current.id;
+  bool shouldNotify(Player previous, Player current) =>
+      previous.id != current.id;
 }
 ```
 
-`equals` по умолчанию возвращает `false` — уведомляет каждый `update`. Это
+`shouldNotify` по умолчанию возвращает `true` — уведомляет каждый `update`. Это
 безопасное поведение для изменяемого объекта, который переприсваивают;
 переопределяйте его, когда состояние — значимый тип и повторные одинаковые
 обновления обычны.
@@ -141,8 +142,8 @@ base class PlayerState extends ScopeStateNotifier<Player> {
 Переданное состояние — это состояние, которое можно прочитать, поэтому
 обновление после `setError` означает восстановление, и ничего другого означать
 не может. Слушателям об этом сообщают, даже если значение — то же, что было до
-отказа: `equals` сравнивает два значения, а здесь изменение между состоянием,
-которое бросает, и состоянием, которое не бросает.
+отказа: `shouldNotify` взвешивает одно значение против другого, а здесь
+изменение между состоянием, которое бросает, и состоянием, которое не бросает.
 
 ```dart
 model

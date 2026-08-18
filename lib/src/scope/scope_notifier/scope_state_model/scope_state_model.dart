@@ -20,19 +20,21 @@ base class ScopeStateNotifier<S extends Object> extends ChangeNotifier
 
   /// Replaces the state and notifies the listeners.
   ///
-  /// Notifies only when [equals] says the value has changed.
+  /// Notifies only when [shouldNotify] says the change is worth hearing about.
   void update(S value) {
-    if (!equals(_state, value)) {
+    if (shouldNotify(_state, value)) {
       _state = value;
       notifyListeners();
     }
   }
 
-  /// Whether two states are the same for the purpose of notifying.
+  /// Whether a change from [previous] to [current] is worth notifying about.
   ///
-  /// Returns `false` by default, so every [update] notifies. Override it
-  /// when the state is a value type and equal updates are common.
-  bool equals(S previous, S current) => false;
+  /// Returns `true` by default, so every [update] notifies. Override it when
+  /// the state is a value type and equal updates are common — and mind the
+  /// sense: this answers the opposite of the `equals` it replaced, which said
+  /// whether the two were the same.
+  bool shouldNotify(S previous, S current) => true;
 
   /// A view of this notifier that can be read and listened to, not set.
   ScopeStateModelView<S> asUnmodifiable() => ScopeStateModelView(this);

@@ -54,11 +54,21 @@ abstract base class AsyncControllerScopeCore<
 
 /// {@category AsyncControllerScope}
 abstract base class AsyncControllerScopeElementBase<
-    W extends AsyncControllerScopeCore<W, E, C>,
-    E extends AsyncControllerScopeElementBase<W, E, C>,
-    C extends ScopeController> extends AsyncDataScopeElementBase<W, E, C> {
+        W extends AsyncControllerScopeCore<W, E, C>,
+        E extends AsyncControllerScopeElementBase<W, E, C>,
+        C extends ScopeController> extends AsyncDataScopeElementBase<W, E, C>
+    implements AsyncControllerScopeContext<W, C> {
   /// Creates the element of a scope owning a controller.
   AsyncControllerScopeElementBase(super.widget);
+
+  @override
+  C get controller => data;
+
+  @override
+  C? get controllerOrNull => dataOrNull;
+
+  @override
+  bool get hasController => hasData;
 
   /// Kept from the moment it is created, so the synchronous half of the
   /// teardown can reach it even when the initialization never finished.

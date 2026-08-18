@@ -72,11 +72,12 @@ base class ScopeStateWithErrorNotifier<S extends Object>
 
     _error = null;
 
-    // [equals] compares two values, and this change is not one between values:
-    // it is between a state that throws and one that does not. Recovering to
-    // the value from before the failure is still something every listener has
-    // to hear about, so the comparison does not get to silence it.
-    if (equals(state, value)) {
+    // [shouldNotify] weighs one value against another, and this change is not
+    // one between values: it is between a state that throws and one that does
+    // not. Recovering to the value from before the failure is still something
+    // every listener has to hear about, so the answer does not get to silence
+    // it.
+    if (!shouldNotify(state, value)) {
       notifyListeners();
     } else {
       super.update(value);

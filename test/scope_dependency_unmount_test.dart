@@ -45,7 +45,7 @@ final class _Deps extends ScopeAutoDependencies<_Deps, void> {
       ]);
 }
 
-Future<void> _runInit(_Deps deps) async {
+Future<void> _init(_Deps deps) async {
   try {
     await deps.init(null).drain<void>();
   } on Object {
@@ -84,7 +84,7 @@ void main() {
       final log = <String>[];
       final deps = _Deps(log, failSecond: false);
 
-      await _runInit(deps);
+      await _init(deps);
       deps.onUnmount();
       await deps.dispose();
 
@@ -109,7 +109,7 @@ void main() {
       // and its own `onUnmount()` has nothing to call: the container is torn
       // down from inside the generator instead, by `autoDisposeOnError`. That
       // path is the one the promise has to hold on.
-      await _runInit(deps);
+      await _init(deps);
 
       expect(
         log,
@@ -127,7 +127,7 @@ void main() {
       final log = <String>[];
       final deps = _Deps(log, failSecond: false);
 
-      await _runInit(deps);
+      await _init(deps);
 
       // Three passes at the same container. One is what a scope leaving the
       // tree does through its element; the others are what an owner holding
@@ -152,7 +152,7 @@ void main() {
       final log = <String>[];
       final deps = _UnmountOnly(log);
 
-      await _runInit2(deps);
+      await _init2(deps);
 
       deps.onUnmount();
       await deps.dispose();
@@ -183,6 +183,6 @@ final class _UnmountOnly extends ScopeAutoDependencies<_UnmountOnly, void> {
       });
 }
 
-Future<void> _runInit2(_UnmountOnly deps) async {
+Future<void> _init2(_UnmountOnly deps) async {
   await deps.init(null).drain<void>();
 }

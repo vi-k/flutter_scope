@@ -200,7 +200,7 @@ final class _Deduplicating extends ScopeStateNotifier<String> {
   _Deduplicating(super.initialState);
 
   @override
-  bool equals(String previous, String current) => previous == current;
+  bool shouldNotify(String previous, String current) => previous != current;
 }
 
 /// The same, on the notifier that can also hold a failure.
@@ -209,5 +209,5 @@ final class _DeduplicatingWithError
   _DeduplicatingWithError(super.initialState);
 
   @override
-  bool equals(String previous, String current) => previous == current;
+  bool shouldNotify(String previous, String current) => previous != current;
 }

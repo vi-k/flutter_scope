@@ -99,9 +99,20 @@ abstract base class AsyncControllerScopeBase<
   Widget? buildOnWaiting(BuildContext context) => null;
 
   /// Built while the controller is initializing.
+  ///
+  /// **No progress argument here, unlike the three other families.** That is
+  /// not an omission: this scope's initialization is `createController()`
+  /// followed by the controller's own `init()`, and neither reports steps —
+  /// the stream behind them yields the ready state and nothing else. The state
+  /// is still [AsyncScopeProgress] while that runs, which is what this branch
+  /// answers; there is simply nothing for it to carry.
   Widget buildOnProgress(BuildContext context);
 
   /// Built when the initialization of the controller failed.
+  ///
+  /// No progress argument either, and for the same reason as
+  /// [buildOnProgress]: there was never a step to report, so there is none to
+  /// report the failure against.
   Widget buildOnError(
     BuildContext context,
     Object error,
@@ -121,12 +132,12 @@ abstract base class AsyncControllerScopeBase<
       _AsyncControllerScopeElement<W, C>(this as W);
 
   /// The nearest scope [W] above [context], or `null`.
-  static AsyncDataScopeContext<W, C>? maybeOf<
+  static AsyncControllerScopeContext<W, C>? maybeOf<
           W extends AsyncControllerScopeBase<W, C>, C extends ScopeController>(
     BuildContext context, {
     required bool listen,
   }) =>
-      ScopeContext.maybeOf<W, AsyncDataScopeContext<W, C>>(
+      ScopeContext.maybeOf<W, AsyncControllerScopeContext<W, C>>(
         context,
         listen: listen,
       );
@@ -134,12 +145,12 @@ abstract base class AsyncControllerScopeBase<
   /// The nearest scope [W] above [context].
   ///
   /// Throws when there is none.
-  static AsyncDataScopeContext<W, C>
+  static AsyncControllerScopeContext<W, C>
       of<W extends AsyncControllerScopeBase<W, C>, C extends ScopeController>(
     BuildContext context, {
     required bool listen,
   }) =>
-          ScopeContext.of<W, AsyncDataScopeContext<W, C>>(
+          ScopeContext.of<W, AsyncControllerScopeContext<W, C>>(
             context,
             listen: listen,
           );
@@ -148,9 +159,9 @@ abstract base class AsyncControllerScopeBase<
   static V select<W extends AsyncControllerScopeBase<W, C>,
           C extends ScopeController, V extends Object?>(
     BuildContext context,
-    V Function(AsyncDataScopeContext<W, C> context) selector,
+    V Function(AsyncControllerScopeContext<W, C> context) selector,
   ) =>
-      ScopeContext.select<W, AsyncDataScopeContext<W, C>, V>(
+      ScopeContext.select<W, AsyncControllerScopeContext<W, C>, V>(
         context,
         selector,
       );

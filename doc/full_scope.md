@@ -303,7 +303,7 @@ this is what it says afterwards. It is a `ScopeDependencyDisposed`, so
 
 `ScopeDependencyDisposalCancelled` is the one state a scope never produces on its
 own — nothing in the package cancels a teardown walk halfway. It belongs to
-whoever drives one: `runDispose()` is a stream, and a caller who listens to it
+whoever drives one: `dispose()` is a stream, and a caller who listens to it
 and cancels the subscription before it is done leaves the dependencies it had not
 reached still initialized, and the one it stopped on saying `disposal cancelled`.
 Reading it therefore means reading about a teardown of your own.

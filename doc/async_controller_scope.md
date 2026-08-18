@@ -136,13 +136,16 @@ initialization is bounded by `initCancellationTimeout` and the wait for
 final controller = AsyncControllerScope.of<PlayerController>(
   context,
   listen: false,
-).data;
+).controller;
 ```
 
-`of`, `maybeOf` and `select` return an `AsyncDataScopeContext`, exactly as in
-the `AsyncDataScope` topic: `data` throws before the controller is ready,
-`dataOrNull` returns `null`. Widgets under `builder` are below a ready scope
-and can use `data`.
+`of`, `maybeOf` and `select` return an `AsyncControllerScopeContext`:
+`controller` throws before the controller is ready, `controllerOrNull` returns
+`null`, and `hasController` is the question on its own. Widgets under `builder`
+are below a ready scope and can use `controller`. The three answers of
+`AsyncDataScopeContext` — `data`, `dataOrNull`, `hasData` — are inherited and
+still work; they are the same object under the name the value had before this
+family gave it its own.
 
 The subclassable form has the same three as statics, taking the widget type
 first:
@@ -150,7 +153,7 @@ first:
 ```dart
 final position = AsyncControllerScopeBase.select<Player, PlayerController, int>(
   context,
-  (scope) => scope.data.position,
+  (scope) => scope.controller.position,
 );
 ```
 

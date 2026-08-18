@@ -25,7 +25,7 @@ final class _ScopeDependencyImpl with ScopeDependencyMixin {
   bool get disposalRequired => !_isDisposalDone && _helper?.dispose != null;
 
   @override
-  Stream<String> init() async* {
+  Stream<String> _runInit() async* {
     final helper = _helper = ScopeDependencyHandle._(this);
     final result = _init(helper);
     if (result is Future<void>) {
@@ -53,7 +53,7 @@ final class _ScopeDependencyImpl with ScopeDependencyMixin {
   }
 
   @override
-  Stream<String> dispose() async* {
+  Stream<String> _runDispose() async* {
     final disposer = _helper?.dispose;
     if (disposer == null) {
       return;

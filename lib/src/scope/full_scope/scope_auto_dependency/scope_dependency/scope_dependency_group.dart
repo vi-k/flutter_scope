@@ -131,16 +131,16 @@ final class _ScopeDependencySequential extends ScopeDependencyGroup {
   _ScopeDependencySequential(super.name, super._dependencies) : super._();
 
   @override
-  Stream<String> init() async* {
+  Stream<String> _runInit() async* {
     final dependencies = _dependencies //
         .where((d) => d.initializationRequired);
     for (final dependency in dependencies) {
-      yield* dependency.runInit().map(_path);
+      yield* dependency.init().map(_path);
     }
   }
 
   @override
-  Stream<String> dispose() async* {
+  Stream<String> _runDispose() async* {
     final dependencies = _disposalOrder();
     final errors = <AsyncError>[];
 
@@ -148,7 +148,7 @@ final class _ScopeDependencySequential extends ScopeDependencyGroup {
       try {
         // Iterated rather than `yield*`-ed: an error inside a delegated stream
         // goes straight to the listener, where no `catch` of ours can see it.
-        await for (final path in dependency.runDispose()) {
+        await for (final path in dependency.dispose()) {
           yield _path(path);
         }
         // ignore: avoid_catching_errors
@@ -172,16 +172,16 @@ final class _ScopeDependencyConcurrent extends ScopeDependencyGroup {
   _ScopeDependencyConcurrent(super.name, super._dependencies) : super._();
 
   @override
-  Stream<String> init() async* {
+  Stream<String> _runInit() async* {
     yield* _dependencies //
         .where((dep) => dep.initializationRequired)
-        .map((dep) => dep.runInit())
+        .map((dep) => dep.init())
         ._mergeStreams()
         .map(_path);
   }
 
   @override
-  Stream<String> dispose() async* {
+  Stream<String> _runDispose() async* {
     final errors = <AsyncError>[];
 
     // Each arm keeps its own failure to itself, which is the same rule the
@@ -196,14 +196,14 @@ final class _ScopeDependencyConcurrent extends ScopeDependencyGroup {
     // which cancels every arm still running. An arm suspended mid-walk is
     // then resumed only as far as its next `yield`, so a branch stops
     // wherever the cancellation found it and everything below that point
-    // stays held. Nothing comes back for it either: `runDispose` marks the
+    // stays held. Nothing comes back for it either: `dispose` marks the
     // walk done whichever way it ended.
     //
     // The first failure in time is passed upwards once the merged stream is
     // over, as the sequential group passes on the first in walk order.
     yield* _disposalOrder()
         .map(
-          (dep) => dep.runDispose().handleError(
+          (dep) => dep.dispose().handleError(
                 (Object error, StackTrace stackTrace) =>
                     errors.add(AsyncError(error, stackTrace)),
               ),

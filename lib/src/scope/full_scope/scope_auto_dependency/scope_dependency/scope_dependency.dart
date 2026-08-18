@@ -36,10 +36,11 @@ abstract interface class ScopeDependency {
   bool get disposalRequired;
 
   /// Initializes this dependency, yielding the path of each step.
+  ///
+  /// Keeps [state] in step with how it went. The step itself lives in the
+  /// implementation and is not part of this interface: there is one way to
+  /// initialize a dependency, and it is this one.
   Stream<String> init();
-
-  /// Runs [init] and keeps [state] in step with how it went.
-  Stream<String> runInit();
 
   /// Lets go of whatever cannot wait for [dispose].
   ///
@@ -48,10 +49,9 @@ abstract interface class ScopeDependency {
   void onUnmount();
 
   /// Releases this dependency, yielding the path of each step.
+  ///
+  /// Keeps [state] in step with how it went, the same way [init] does.
   Stream<String> dispose();
-
-  /// Runs [dispose] and keeps [state] in step with how it went.
-  Stream<String> runDispose();
 
   /// The name as it appears in a tree dump — `"dep"` or `[group]`.
   String get wrappedName;

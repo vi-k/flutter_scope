@@ -25,7 +25,7 @@ final class _Deps extends ScopeAutoDependencies<_Deps, void> {
       sequential('', [dep('holder', _init)]);
 }
 
-Future<void> _runInit(_Deps deps) async {
+Future<void> _init(_Deps deps) async {
   try {
     await deps.init(null).drain<void>();
   } on Object {
@@ -43,7 +43,7 @@ void main() {
         throw Exception('boom');
       });
 
-      await _runInit(deps);
+      await _init(deps);
       await deps.dispose();
 
       expect(
@@ -64,7 +64,7 @@ void main() {
         throw Exception('boom');
       });
 
-      await _runInit(deps);
+      await _init(deps);
       await deps.dispose();
 
       expect(released, ['holder']);
@@ -76,7 +76,7 @@ void main() {
         throw Exception('boom');
       });
 
-      await _runInit(deps);
+      await _init(deps);
       await deps.dispose();
 
       expect(
@@ -94,7 +94,7 @@ void main() {
         throw Exception('boom');
       });
 
-      await _runInit(deps);
+      await _init(deps);
       await deps.dispose();
       await deps.dispose();
 

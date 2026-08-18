@@ -295,6 +295,49 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
       await settle(tester, until: () => controller.calls.contains('dispose'));
     });
+
+    testWidgets('the context answers about the controller by that name',
+        (tester) async {
+      late _TestController controller;
+      AsyncControllerScopeContext<AsyncControllerScope<_TestController>,
+          _TestController>? seen;
+
+      await tester.pumpWidget(
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: AsyncControllerScope<_TestController>(
+            createController: (context) => controller = _TestController(),
+            progressBuilder: (context) => const Text('initializing'),
+            errorBuilder: (context, error, stackTrace) => const Text('error'),
+            builder: (context, _) => Builder(
+              builder: (context) {
+                seen = AsyncControllerScope.of<_TestController>(
+                  context,
+                  listen: false,
+                );
+
+                return const Text('ready');
+              },
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final context = seen!;
+      expect(context.hasController, isTrue);
+      expect(context.controller, same(controller));
+      expect(context.controllerOrNull, same(controller));
+      expect(
+        context.data,
+        same(controller),
+        reason: 'the inherited three answer the same object, so the old way '
+            'of reading a controller keeps working',
+      );
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await settle(tester, until: () => controller.calls.contains('dispose'));
+    });
   });
 
   group('a controller whose dispose also fails', () {
@@ -376,7 +419,7 @@ final class _Reader extends StatelessWidget {
   Widget build(BuildContext context) {
     final calls = AsyncControllerScope.select<_TestController, String>(
       context,
-      (scope) => scope.data.calls.join(','),
+      (scope) => scope.controller.calls.join(','),
     );
 
     return Text('reader: $calls');

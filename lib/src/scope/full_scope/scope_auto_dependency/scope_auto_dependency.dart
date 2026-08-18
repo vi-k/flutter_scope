@@ -96,7 +96,7 @@ abstract base class ScopeAutoDependencies<T extends ScopeAutoDependencies<T, C>,
 
     try {
       _log.d('initialize…');
-      yield* dependencies.runInit().map((path) {
+      yield* dependencies.init().map((path) {
         final step = progressIterator.nextStep();
         _log.d(() => 'progress: $path ($step)');
         return ScopeProgress(ScopeAutoDependenciesProgress(path, step));
@@ -248,7 +248,7 @@ abstract base class ScopeAutoDependencies<T extends ScopeAutoDependencies<T, C>,
     final completer = Completer<void>();
 
     _log.d('dispose…');
-    dependencies.runDispose().listen(
+    dependencies.dispose().listen(
       (path) {
         _log.d(path);
       },

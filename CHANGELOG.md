@@ -221,6 +221,33 @@
   it implements, so each is held in a private field. Nothing in this package,
   its tests or its examples read them from outside, and the analyzer says so at
   once for anyone who did.
+* [breaking changes] `ScopeDependency` stops offering two ways to run one step.
+  The interface had `init()` beside `runInit()` and `dispose()` beside
+  `runDispose()`, the second of each wrapping the first and keeping `state` in
+  step; the bare pair was an implementation detail with the shorter, more
+  inviting name. The wrappers are `init()` and `dispose()` now — the names a
+  caller expects — and the step itself is private to the library. Nothing
+  outside called the bare pair, here or in the tests.
+* A scope owning a controller has a context of its own. `of`, `maybeOf` and
+  `select` of `AsyncControllerScope` and `AsyncControllerScopeBase` return an
+  `AsyncControllerScopeContext`, which answers `controller`, `controllerOrNull`
+  and `hasController` — the controller used to be read as `data` off an
+  `AsyncDataScopeContext`, a type named after another family and a member named
+  after a payload. This is an addition: the new interface implements the old
+  one, so `data`, `dataOrNull` and `hasData` still answer the same object.
+* [breaking changes] `ScopeStateNotifier.equals` is `shouldNotify`, **and its
+  sense is inverted**: it returns `true` by default, where `equals` returned
+  `false`, and `update` notifies when it says so rather than when it does not.
+  The old name promised a comparison and denied every equality — including an
+  object with itself — while what it decides is whether the listeners hear
+  about a change; `CompareUtils.equals` beside it is the honest one. An
+  override written with `@override` stops compiling, which is the point; one
+  written without it does not, so check for it before upgrading.
+* The dartdoc of `AsyncControllerScopeBase` says why its `buildOnProgress` and
+  `buildOnError` take no progress where the other three families do: this
+  scope's initialization is `createController()` and the controller's own
+  `init()`, and neither reports steps. The reason was a comment in the
+  implementation, where the person reading the signature never sees it.
 * The bookkeeping that decides which build a dependent's selectors belong to asks
   for a frame when nothing else will bring one. The reset runs in a post-frame
   callback, and a build is not always inside a frame — `runApp` builds the first
@@ -243,7 +270,7 @@
   `ScopeDependency.count` no longer claims to include the group itself (it counts
   the steps a subtree reports, and a group reports none); `AsyncScopeModel` is
   the third type argument of `ScopeModelCore`, not of the two-parameter
-  `AsyncScopeCore`; and the `runDispose` comment no longer justifies itself with
+  `AsyncScopeCore`; and the `dispose` comment no longer justifies itself with
   "a failed leaf is never disposed of at all", which stopped being true when a
   failed leaf started giving back what it had taken.
 * `ScopeLog.message` is declared `String` rather than `String?`. It never
@@ -475,7 +502,8 @@
   the dependent is rebuilt, its `build` reads `state`, and so on. A state
   handed over is a state that can be read, so the failure goes with the same
   call; the listeners hear about it even when the value is the one from before
-  the failure, since `equals` compares two values and this change is between a
+  the failure, since `shouldNotify` weighs one value against another and this
+  change is between a
   state that throws and one that does not. The `ScopeNotifier` topic says so.
 * The dartdoc of `of`, `maybeOf` and `select` on `Scope` and `LiteScope`
   promised one condition where there are two. Both read the state, and the

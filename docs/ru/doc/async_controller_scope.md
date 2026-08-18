@@ -1,6 +1,6 @@
 # AsyncControllerScope
 
-> Перевод `doc/async_controller_scope.md` (blob `57c97a7760022e761fc4f4c5448a172fa47c13bd`).
+> Перевод `doc/async_controller_scope.md` (blob `2b94d8d583929116a97b5ff04f314d915be5bd49`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 Скоуп, всё содержимое которого — контроллер: объект со своим жизненным циклом,
@@ -137,13 +137,16 @@ await controller.performDispose();
 final controller = AsyncControllerScope.of<PlayerController>(
   context,
   listen: false,
-).data;
+).controller;
 ```
 
-`of`, `maybeOf` и `select` возвращают `AsyncDataScopeContext` — ровно как в теме
-`AsyncDataScope`: `data` бросает, пока контроллер не готов, `dataOrNull`
-возвращает `null`. Виджеты внутри `builder` находятся под готовым скоупом и
-могут пользоваться `data`.
+`of`, `maybeOf` и `select` возвращают `AsyncControllerScopeContext`:
+`controller` бросает, пока контроллер не готов, `controllerOrNull` возвращает
+`null`, а `hasController` спрашивает о том же отдельно. Виджеты внутри `builder`
+находятся под готовым скоупом и могут пользоваться `controller`. Три ответа
+`AsyncDataScopeContext` — `data`, `dataOrNull`, `hasData` — унаследованы и
+по-прежнему работают: это тот же объект под именем, которое было у значения до
+того, как у семейства появилось своё.
 
 У формы для наследования те же три метода статическими, первым идёт тип
 виджета:
@@ -151,7 +154,7 @@ final controller = AsyncControllerScope.of<PlayerController>(
 ```dart
 final position = AsyncControllerScopeBase.select<Player, PlayerController, int>(
   context,
-  (scope) => scope.data.position,
+  (scope) => scope.controller.position,
 );
 ```
 

@@ -115,13 +115,14 @@ base class PlayerState extends ScopeStateNotifier<Player> {
   PlayerState(super.initialState);
 
   @override
-  bool equals(Player previous, Player current) => previous.id == current.id;
+  bool shouldNotify(Player previous, Player current) =>
+      previous.id != current.id;
 }
 ```
 
-The default `equals` returns `false` — every `update` notifies. That is the
-safe default for a mutable object being re-assigned; override it when the state
-is a value type and repeated equal updates are common.
+The default `shouldNotify` returns `true` — every `update` notifies. That is
+the safe default for a mutable object being re-assigned; override it when the
+state is a value type and repeated equal updates are common.
 
 `asUnmodifiable()` wraps a notifier into a `ScopeStateModelView`, which forwards
 `state`, `addListener` and `removeListener` and nothing else. Hand that to the
@@ -137,8 +138,8 @@ A failure is not terminal, though: `update` puts it down as it stores the new
 state. A state handed over is a state that can be read, so recovering is what
 an update after `setError` means, and there is nothing else it could mean. The
 listeners hear about it even when the value is the one from before the failure
-— `equals` compares two values, and this change is between a state that throws
-and one that does not.
+— `shouldNotify` weighs one value against another, and this change is between
+a state that throws and one that does not.
 
 ```dart
 model

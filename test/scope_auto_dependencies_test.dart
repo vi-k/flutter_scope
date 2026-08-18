@@ -1666,14 +1666,14 @@ void main() {
 
   // `ScopeDependencyDisposalCancelled` was read as unreachable: nothing in the
   // package stops a teardown walk halfway. The walk is public, though --
-  // `runDispose()` is a stream -- so a caller who drives one and cancels the
+  // `dispose()` is a stream -- so a caller who drives one and cancels the
   // subscription reaches the state, and this is what it looks like.
   test('a disposal cancelled by whoever drove it says so', () {
     myFakeAsync((async) {
       final dependencies = TestDependencies();
       handleInitFor(dependencies, async);
 
-      final subscription = dependencies.root.runDispose().listen((_) {});
+      final subscription = dependencies.root.dispose().listen((_) {});
       async
         ..elapse(TestDependencies.step)
         ..waitFuture(subscription.cancel());
@@ -1717,7 +1717,7 @@ void main() {
   group('ScopeAutoDependencies failure after the automatic disposal', () {
     // A group is disposed of *because* something under it failed
     // (`ScopeDependencyGroup.disposalRequired` covers
-    // `ScopeDependencyFailed`), and `runDispose` used to overwrite that state
+    // `ScopeDependencyFailed`), and `dispose` used to overwrite that state
     // with `ScopeDependencyDisposed` — so with the default
     // `autoDisposeOnError` the caller was left with a tree that said nothing
     // about what had gone wrong. A failed *leaf* keeps its errors by the same
