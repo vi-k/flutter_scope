@@ -278,9 +278,12 @@ abstract base class ScopeAutoDependencies<T extends ScopeAutoDependencies<T, C>,
 
   /// A single dependency called [name].
   ///
-  /// The `DepHelper` handed to `init` is where the teardown is registered.
+  /// The `ScopeDependencyHandle` handed to `init` is where the teardown is registered.
   /// The name must not be empty.
-  ScopeDependency dep(String name, FutureOr<void> Function(DepHelper) init) =>
+  ScopeDependency dep(
+    String name,
+    FutureOr<void> Function(ScopeDependencyHandle) init,
+  ) =>
       ScopeDependency(name, init);
 
   /// A group whose children are initialized one after another.
@@ -341,7 +344,7 @@ abstract base class ScopeAutoDependencies<T extends ScopeAutoDependencies<T, C>,
           final _ScopeDependencyWithErrors state => state.errors().any(
                 (e) => e.error is! ScopeDependencyException,
               ),
-          ScopeDependencySuccessStates() => false,
+          ScopeDependencyAnySuccess() => false,
         },
       );
 }

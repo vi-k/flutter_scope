@@ -531,7 +531,7 @@ void main() {
 
   // How long a scope waits for its `scopeKey` and for its children to be
   // disposed of (3 seconds each by default; `null` means no timeout).
-  ScopeConfig.defaultScopeKeysTimeout = const Duration(seconds: 5);
+  ScopeConfig.defaultScopeKeyTimeout = const Duration(seconds: 5);
   ScopeConfig.defaultWaitForChildrenTimeout = null;
 
   runApp(const App(title: 'scopo'));

@@ -4,7 +4,7 @@ part of '../scope.dart';
 /// updates.
 ///
 /// {@category Scope}
-typedef ScopeInitFunction<P extends Object, D extends ScopeDependencies>
+typedef ScopeInitCallback<P extends Object, D extends ScopeDependencies>
     = Stream<ScopeInitState<P, D>> Function(BuildContext context);
 
 /// A builder function used to display a waiting widget while the [Scope] is
@@ -21,7 +21,7 @@ typedef ScopeWaitingBuilder = Widget? Function(BuildContext context);
 /// initialization.
 ///
 /// {@category Scope}
-typedef ScopeInitBuilder<P extends Object> = Widget Function(
+typedef ScopeProgressBuilder<P extends Object> = Widget Function(
   BuildContext context,
   P? progress,
 );

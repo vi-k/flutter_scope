@@ -129,14 +129,14 @@ mixin ScopeDependencyMixin implements ScopeDependency {
           error,
           stackTrace,
         ),
-      ScopeDependencySuccessStates() => defaultState(error, stackTrace),
+      ScopeDependencyAnySuccess() => defaultState(error, stackTrace),
     };
   }
 
   void _handleError(
     Object error,
     StackTrace stackTrace,
-    ScopeDependencyFailedStates Function(Object error, StackTrace stackTrace)
+    ScopeDependencyAnyFailed Function(Object error, StackTrace stackTrace)
         defaultState,
   ) {
     _log.d(() => '[handleError] $wrappedName', error: error);
@@ -184,7 +184,7 @@ mixin ScopeDependencyMixin implements ScopeDependency {
   void _handlePostCancelError(
     Object error,
     StackTrace stackTrace,
-    ScopeDependencyCancelledStates Function(Object error, StackTrace stackTrace)
+    ScopeDependencyAnyCancelled Function(Object error, StackTrace stackTrace)
         defaultState,
   ) {
     _log.d(() => '[handlePostCancelError] $wrappedName', error: error);

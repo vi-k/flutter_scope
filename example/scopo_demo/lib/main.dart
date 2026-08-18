@@ -48,7 +48,7 @@ void main() {
   // Scope timeouts
   //
 
-  // ScopeConfig.defaultScopeKeysTimeout = const Duration(milliseconds: 500);
+  // ScopeConfig.defaultScopeKeyTimeout = const Duration(milliseconds: 500);
   // ScopeConfig.defaultWaitForChildrenTimeout = const Duration(milliseconds: 500);
 
   //

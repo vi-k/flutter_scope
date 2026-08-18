@@ -79,8 +79,8 @@ container that needs no asynchronous work at all:
 `ScopeReady`.
 
 The three function types the scope is built from are named as well, for anyone
-passing them around: `ScopeInitFunction`, `ScopeWaitingBuilder`,
-`ScopeInitBuilder` and `ScopeErrorBuilder`.
+passing them around: `ScopeInitCallback`, `ScopeWaitingBuilder`,
+`ScopeProgressBuilder` and `ScopeErrorBuilder`.
 
 ## ScopeAutoDependencies
 
@@ -121,7 +121,7 @@ final class HomeDependencies
 
 Three builders describe the tree, and all of them return a `ScopeDependency`:
 
-- `dep(name, init)` — a single dependency. The `DepHelper` handed to `init` is
+- `dep(name, init)` — a single dependency. The `ScopeDependencyHandle` handed to `init` is
   where the reverse operations are registered: `dep.unmount` runs synchronously
   before anything is released, `dep.dispose` is awaited during the disposal.
   Setting neither is fine — a dependency that owns nothing needs no teardown.
@@ -164,7 +164,7 @@ instead of `null`.
 Every event of that stream carries a `ScopeAutoDependenciesProgress`: `path` —
 the path of the dependency that has just been initialized — `name`, the last
 segment of that path, which is the name the dependency was declared with, plus
-the step counter of a `ProgressIterator` (`number`, `total`, and `progress` as a
+the step counter of a `ProgressIterator` (`number`, `total`, and `value` as a
 fraction between 0 and 1). That object is what `buildOnInitializing` receives,
 so a progress bar with a caption needs nothing else:
 

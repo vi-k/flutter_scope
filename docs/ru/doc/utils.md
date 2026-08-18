@@ -1,6 +1,6 @@
 # utils
 
-> Перевод `doc/utils.md` (blob `470881a9e583a62bad7124b8a17ab1f62d0493a0`).
+> Перевод `doc/utils.md` (blob `8246b1622173796b698d98f6da030012f23349f6`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 Хелперы, которые едут вместе с пакетом, но не принадлежат ни одному семейству
@@ -151,11 +151,11 @@ final progress = ProgressIterator(3);
 
 progress.nextStep(); // 1/3
 progress.nextStep(); // 2/3
-progress.add(1);     // 3/3
+progress.addSteps(1); // 3/3
 progress.isCompleted; // true
 ```
 
-`Progress` — производимое им значение: `number`, `total`, `progress` как доля от
+`Progress` — производимое им значение: `number`, `total`, `value` как доля от
 0 до 1 и `toString` вида `2/3`. Доля держится в этих границах при любой паре:
 работа без шагов вовсе читается как завершённая, а не как `NaN` от `0 / 0`, —
 поэтому её можно отдавать `LinearProgressIndicator` как есть. Шаг за предел

@@ -93,7 +93,7 @@ abstract base class ScopeDependencyGroup with ScopeDependencyMixin {
   @override
   String stateToString() {
     switch (state) {
-      case final ScopeDependencyFailedStates state:
+      case final ScopeDependencyAnyFailed state:
         final failedChildren = state
             .errors()
             .where((e) => e.error is ScopeDependencyException)

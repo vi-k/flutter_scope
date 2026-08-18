@@ -15,8 +15,8 @@ sealed class ScopeDependencyState {
 }
 
 /// {@category Scope}
-sealed class ScopeDependencySuccessStates extends ScopeDependencyState {
-  const ScopeDependencySuccessStates();
+sealed class ScopeDependencyAnySuccess extends ScopeDependencyState {
+  const ScopeDependencyAnySuccess();
 }
 
 sealed class _ScopeDependencyWithErrors extends ScopeDependencyState {
@@ -54,26 +54,26 @@ sealed class _ScopeDependencyWithErrors extends ScopeDependencyState {
 }
 
 /// {@category Scope}
-sealed class ScopeDependencyFailedStates extends _ScopeDependencyWithErrors {
-  ScopeDependencyFailedStates(super.error, super.stackTrace);
+sealed class ScopeDependencyAnyFailed extends _ScopeDependencyWithErrors {
+  ScopeDependencyAnyFailed(super.error, super.stackTrace);
 
-  const ScopeDependencyFailedStates._(super._errors) : super._();
+  const ScopeDependencyAnyFailed._(super._errors) : super._();
 }
 
 /// {@category Scope}
-sealed class ScopeDependencyCancelledStates extends _ScopeDependencyWithErrors {
-  ScopeDependencyCancelledStates([Object? error, StackTrace? stackTrace])
+sealed class ScopeDependencyAnyCancelled extends _ScopeDependencyWithErrors {
+  ScopeDependencyAnyCancelled([Object? error, StackTrace? stackTrace])
       : super._(
           error == null
               ? _emptyList<AsyncError>()
               : _singleList(AsyncError(error, stackTrace)),
         );
 
-  const ScopeDependencyCancelledStates._(super._errors) : super._();
+  const ScopeDependencyAnyCancelled._(super._errors) : super._();
 }
 
 /// {@category Scope}
-final class ScopeDependencyInitial extends ScopeDependencySuccessStates {
+final class ScopeDependencyInitial extends ScopeDependencyAnySuccess {
   /// Creates the state of a dependency not started yet.
   const ScopeDependencyInitial();
 
@@ -82,7 +82,7 @@ final class ScopeDependencyInitial extends ScopeDependencySuccessStates {
 }
 
 /// {@category Scope}
-final class ScopeDependencyFailed extends ScopeDependencyFailedStates {
+final class ScopeDependencyFailed extends ScopeDependencyAnyFailed {
   /// Creates the state of a dependency whose initialization failed.
   ScopeDependencyFailed(super.error, super.stackTrace);
 
@@ -99,7 +99,7 @@ final class ScopeDependencyFailed extends ScopeDependencyFailedStates {
 }
 
 /// {@category Scope}
-final class ScopeDependencyCancelled extends ScopeDependencyCancelledStates {
+final class ScopeDependencyCancelled extends ScopeDependencyAnyCancelled {
   /// Creates the state of a dependency whose initialization was cancelled.
   ScopeDependencyCancelled([super.error, super.stackTrace]);
 
@@ -118,7 +118,7 @@ final class ScopeDependencyCancelled extends ScopeDependencyCancelledStates {
 }
 
 /// {@category Scope}
-final class ScopeDependencyInitialized extends ScopeDependencySuccessStates {
+final class ScopeDependencyInitialized extends ScopeDependencyAnySuccess {
   /// Creates the state of an initialized dependency.
   const ScopeDependencyInitialized();
 
@@ -127,7 +127,7 @@ final class ScopeDependencyInitialized extends ScopeDependencySuccessStates {
 }
 
 /// {@category Scope}
-final class ScopeDependencyDisposalFailed extends ScopeDependencyFailedStates {
+final class ScopeDependencyDisposalFailed extends ScopeDependencyAnyFailed {
   /// Creates the state of a dependency whose disposal failed.
   ScopeDependencyDisposalFailed(super.error, super.stackTrace);
 
@@ -153,7 +153,7 @@ final class ScopeDependencyDisposalFailed extends ScopeDependencyFailedStates {
 ///
 /// {@category Scope}
 final class ScopeDependencyDisposalCancelled
-    extends ScopeDependencyCancelledStates {
+    extends ScopeDependencyAnyCancelled {
   /// Creates the state of a dependency whose disposal was cancelled.
   ScopeDependencyDisposalCancelled([super.error, super.stackTrace]);
 
@@ -175,7 +175,7 @@ final class ScopeDependencyDisposalCancelled
 }
 
 /// {@category Scope}
-final class ScopeDependencyDisposed extends ScopeDependencySuccessStates {
+final class ScopeDependencyDisposed extends ScopeDependencyAnySuccess {
   /// Creates the state of a disposed dependency.
   const ScopeDependencyDisposed();
 

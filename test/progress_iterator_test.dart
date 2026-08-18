@@ -25,8 +25,8 @@ void main() {
     test('add moves several steps at once', () {
       final iterator = ProgressIterator(10);
 
-      expect('${iterator.add(4)}', '4/10');
-      expect('${iterator.add(6)}', '10/10');
+      expect('${iterator.addSteps(4)}', '4/10');
+      expect('${iterator.addSteps(6)}', '10/10');
       expect(iterator.isCompleted, isTrue);
     });
 
@@ -39,22 +39,22 @@ void main() {
     test('progress is the fraction of the work reported', () {
       final iterator = ProgressIterator(4);
 
-      expect(iterator.currentStep.progress, 0.0);
-      expect(iterator.add(1).progress, 0.25);
-      expect(iterator.add(3).progress, 1.0);
+      expect(iterator.currentStep.value, 0.0);
+      expect(iterator.addSteps(1).value, 0.25);
+      expect(iterator.addSteps(3).value, 1.0);
     });
 
     test('a task of no steps is complete rather than NaN', () {
       final iterator = ProgressIterator(0);
 
       expect(iterator.isCompleted, isTrue);
-      expect(iterator.currentStep.progress, 1.0);
+      expect(iterator.currentStep.value, 1.0);
     });
 
     test('a step backwards past the start is a mistake in the caller', () {
       final iterator = ProgressIterator(3);
 
-      expect(() => iterator.add(-1), throwsA(isA<AssertionError>()));
+      expect(() => iterator.addSteps(-1), throwsA(isA<AssertionError>()));
     });
   });
 
@@ -64,7 +64,7 @@ void main() {
 
       expect(progress.number, 2);
       expect(progress.total, 5);
-      expect(progress.progress, 0.4);
+      expect(progress.value, 0.4);
       expect('$progress', '2/5');
     });
 
@@ -72,8 +72,8 @@ void main() {
       // The assert in `ProgressIterator.add` is the debug half of the
       // promise. A release build steps past the total without a word, and the
       // fraction still has to be something a progress indicator can take.
-      expect(const Progress(4, 3).progress, 1.0);
-      expect(const Progress(0, 0).progress, 1.0);
+      expect(const Progress(4, 3).value, 1.0);
+      expect(const Progress(0, 0).value, 1.0);
     });
   });
 }

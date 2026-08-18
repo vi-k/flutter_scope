@@ -149,11 +149,11 @@ final progress = ProgressIterator(3);
 
 progress.nextStep(); // 1/3
 progress.nextStep(); // 2/3
-progress.add(1);     // 3/3
+progress.addSteps(1); // 3/3
 progress.isCompleted; // true
 ```
 
-`Progress` is the value it produces: `number`, `total`, `progress` as a
+`Progress` is the value it produces: `number`, `total`, `value` as a
 fraction between 0 and 1, and a `toString` of `2/3`. The fraction holds those
 bounds whatever the pair says: a task of no steps at all reads as complete
 rather than as the `NaN` of `0 / 0`, so it can go straight into a

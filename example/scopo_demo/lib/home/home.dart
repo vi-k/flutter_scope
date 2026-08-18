@@ -37,7 +37,7 @@ const _tabs = <(String, Widget)>[
 /// Initializes feature-specific dependencies like [FakeBloc] and
 /// [FakeController].
 final class Home extends Scope<Home, HomeDependencies, HomeState> {
-  final ScopeInitFunction<ScopeAutoDependenciesProgress, HomeDependencies> init;
+  final ScopeInitCallback<ScopeAutoDependenciesProgress, HomeDependencies> init;
   final bool isRoot;
 
   const Home({
@@ -182,7 +182,7 @@ class _FakeContent extends StatelessWidget {
         padding: const EdgeInsets.all(8),
         child: Center(
           child: AnimatedProgressIndicator(
-            value: progress?.progress,
+            value: progress?.value,
             builder: (value) {
               return CircularProgressIndicator(value: value);
             },

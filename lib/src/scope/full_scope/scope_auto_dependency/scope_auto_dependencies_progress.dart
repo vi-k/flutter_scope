@@ -31,7 +31,7 @@ final class ScopeAutoDependenciesProgress {
   int get total => _progress.total;
 
   /// The progress as a fraction between 0 and 1.
-  double get progress => _progress.progress;
+  double get value => _progress.value;
 
   @override
   String toString() => '$path ($_progress)';

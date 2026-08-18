@@ -38,8 +38,8 @@ final class ProgressIterator {
   ///
   /// A negative [n] moves back, and a step past [total] is a mistake in the
   /// caller — caught by an assertion here, and by the bounds of
-  /// [Progress.progress] where assertions are off.
-  Progress add(int n) {
+  /// [Progress.value] where assertions are off.
+  Progress addSteps(int n) {
     final newNum = _currentStep.number + n;
     assert(newNum <= total, 'next step ($newNum) > total ($total)');
 
@@ -47,7 +47,7 @@ final class ProgressIterator {
   }
 
   /// Returns the next step.
-  Progress nextStep() => add(1);
+  Progress nextStep() => addSteps(1);
 }
 
 /// {@category utils}
@@ -62,7 +62,7 @@ final class Progress {
   ///
   /// Neither may be negative. A [number] past [total] is *not* refused here:
   /// that is what a release build does when it steps past the end, and
-  /// [progress] answers for it.
+  /// [value] answers for it.
   const Progress(this.number, this.total)
       : assert(total >= 0, 'total ($total) cannot be negative'),
         assert(number >= 0, 'number ($number) cannot be negative');
@@ -72,9 +72,9 @@ final class Progress {
   /// Between 0 and 1 whatever it was built from, since that is what a progress
   /// indicator is handed: a task of no steps at all is complete rather than
   /// the `NaN` of `0 / 0`, and a count that ran past its total reads as 1
-  /// rather than as `4/3`. The assertions above and in [ProgressIterator.add]
+  /// rather than as `4/3`. The assertions above and in [ProgressIterator.addSteps]
   /// are what say so out loud, and they are off in a release build.
-  double get progress => total == 0 ? 1 : (number / total).clamp(0.0, 1.0);
+  double get value => total == 0 ? 1 : (number / total).clamp(0.0, 1.0);
 
   @override
   String toString() => '$number/$total';

@@ -987,7 +987,8 @@ final class _Deps extends ScopeAutoDependencies<_Deps, BuildContext> {
 
   _Deps({required this.log, this.failOnUnmount});
 
-  FutureOr<void> Function(DepHelper dep) _init(String name) => (dep) {
+  FutureOr<void> Function(ScopeDependencyHandle dep) _init(String name) =>
+      (dep) {
         dep
           ..unmount = () {
             log.add('unmount $name');

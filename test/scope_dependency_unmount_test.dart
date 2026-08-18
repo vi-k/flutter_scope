@@ -21,7 +21,7 @@ final class _Deps extends ScopeAutoDependencies<_Deps, void> {
 
   _Deps(this.log, {required this.failSecond});
 
-  void _both(DepHelper dep) {
+  void _both(ScopeDependencyHandle dep) {
     final name = dep.name;
 
     dep

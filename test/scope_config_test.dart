@@ -108,7 +108,7 @@ void main() {
       addTearDown(ScopeConfig.reset);
 
       ScopeConfig.pauseAfterInitializationEnabled = false;
-      ScopeConfig.defaultScopeKeysTimeout = null;
+      ScopeConfig.defaultScopeKeyTimeout = null;
       ScopeConfig.defaultWaitForChildrenTimeout = Duration.zero;
       ScopeConfig.defaultDisposeAsyncTimeout = const Duration(days: 1);
       ScopeConfig.defaultInitCancellationTimeout = null;
@@ -116,7 +116,7 @@ void main() {
       ScopeConfig.reset();
 
       expect(ScopeConfig.pauseAfterInitializationEnabled, isTrue);
-      expect(ScopeConfig.defaultScopeKeysTimeout, const Duration(seconds: 3));
+      expect(ScopeConfig.defaultScopeKeyTimeout, const Duration(seconds: 3));
       expect(
         ScopeConfig.defaultWaitForChildrenTimeout,
         const Duration(seconds: 3),

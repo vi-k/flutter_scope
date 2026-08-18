@@ -1,6 +1,6 @@
 # scopo
 
-> Перевод `README.md` (blob `973e80906211968d781818c84eb31bb2c60061cd`).
+> Перевод `README.md` (blob `05842a5b3f2f9da299674342a128f0651b597cd1`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 [![pub version](https://img.shields.io/pub/v/scopo)](https://pub.dev/packages/scopo)
@@ -541,7 +541,7 @@ void main() {
 
   // Сколько скоуп ждёт свой `scopeKey` и утилизации своих детей (по три
   // секунды по умолчанию; `null` — без ограничения).
-  ScopeConfig.defaultScopeKeysTimeout = const Duration(seconds: 5);
+  ScopeConfig.defaultScopeKeyTimeout = const Duration(seconds: 5);
   ScopeConfig.defaultWaitForChildrenTimeout = null;
 
   runApp(const App(title: 'scopo'));

@@ -12,7 +12,7 @@ abstract base class AsyncDataScopeBase<W extends AsyncDataScopeBase<W, T>,
 
   /// How long to wait for [scopeKey]; `null` takes the default.
   ///
-  /// Defaults to [ScopeConfig.defaultScopeKeysTimeout]. Removing the limit
+  /// Defaults to [ScopeConfig.defaultScopeKeyTimeout]. Removing the limit
   /// altogether is done there, not here.
   final Duration? scopeKeyTimeout;
 

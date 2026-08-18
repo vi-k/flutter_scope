@@ -571,7 +571,7 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
         await coordinator.enter(
           scopeKey,
           entry,
-          timeout: scopeKeyTimeout ?? ScopeConfig.defaultScopeKeysTimeout,
+          timeout: scopeKeyTimeout ?? ScopeConfig.defaultScopeKeyTimeout,
           onTimeout: (error, stackTrace) {
             FlutterError.reportError(
               FlutterErrorDetails(

@@ -1,6 +1,6 @@
 # Scope
 
-> Перевод `doc/full_scope.md` (blob `bc36c9a0714186e3e553f1f4306ba899adb53ca6`).
+> Перевод `doc/full_scope.md` (blob `6b0dd4ae9919901a1c3d361ef0e608f6fe770730`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 `Scope` — основной строительный блок пакета: виджет, который владеет контейнером
@@ -81,8 +81,8 @@ final class AppDependencies implements ScopeDependencies {
 `ScopeReady`.
 
 У трёх функциональных типов, из которых собран скоуп, есть имена — на случай,
-если их приходится передавать: `ScopeInitFunction`, `ScopeWaitingBuilder`,
-`ScopeInitBuilder` и `ScopeErrorBuilder`.
+если их приходится передавать: `ScopeInitCallback`, `ScopeWaitingBuilder`,
+`ScopeProgressBuilder` и `ScopeErrorBuilder`.
 
 ## ScopeAutoDependencies
 
@@ -123,7 +123,7 @@ final class HomeDependencies
 
 Дерево описывают три билдера, и все они возвращают `ScopeDependency`:
 
-- `dep(name, init)` — одна зависимость. `DepHelper`, который передают в `init`, —
+- `dep(name, init)` — одна зависимость. `ScopeDependencyHandle`, который передают в `init`, —
   это место, где регистрируют обратные операции: `dep.unmount` выполняется
   синхронно до того, как что-либо освобождается, `dep.dispose` дожидаются при
   утилизации. Не задать ни того ни другого нормально — зависимости, которая
@@ -166,7 +166,7 @@ ScopeAutoDependenciesStream<HomeDependencies> initDependencies(
 Каждое событие этого потока несёт `ScopeAutoDependenciesProgress`: `path` — путь
 только что инициализированной зависимости, `name` — последний сегмент этого
 пути, то есть имя, с которым зависимость объявлена, плюс счётчик шагов
-`ProgressIterator` (`number`, `total` и `progress` как доля от 0 до 1). Именно
+`ProgressIterator` (`number`, `total` и `value` как доля от 0 до 1). Именно
 этот объект получает `buildOnInitializing`, так что прогресс-бару с подписью
 больше ничего не нужно:
 

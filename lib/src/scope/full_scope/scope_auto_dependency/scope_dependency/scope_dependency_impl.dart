@@ -8,8 +8,8 @@ final class _ScopeDependencyImpl with ScopeDependencyMixin {
   @override
   final int count = 1;
 
-  final FutureOr<void> Function(DepHelper dep) _init;
-  DepHelper? _helper;
+  final FutureOr<void> Function(ScopeDependencyHandle dep) _init;
+  ScopeDependencyHandle? _helper;
 
   _ScopeDependencyImpl(this.name, this._init)
       : assert(name.isNotEmpty, 'The dependency name cannot be empty');
@@ -26,7 +26,7 @@ final class _ScopeDependencyImpl with ScopeDependencyMixin {
 
   @override
   Stream<String> init() async* {
-    final helper = _helper = DepHelper._(this);
+    final helper = _helper = ScopeDependencyHandle._(this);
     final result = _init(helper);
     if (result is Future<void>) {
       await result;
@@ -76,32 +76,4 @@ final class _ScopeDependencyImpl with ScopeDependencyMixin {
 
   @override
   String stateToString() => '$state';
-}
-
-/// {@category Scope}
-final class DepHelper {
-  _ScopeDependencyImpl? _dep;
-
-  DepHelper._(this._dep);
-
-  /// The name of the dependency being initialized.
-  String get name =>
-      _dep?.name ?? (throw StateError('helper already disposed'));
-
-  /// Lets go of whatever cannot wait for [dispose].
-  ///
-  /// Assign it from the initializer for whatever the asynchronous teardown
-  /// cannot wait for — unsubscribing, for instance. It runs exactly once,
-  /// always before [dispose], whether the scope was removed from the tree or
-  /// closed with `close()`.
-  ///
-  /// Within a group the hooks run in reverse declaration order, the same way
-  /// the disposal does: a later dependency is built on top of an earlier one,
-  /// so it stops reaching the world before that one lets go of anything.
-  void Function()? unmount;
-
-  /// Releases what this dependency acquired; awaited during the disposal.
-  ///
-  /// Leave it unset when the dependency owns nothing.
-  FutureOr<void> Function()? dispose;
 }

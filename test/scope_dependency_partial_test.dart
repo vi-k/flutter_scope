@@ -13,7 +13,7 @@ import 'package:test/test.dart';
 /// because it failed afterwards.
 final class _Deps extends ScopeAutoDependencies<_Deps, void> {
   final List<String> released;
-  final FutureOr<void> Function(DepHelper dep) _init;
+  final FutureOr<void> Function(ScopeDependencyHandle dep) _init;
 
   _Deps(this.released, this._init);
 
@@ -117,7 +117,8 @@ final class _Three extends ScopeAutoDependencies<_Three, void> {
   @override
   bool get autoDisposeOnError => false;
 
-  FutureOr<void> Function(DepHelper dep) _init(String name) => (dep) {
+  FutureOr<void> Function(ScopeDependencyHandle dep) _init(String name) =>
+      (dep) {
         dep.dispose = () {
           released.add(name);
           if (failOnDispose.contains(name)) {
@@ -181,7 +182,8 @@ final class _Nested extends ScopeAutoDependencies<_Nested, void> {
   @override
   bool get autoDisposeOnError => false;
 
-  FutureOr<void> Function(DepHelper dep) _init(String name) => (dep) {
+  FutureOr<void> Function(ScopeDependencyHandle dep) _init(String name) =>
+      (dep) {
         dep.dispose = () async {
           // Asynchronous on purpose: a synchronous branch would be over
           // before the sibling had a chance to fail, and the cancellation

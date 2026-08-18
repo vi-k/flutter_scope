@@ -25,12 +25,12 @@ abstract final class ScopeConfig {
   static bool pauseAfterInitializationEnabled =
       _pauseAfterInitializationEnabled;
 
-  /// Timeout for waiting for `scopeKeys` to be released.
+  /// Timeout for waiting for a `scopeKey` to be released.
   ///
   /// If `null`, then there is no timeout and the wait is unbounded.
   ///
   /// If zero, then the timeout expires immediately.
-  static Duration? defaultScopeKeysTimeout = _timeout;
+  static Duration? defaultScopeKeyTimeout = _timeout;
 
   /// Timeout for waiting for scopes to be disposed of.
   ///
@@ -81,7 +81,7 @@ abstract final class ScopeConfig {
   /// the whole point of the run it was given for.
   static void reset() {
     pauseAfterInitializationEnabled = _pauseAfterInitializationEnabled;
-    defaultScopeKeysTimeout = _timeout;
+    defaultScopeKeyTimeout = _timeout;
     defaultWaitForChildrenTimeout = _timeout;
     defaultDisposeAsyncTimeout = _timeout;
     defaultInitCancellationTimeout = _timeout;

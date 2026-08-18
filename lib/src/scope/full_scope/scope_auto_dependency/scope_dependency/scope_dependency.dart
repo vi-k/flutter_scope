@@ -4,7 +4,7 @@ part of '../../../scope.dart';
 abstract interface class ScopeDependency {
   factory ScopeDependency(
     String name,
-    FutureOr<void> Function(DepHelper dep) init,
+    FutureOr<void> Function(ScopeDependencyHandle dep) init,
   ) =>
       _ScopeDependencyImpl(name, init);
 
@@ -71,34 +71,30 @@ extension ScopeDependencyExtension on ScopeDependency {
   /// Whether the initialization succeeded.
   bool get isInitialized => switch (state) {
         ScopeDependencyInitialized() => true,
-        ScopeDependencySuccessStates() ||
-        ScopeDependencyFailedStates() ||
-        ScopeDependencyCancelledStates() =>
+        ScopeDependencyAnySuccess() ||
+        ScopeDependencyAnyFailed() ||
+        ScopeDependencyAnyCancelled() =>
           false,
       };
 
   /// Whether the initialization or the disposal was cancelled.
   bool get isCancelled => switch (state) {
-        ScopeDependencyCancelledStates() => true,
-        ScopeDependencySuccessStates() ||
-        ScopeDependencyFailedStates() =>
-          false,
+        ScopeDependencyAnyCancelled() => true,
+        ScopeDependencyAnySuccess() || ScopeDependencyAnyFailed() => false,
       };
 
   /// Whether the initialization or the disposal failed.
   bool get isFailed => switch (state) {
-        ScopeDependencyFailedStates() => true,
-        ScopeDependencySuccessStates() ||
-        ScopeDependencyCancelledStates() =>
-          false,
+        ScopeDependencyAnyFailed() => true,
+        ScopeDependencyAnySuccess() || ScopeDependencyAnyCancelled() => false,
       };
 
   /// Whether the disposal is over, including when there was nothing to do.
   bool get isDisposed => switch (state) {
         ScopeDependencyDisposed() => true,
-        ScopeDependencySuccessStates() ||
-        ScopeDependencyFailedStates() ||
-        ScopeDependencyCancelledStates() =>
+        ScopeDependencyAnySuccess() ||
+        ScopeDependencyAnyFailed() ||
+        ScopeDependencyAnyCancelled() =>
           false,
       };
 }

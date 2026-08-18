@@ -54,7 +54,7 @@ abstract final class ScopeLogLevel {
 /// called when the level is enabled.
 ///
 /// {@category debug}
-typedef ScopeLogFn = bool Function(
+typedef ScopeLogCallback = bool Function(
   Object? message, {
   Object? error,
   StackTrace? stackTrace,
@@ -99,7 +99,7 @@ final class ScopeLog extends CustomLog {
 ///
 /// {@category debug}
 final class ScopeLevelLogger extends CustomLevelLogger<ScopeLogger,
-    ScopeLevelLogger, ScopeLogFn, ScopeLog> {
+    ScopeLevelLogger, ScopeLogCallback, ScopeLog> {
   /// Creates the logger of one level.
   ScopeLevelLogger({required super.level, required super.name, super.shortName})
       : super(
@@ -111,7 +111,7 @@ final class ScopeLevelLogger extends CustomLevelLogger<ScopeLogger,
         );
 
   @override
-  ScopeLogFn get processLog => (message, {error, stackTrace}) {
+  ScopeLogCallback get processLog => (message, {error, stackTrace}) {
         publishLog(
           ScopeLog(
             this,
@@ -132,8 +132,8 @@ final class ScopeLevelLogger extends CustomLevelLogger<ScopeLogger,
 /// with [withAddedName] extend the [path] that every [ScopeLog] carries.
 ///
 /// {@category debug}
-final class ScopeLogger
-    extends CustomLogger<ScopeLogger, ScopeLevelLogger, ScopeLogFn, ScopeLog> {
+final class ScopeLogger extends CustomLogger<ScopeLogger, ScopeLevelLogger,
+    ScopeLogCallback, ScopeLog> {
   final LazyString _lazyPath;
 
   /// Joins the segments of [path]; inherited by sub-loggers created after it.
@@ -175,16 +175,16 @@ final class ScopeLogger
   );
 
   /// Writes at the `verbose` level.
-  ScopeLogFn get v => _v.log;
+  ScopeLogCallback get v => _v.log;
 
   /// Writes at the `debug` level.
-  ScopeLogFn get d => _d.log;
+  ScopeLogCallback get d => _d.log;
 
   /// Writes at the `info` level.
-  ScopeLogFn get i => _i.log;
+  ScopeLogCallback get i => _i.log;
 
   /// Writes at the `error` level.
-  ScopeLogFn get e => _e.log;
+  ScopeLogCallback get e => _e.log;
 
   @override
   void registerLevels() {

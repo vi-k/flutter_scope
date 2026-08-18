@@ -15,8 +15,8 @@ import 'theme_manager/theme_manager.dart';
 /// Initializes global dependencies like [FakeAppHttpClient], [FakeService], and
 /// [FakeAnalytics].
 final class App extends Scope<App, AppDependencies, AppState> {
-  final ScopeInitFunction<String, AppDependencies> init;
-  final ScopeInitBuilder<String> initBuilder;
+  final ScopeInitCallback<String, AppDependencies> init;
+  final ScopeProgressBuilder<String> initBuilder;
   final Widget Function(BuildContext context) builder;
 
   const App({

@@ -46,6 +46,7 @@ part 'full_scope/scope_base.dart';
 part 'full_scope/scope_core.dart';
 part 'full_scope/scope_dependencies.dart';
 part 'full_scope/scope_init_state.dart';
+part 'full_scope/scope_auto_dependency/scope_dependency/scope_dependency_handle.dart';
 part 'full_scope/scope_auto_dependency/scope_dependency/scope_dependency_impl.dart';
 part 'full_scope/scope_auto_dependency/scope_dependency/scope_dependency_group.dart';
 part 'full_scope/scope_auto_dependency/scope_dependency/scope_dependency.dart';

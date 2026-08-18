@@ -165,6 +165,26 @@
   is the floor's own and not one above it. Tests, formatter, dartdoc, publish dry
   run, translations and both example suites are run on 3.27.0, and CI pins the
   same number.
+* [breaking changes] Renames, the first of several waves. Nothing here changes
+  behaviour: each is a name that said the wrong thing or said it differently
+  from its neighbour. `ScopeConfig.defaultScopeKeysTimeout` is
+  `defaultScopeKeyTimeout`, singular like the `scopeKey` and `scopeKeyTimeout`
+  it answers for and like the three settings beside it. The three sealed bases
+  of the dependency states drop a plural that described the hierarchy rather
+  than the object: `ScopeDependencySuccessStates`, `ScopeDependencyFailedStates`
+  and `ScopeDependencyCancelledStates` are `ScopeDependencyAnySuccess`,
+  `ScopeDependencyAnyFailed` and `ScopeDependencyAnyCancelled`, which is how
+  they read at a call site — `state is ScopeDependencyAnyFailed`. `DepHelper` is
+  `ScopeDependencyHandle` and has a file of its own: everything else in that
+  family spells `Dependency` out, and "Helper" said nothing about the handle it
+  is. `ScopeLogFn` and `ScopeInitFunction` are `ScopeLogCallback` and
+  `ScopeInitCallback`, one suffix instead of two for the same idea, and
+  `ScopeInitBuilder` is `ScopeProgressBuilder` after the state it builds for.
+  `Progress.progress` is `Progress.value` — a fraction inside a class already
+  called `Progress` explained itself worse than the pair `number`/`total` beside
+  it — and `ScopeAutoDependenciesProgress.progress` follows it.
+  `ProgressIterator.add` is `addSteps`, the word `nextStep` and `currentStep`
+  already use.
 * The bookkeeping that decides which build a dependent's selectors belong to asks
   for a frame when nothing else will bring one. The reset runs in a post-frame
   callback, and a build is not always inside a frame — `runApp` builds the first

@@ -778,7 +778,7 @@ void main() {
   );
 
   testWidgets('an expired wait for a scopeKey is reported', (tester) async {
-    ScopeConfig.defaultScopeKeysTimeout = const Duration(milliseconds: 50);
+    ScopeConfig.defaultScopeKeyTimeout = const Duration(milliseconds: 50);
 
     await tester.pumpWidget(
       const Directionality(

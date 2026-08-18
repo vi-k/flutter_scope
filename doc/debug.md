@@ -85,7 +85,7 @@ and the sub-loggers created afterwards inherit it). The message is followed by
 `: <error>` when the event carries one, and by the stack trace on a line of its
 own when it carries a non-empty one.
 
-`ScopeLogFn` is the signature of the four logging methods of `ScopeLogger` (`v`,
+`ScopeLogCallback` is the signature of the four logging methods of `ScopeLogger` (`v`,
 `d`, `i`, `e`): a message plus an optional `error` and `stackTrace`. The message
 is an `Object?`, and a callback passed as the message is only invoked when the
 level is enabled — which is why the calls inside the package look like
@@ -153,7 +153,7 @@ which is the way to collect the events into a list and assert on them.
 Four waits in the scope lifecycle are bounded by a timeout, and all four
 defaults live in `ScopeConfig`:
 
-- `ScopeConfig.defaultScopeKeysTimeout` — how long a scope waits for its
+- `ScopeConfig.defaultScopeKeyTimeout` — how long a scope waits for its
   `scopeKey` to be released by the previous owner;
 - `ScopeConfig.defaultInitCancellationTimeout` — how long a teardown waits for
   the initialization to be cancelled;

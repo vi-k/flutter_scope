@@ -22,7 +22,7 @@ final class TestDependencies
   @override
   bool get autoDisposeOnError => false;
 
-  FutureOr<void> Function(DepHelper) initDep(
+  FutureOr<void> Function(ScopeDependencyHandle) initDep(
     Duration delay, {
     bool dispose = true,
   }) =>
@@ -93,7 +93,8 @@ final class TestDependenciesAnonNested
   @override
   bool get autoDisposeOnError => false;
 
-  FutureOr<void> Function(DepHelper) initDep(Duration delay) => (dep) async {
+  FutureOr<void> Function(ScopeDependencyHandle) initDep(Duration delay) =>
+      (dep) async {
         _log.v(() => 'init: ${dep.name} delay');
         await Future<void>.delayed(delay);
         _log.v(() => 'init: ${dep.name} after delay');
@@ -124,7 +125,8 @@ final class TestDependenciesNamedNested
     extends ScopeAutoDependencies<TestDependenciesNamedNested, void> {
   static const step = Duration(milliseconds: 10);
 
-  FutureOr<void> Function(DepHelper) initDep(Duration delay) => (dep) async {
+  FutureOr<void> Function(ScopeDependencyHandle) initDep(Duration delay) =>
+      (dep) async {
         await Future<void>.delayed(delay);
       };
 
@@ -153,7 +155,7 @@ final class TestDependenciesTwinFailures
   @override
   bool get autoDisposeOnError => false;
 
-  FutureOr<void> Function(DepHelper) _failAfterStep(String name) =>
+  FutureOr<void> Function(ScopeDependencyHandle) _failAfterStep(String name) =>
       (dep) async {
         await Future<void>.delayed(step);
 
@@ -174,7 +176,8 @@ final class TestDependenciesConcurrentNoDispose
     extends ScopeAutoDependencies<TestDependenciesConcurrentNoDispose, void> {
   static const step = Duration(milliseconds: 10);
 
-  FutureOr<void> Function(DepHelper) initDep(Duration delay) => (dep) async {
+  FutureOr<void> Function(ScopeDependencyHandle) initDep(Duration delay) =>
+      (dep) async {
         _log.v(() => 'init: ${dep.name} delay');
         await Future<void>.delayed(delay);
         _log.v(() => 'init: ${dep.name} after delay');
@@ -227,7 +230,7 @@ final class TestAutoDisposeDependencies
 
   TestAutoDisposeDependencies({this.failed = const {}});
 
-  FutureOr<void> Function(DepHelper) initDep() => (dep) async {
+  FutureOr<void> Function(ScopeDependencyHandle) initDep() => (dep) async {
         await Future<void>.delayed(step);
         if (failed.contains(dep.name)) {
           throw Exception('${dep.name} failed');
@@ -1753,7 +1756,7 @@ void main() {
         );
         expect(dependencies.root.state, isA<ScopeDependencyFailed>());
         expect(
-          (dependencies.root.state as ScopeDependencyFailedStates).errors(),
+          (dependencies.root.state as ScopeDependencyAnyFailed).errors(),
           hasLength(1),
           reason: 'the error list is the only record of the failure',
         );
