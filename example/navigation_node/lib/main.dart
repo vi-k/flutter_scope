@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:scopo/scopo.dart';
 
 import 'journal.dart';
 import 'lesson.dart';
@@ -19,7 +20,11 @@ final lessons = <Lesson>[
   nestedNodesLesson,
 ];
 
-void main() => runApp(const NavigationNodeApp());
+void main() {
+  ScopeConfig.observer = const ScopePrintObserver();
+
+  runApp(const NavigationNodeApp());
+}
 
 /// Shows what `NavigationNode` does, one lesson at a time.
 class NavigationNodeApp extends StatefulWidget {

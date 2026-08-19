@@ -55,10 +55,13 @@ base class ScopeObserver {
   /// An initialization has begun.
   void onInit(ScopeObservable target) {}
 
-  /// One step of an initialization is done.
+  /// One step of an initialization is done — or, for a dependency container,
+  /// one step of its disposal.
   ///
   /// [progress] is what that source reports: the value an `initScope` yielded
-  /// for a scope, a `ScopeAutoDependenciesProgress` for a container.
+  /// for a scope, a `ScopeAutoDependenciesProgress` while a container
+  /// initializes, or the bare `String` path of the dependency a container
+  /// just disposed of.
   void onProgress(ScopeObservable target, Object? progress) {}
 
   /// An initialization has finished successfully.
@@ -90,4 +93,71 @@ base class ScopeObserver {
   /// of `scopeKey`s and the guarded streams report themselves, and a scope
   /// produces a dozen such lines where it produces one of the rest.
   void onTrace(ScopeObservable target, String message) {}
+}
+
+/// A [ScopeObserver] that writes a line per event.
+///
+/// The line is `scopo | <label> | <what happened>`, and a failure adds
+/// `: <error>` and the stack trace on a line of its own.
+///
+/// {@category debug}
+final class ScopePrintObserver extends ScopeObserver {
+  /// Creates an observer printing through [output].
+  const ScopePrintObserver({
+    this.output = print,
+    this.trace = false,
+  });
+
+  /// Where a line goes; `print` by default.
+  final void Function(String line) output;
+
+  /// Whether [onTrace] is printed too.
+  final bool trace;
+
+  void _write(ScopeObservable target, String message) =>
+      output('scopo | ${target.debugLabel} | $message');
+
+  @override
+  void onInit(ScopeObservable target) => _write(target, 'initialize…');
+
+  @override
+  void onProgress(ScopeObservable target, Object? progress) =>
+      _write(target, 'progress: $progress');
+
+  @override
+  void onReady(ScopeObservable target) => _write(target, 'initialized');
+
+  @override
+  void onCancelled(ScopeObservable target) =>
+      _write(target, 'initialization cancelled');
+
+  @override
+  void onDispose(ScopeObservable target) => _write(target, 'dispose…');
+
+  @override
+  void onDisposed(ScopeObservable target) => _write(target, 'disposed');
+
+  @override
+  void onError(
+    ScopeObservable target,
+    ScopePhase phase,
+    Object error,
+    StackTrace? stackTrace,
+  ) {
+    final trace = stackTrace == null || stackTrace == StackTrace.empty
+        ? ''
+        : '\n$stackTrace';
+    _write(target, '${phase.name} failed: $error$trace');
+  }
+
+  @override
+  void onTimeout(ScopeObservable target, String what) =>
+      _write(target, 'gave up waiting for $what');
+
+  @override
+  void onTrace(ScopeObservable target, String message) {
+    if (trace) {
+      _write(target, message);
+    }
+  }
 }

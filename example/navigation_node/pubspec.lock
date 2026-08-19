@@ -99,14 +99,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "5.1.1"
-  logger_builder:
-    dependency: transitive
-    description:
-      name: logger_builder
-      sha256: afd61628d8d38675e8c1a9f50a94d254563c2eb680bf8c7d0e5c3ed3ac91315c
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.6.1"
   matcher:
     dependency: transitive
     description:

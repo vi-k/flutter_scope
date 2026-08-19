@@ -6,59 +6,16 @@
 // ignore_for_file: avoid_classes_with_only_static_members
 
 import 'package:flutter/foundation.dart';
-import 'package:logger_builder/logger_builder.dart';
 
-part 'scope_logger.dart';
 part 'scope_observer.dart';
 
 /// {@category debug}
 abstract final class ScopeConfig {
-  /// The logger of the package.
-  ///
-  /// Off by default. See the `debug` topic for levels, publishers and
-  /// transformers.
-  ///
-  /// It comes with a handler for failures of the logging path itself; what
-  /// that handler is for, and how to replace or remove it, is written on
-  /// [_reportLoggerFailure].
-  static final logger = ScopeLogger('scopo')
-    ..level = ScopeLogLevel.off
-    ..onError = _reportLoggerFailure;
-
-  /// Reports a failure of the logging path instead of letting it out.
-  ///
-  /// The publisher and the transformer are consumer code, and a throwing one
-  /// used to come back out of the logging call. Inside this package that call
-  /// sits in a build, in an initialization or in a teardown, so a logger that
-  /// failed took the scope with it: a scope that never built its ready branch,
-  /// or a teardown that stopped halfway with a `scopeKey` still held. A log
-  /// line is the one thing in a package that must not be able to do that.
-  ///
-  /// The failure is reported the way every other failure of consumer code
-  /// here is — through [FlutterError.reportError], a red screen in debug and
-  /// `FlutterError.onError` in release. Nothing is swallowed, and nothing that
-  /// was logging is interrupted.
-  ///
-  /// Assigning a handler of your own replaces this one, and
-  /// `ScopeConfig.logger.onError = null` brings back what a throwing publisher
-  /// did before: come out of the logging call. [reset] leaves it alone, as it
-  /// leaves the rest of the logger alone.
-  static void _reportLoggerFailure(Object error, StackTrace stackTrace) =>
-      FlutterError.reportError(
-        FlutterErrorDetails(
-          exception: error,
-          stack: stackTrace,
-          library: 'scopo',
-          context: ErrorDescription('while publishing a log line'),
-        ),
-      );
-
   /// Where the package reports its lifecycle.
   ///
   /// `null` by default: the package says nothing until an observer is
-  /// assigned. [reset] leaves it alone, as it leaves the logger alone: it is
-  /// an object rather than a switch, and it is usually the whole point of the
-  /// run it was assigned for.
+  /// assigned. [reset] leaves it alone: it is an object rather than a switch,
+  /// and it is usually the whole point of the run it was assigned for.
   static ScopeObserver? observer;
 
   /// Whether a notification is already running.
@@ -123,9 +80,8 @@ abstract final class ScopeConfig {
   /// different package. Call this from a `tearDown`, or from a `setUp` — which
   /// also covers a test that failed before its own teardown ran.
   ///
-  /// [logger] is left alone: it is an object with publishers and a transformer
-  /// of its own rather than a switch, and the level it was given is usually
-  /// the whole point of the run it was given for.
+  /// [observer] is left alone: it is an object rather than a switch, and it
+  /// is usually the whole point of the run it was assigned for.
   static void reset() {
     pauseAfterInitializationEnabled = _pauseAfterInitializationEnabled;
     defaultScopeKeyTimeout = _timeout;

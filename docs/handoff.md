@@ -693,7 +693,7 @@ CI отвечает через несколько минут и на чисто�
 
 | проверка | результат |
 | --- | --- |
-| `fvm flutter test` | **394 теста, все зелёные, leak-трекер включён** |
+| `fvm flutter test` | **391 тест, все зелёные, leak-трекер включён** |
 | `fvm flutter analyze` (корень) | `No issues found!` |
 | `analyze` во всех трёх `example/*` | `No issues found!` в каждом |
 | `fvm dart format --set-exit-if-changed lib test` | 97 файлов, 0 changed |
@@ -1002,21 +1002,18 @@ release-слепота `isBuilding`, записанная там как прин
   — обещанного конфликта с `require_trailing_commas` на нём нет. Витрина даёт
   0 changed на 68 файлах. В гейт §6 форматирование примеров по-прежнему не
   входит.
-- **у анонимной группы зависимостей `debugLabel` — пустая строка.**
-  `debugLabel => name` в `ScopeDependencyMixin` не знает запасного варианта,
-  в отличие от `wrappedName` в `scope_dependency_group.dart:91`, который для
-  пустого имени рисует `[group]`. Следствие — трассировка такой группы при
-  `trace: true` печатается с задвоенным пробелом. Сейчас мёртвый код: ни
-  один тест не доводит до неё трассировку. Найдено при ревью задачи 3 плана
-  наблюдателя (2026-08-19); чинить — тому, кто доделывает вывод
-  `ScopePrintObserver`.
-- **дартдок `ScopeObserver.onProgress` уже, чем правда.** В
-  `scope_observer.dart` он называет `progress` значением `initScope` или
-  `ScopeAutoDependenciesProgress` для контейнера, а задача 3 плана
-  наблюдателя добавила третий случай — голую `String`, путь шага при
-  разборе одной зависимости (`ScopeAutoDependencies.dispose()` шлёт туда
-  `path`). Дартдок его не называет. Найдено при ревью задачи 3
-  (2026-08-19); поправить вместе с прочей документацией наблюдателя.
+- **`example/minimal/README.md` и `example/README.md` описывают журнал,
+  которого больше нет.** `example/minimal/README.md` говорит «`main()` also
+  sets up the logger: `ScopeLogLevel.info` by default…» и предлагает менять
+  `ScopeConfig.logger.level`; `example/README.md` встраивает почти дословную
+  копию `example/minimal/lib/main.dart`, включая прежнюю настройку
+  публикаторов. Задача 4 плана наблюдателя меняла только `lib/main.dart` и
+  `pubspec.yaml` трёх примеров, а план задачи 5 называет `doc/debug.md`,
+  корневой `README.md`, `docs/architecture.md` и `CHANGELOG.md` — эта пара не
+  в списке ни там, ни там. Правка — вместе с зеркалами
+  `docs/ru/example/minimal/README.md` и `docs/ru/example/README.md` в том же
+  коммите (`AGENTS.md` §7). `sh docs/ru/check.sh` их пока не ловит: оригиналы
+  не менялись, хеши сходятся.
 
 ### Тулчейн и окружение
 

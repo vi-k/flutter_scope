@@ -302,6 +302,25 @@
   function, not an object — so it gained an optional `observable` parameter:
   its two callers here pass their own, and its seven internal steps report
   through `onTrace` under that label; left unset, a run traces nothing.
+* **Breaking:** `logger_builder` is no longer a dependency. Nine public names
+  built on it are gone: `ScopeConfig.logger`, `ScopeLogger`, `ScopeLevelLogger`,
+  `ScopeLog`, `ScopeLogPublisher`, `ScopeLogFormatter`, `ScopeLogTransformer`,
+  `ScopeLogLevel` and `ScopeLogCallback`. In their place, a ready-made
+  `ScopePrintObserver`: `ScopeConfig.observer = const ScopePrintObserver();`
+  prints one line per event — `scopo | <label> | <what happened>`, a failure's
+  error and stack trace included — the same shape `ScopeLogger.defaultFormat`
+  wrote, minus the level and the logger path. `trace: true` also prints what
+  `onTrace` carries, off by default: that is where the coordination below the
+  lifecycle reports, and a scope produces a dozen such lines where it produces
+  one of the rest.
+* Fix an anonymous dependency group — the common shape for the root of a tree,
+  `sequential('', […])` or `concurrent('', […])` — reporting through
+  `ScopeConfig.observer` under an empty label instead of `[group]`.
+  `ScopeDependencyMixin.debugLabel` fell back to `name`, empty by design for
+  such a group, so a line about it printed with a doubled space where the
+  label should have been; `[group]` is the same fallback `wrappedName` already
+  used for the same case, and a named group still reports under its own name,
+  unwrapped.
 * The bookkeeping that decides which build a dependent's selectors belong to asks
   for a frame when nothing else will bring one. The reset runs in a post-frame
   callback, and a build is not always inside a frame — `runApp` builds the first

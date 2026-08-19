@@ -309,6 +309,97 @@ void main() {
       'disposed _TestDependencies',
     ]);
   });
+
+  test('the print observer writes one line per event', () {
+    final lines = <String>[];
+    const scope = _FakeObservable('CounterScope(#4e0b7)');
+
+    ScopePrintObserver(output: lines.add)
+      ..onInit(scope)
+      ..onReady(scope)
+      ..onTrace(scope, 'wait for access to [key]');
+
+    expect(
+      lines,
+      [
+        'scopo | CounterScope(#4e0b7) | initialize…',
+        'scopo | CounterScope(#4e0b7) | initialized',
+      ],
+      reason: 'a trace is silent unless trace: true',
+    );
+  });
+
+  test('the print observer prints a trace when trace is true', () {
+    final lines = <String>[];
+    const scope = _FakeObservable('CounterScope(#4e0b7)');
+
+    ScopePrintObserver(output: lines.add, trace: true)
+        .onTrace(scope, 'wait for access to [key]');
+
+    expect(lines, ['scopo | CounterScope(#4e0b7) | wait for access to [key]']);
+  });
+
+  test('the print observer covers the rest of the lifecycle', () {
+    final lines = <String>[];
+    const scope = _FakeObservable('CounterScope(#4e0b7)');
+
+    ScopePrintObserver(output: lines.add)
+      ..onProgress(scope, 'dep1 (1/2)')
+      ..onCancelled(scope)
+      ..onDispose(scope)
+      ..onDisposed(scope)
+      ..onTimeout(scope, 'the disposal');
+
+    expect(lines, [
+      'scopo | CounterScope(#4e0b7) | progress: dep1 (1/2)',
+      'scopo | CounterScope(#4e0b7) | initialization cancelled',
+      'scopo | CounterScope(#4e0b7) | dispose…',
+      'scopo | CounterScope(#4e0b7) | disposed',
+      'scopo | CounterScope(#4e0b7) | gave up waiting for the disposal',
+    ]);
+  });
+
+  test('the print observer adds the stack trace on its own line', () {
+    final lines = <String>[];
+    const scope = _FakeObservable('CounterScope(#4e0b7)');
+    final stackTrace = StackTrace.fromString('#0 main');
+
+    ScopePrintObserver(output: lines.add).onError(
+      scope,
+      ScopePhase.initialization,
+      StateError('no network'),
+      stackTrace,
+    );
+
+    final expected = 'scopo | CounterScope(#4e0b7) | initialization failed: '
+        'Bad state: no network\n$stackTrace';
+    expect(lines, [expected]);
+  });
+
+  test('the print observer leaves out a missing stack trace', () {
+    final lines = <String>[];
+    const scope = _FakeObservable('CounterScope(#4e0b7)');
+
+    ScopePrintObserver(output: lines.add).onError(
+      scope,
+      ScopePhase.disposal,
+      StateError('dispose failed'),
+      null,
+    );
+
+    const expected = 'scopo | CounterScope(#4e0b7) | disposal failed: Bad '
+        'state: dispose failed';
+    expect(lines, [expected]);
+  });
+
+  test('an anonymous dependency group is not printed with a doubled space', () {
+    final lines = <String>[];
+    final group = ScopeDependency.sequential('', const []) as ScopeObservable;
+
+    ScopePrintObserver(output: lines.add).onInit(group);
+
+    expect(lines, ['scopo | [group] | initialize…']);
+  });
 }
 
 /// A minimal [LiteScope]: nothing to initialize asynchronously, and [child]
@@ -358,12 +449,14 @@ final class _NestingObserver extends ScopeObserver {
 }
 
 /// A [ScopeObservable] with no scope behind it, for a test that calls
-/// [notifyObserver] directly rather than through a widget tree.
+/// [notifyObserver] directly rather than through a widget tree, or that
+/// exercises a [ScopeObserver] such as [ScopePrintObserver] without building
+/// one.
 final class _FakeObservable implements ScopeObservable {
-  const _FakeObservable();
+  const _FakeObservable([this.debugLabel = '_FakeObservable']);
 
   @override
-  String get debugLabel => '_FakeObservable';
+  final String debugLabel;
 }
 
 /// A minimal [AsyncScopeCore] with two progress steps before it is ready.

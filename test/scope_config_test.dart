@@ -130,20 +130,5 @@ void main() {
         const Duration(seconds: 3),
       );
     });
-
-    test('leaves the logger alone', () {
-      final level = ScopeConfig.logger.level;
-      addTearDown(() => ScopeConfig.logger.level = level);
-
-      ScopeConfig.logger.level = ScopeLogLevel.debug;
-      ScopeConfig.reset();
-
-      expect(
-        ScopeConfig.logger.level,
-        ScopeLogLevel.debug,
-        reason: 'the logger is an object with publishers and a transformer of '
-            'its own, not a switch this can put back',
-      );
-    });
   });
 }
