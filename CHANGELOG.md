@@ -263,10 +263,15 @@
   `Stream.listen(onData:)`, and the measurement said it escaped from every one
   of the package's ninety-odd logging calls.
 * Add `ScopeConfig.observer`: an application assigns a typed `ScopeObserver` to
-  hear about a scope's lifecycle, the first step of replacing
-  `ScopeConfig.logger` with it. Two hooks are wired so far, `onInit` and
-  `onDisposed`, on `ScopeWidgetElementBase` — the ancestor of every scope family
-  — so a family that never reported anything of its own, `LiteScope` included,
+  hear about a scope's lifecycle. Nine hooks, every one of them empty by
+  default — `onInit`, `onProgress`, `onReady`, `onCancelled`, `onDispose`,
+  `onDisposed`, `onError`, `onTimeout` and `onTrace` — so a subclass overrides
+  only what it needs; the first argument of each is a `ScopeObservable`,
+  carrying the `debugLabel` its source names itself by. The field is `null` by
+  default, so the package says nothing until one is assigned, and
+  `ScopeConfig.reset()` leaves it alone. The structural pair
+  `onInit`/`onDisposed` lives on `ScopeWidgetElementBase` — the ancestor of
+  every scope family — so a family that never reported anything of its own
   now reports through the observer the same as the rest. A hook that throws is
   reported through `FlutterError.reportError` rather than reaching the scope,
   and a nested notification — an observer producing a scope event of its own

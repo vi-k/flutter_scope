@@ -182,13 +182,13 @@ those subscriptions are kept in a separate list and notified before the others.
 When one of them changes, the subtree is rebuilt — the element that selected the
 value is the element that builds the subtree.
 
-## Names in the log
+## Names in the output
 
 `toStringShort` of a scope widget is `MyScope(#4e0b7)`, or `MyScope(cart)` when
-a `tag` was given; the element prints its own type and hash. The logger of a
-scope takes its name from the first, which is why a `tag` is the cheapest way to
-tell two scopes of the same type apart in the output. The `debug` topic has the
-format.
+a `tag` was given; the element prints its own type and hash. A scope reports
+itself to `ScopeConfig.observer` under the first — that is its `debugLabel` —
+which is why a `tag` is the cheapest way to tell two scopes of the same type
+apart in the output. The `debug` topic has the format.
 
 ## Where to go next
 
@@ -197,4 +197,4 @@ format.
 | `base` | the lookup protocol these classes implement: `of`, `select`, `listen` |
 | `ScopeModel`, `ScopeNotifier` | the first two families built on this pair |
 | `Scope` | the full family, and what `notifyDependents` means for a state |
-| `debug` | the log, and what a `tag` does to it |
+| `debug` | the observer, and what a `tag` does to it |

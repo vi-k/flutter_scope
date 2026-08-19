@@ -26,7 +26,8 @@ order — after its child scopes are gone.
   `buildOnClosing` while the asynchronous disposal is running.
 - **Specialized scopes**: lightweight variants for widget parameters, plain
   models, `Listenable`s, and for async work that needs no dependency container.
-- **Logging**: a built-in level logger with pluggable formatting and output.
+- **Observable lifecycle**: a typed observer is told about every
+  initialization, progress step, failure and teardown.
 
 ## Installation
 
@@ -514,20 +515,17 @@ error the caller has to handle: the future completes normally and the
 `TimeoutException` is reported through `FlutterError.reportError`, unless an
 `onTimeout` callback is given.
 
-## Logging and configuration
+## Observing and configuration
 
-Logging is off by default. Levels are `verbose`, `debug`, `info`, `error`, and
-each level has its own publisher, so formatting and output can be replaced per
-level.
+The package says nothing until `ScopeConfig.observer` is assigned. A
+`ScopeObserver` has one hook per lifecycle event — `onInit`, `onProgress`,
+`onReady`, `onCancelled`, `onDispose`, `onDisposed`, `onError`, `onTimeout`,
+`onTrace` — all of them empty, so a subclass overrides only what it needs.
+`ScopePrintObserver` comes with the package and writes a line per event.
 
 ```dart
 void main() {
-  ScopeConfig.logger.level = ScopeLogLevel.info;
-
-  ScopeConfig.logger[ScopeLogLevel.debug].publisher = ScopeLogFormatter(
-    format: ScopeLogger.defaultFormat,
-    output: debugPrint,
-  );
+  ScopeConfig.observer = const ScopePrintObserver();
 
   // How long a scope waits for its `scopeKey` and for its children to be
   // disposed of (3 seconds each by default; `null` means no timeout).
@@ -588,5 +586,5 @@ on pub.dev as Topics, inside the API reference above.
 | [AsyncControllerScope](https://github.com/vi-k/scopo/blob/main/doc/async_controller_scope.md) | the same, where that value is a controller with a lifecycle of its own |
 | [LiteScope](https://github.com/vi-k/scopo/blob/main/doc/lite_scope.md) | a state class with that lifecycle, and `close()` |
 | [Scope](https://github.com/vi-k/scopo/blob/main/doc/full_scope.md) | the full family: dependencies, state, four branches |
-| [debug](https://github.com/vi-k/scopo/blob/main/doc/debug.md) | logging, timeouts, and the test setup |
+| [debug](https://github.com/vi-k/scopo/blob/main/doc/debug.md) | the observer, timeouts, and the test setup |
 | [utils](https://github.com/vi-k/scopo/blob/main/doc/utils.md) | the helpers that come with the package |

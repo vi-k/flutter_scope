@@ -1,179 +1,251 @@
 # debug
 
-Logging and the global settings of the package. Everything on this page is
+The observer and the global settings of the package. Everything on this page is
 static and lives in `ScopeConfig`, so the usual place to set it up is `main()`,
 before `runApp`.
 
-## Levels
+## The observer
 
-Logging is off by default: `ScopeConfig.logger.level` is `ScopeLogLevel.off`.
-Assigning a lower threshold enables every level whose value is equal to or
-greater than it.
+The package is silent until it is given somewhere to speak.
+`ScopeConfig.observer` is `null` by default; assign a `ScopeObserver` and every
+scope in the application starts reporting through it.
 
 ```dart
 void main() {
-  ScopeConfig.logger.level = ScopeLogLevel.info;
+  ScopeConfig.observer = const ScopePrintObserver();
 
   runApp(const App());
 }
 ```
 
-`ScopeLogLevel` collects the thresholds the package uses. They are plain `int`
-constants (the `Levels` of `logger_builder`), so `level` also accepts an
-intermediate value.
-
-| Constant                | Value | What the package writes                   |
-| ----------------------- | ----- | ----------------------------------------- |
-| `ScopeLogLevel.all`     | 0     | the lowest possible threshold: everything |
-| `ScopeLogLevel.verbose` | 400   | registered, but unused by the package     |
-| `ScopeLogLevel.debug`   | 500   | the whole lifecycle, step by step         |
-| `ScopeLogLevel.info`    | 800   | the milestones of an asynchronous scope   |
-| `ScopeLogLevel.error`   | 1000  | failed initialization and failed disposal |
-| `ScopeLogLevel.off`     | 2000  | the highest possible threshold: nothing   |
-
-`info` is a reasonable default for an application: it reports
-`initialize…`/`initialized`, the progress values, `dispose…`/`disposed`, and the
-cancellation of an interrupted initialization.
-
-`debug` is what to turn on when a scope hangs, initializes in an unexpected
-order, or is disposed of too late. On top of the `info` messages it reports
-preparation for initialization and disposal, waiting for a `scopeKey`, waiting
-for child scopes, and every dependency of a `ScopeAutoDependencies` as it is
-initialized or disposed of.
-
-`error` reports `initialization failed`, `disposal failed`, and the errors
-raised while disposing of dependencies — each with its `error` and
-`stackTrace`. Note that a scope also reports its initialization errors through
-`buildOnError` and its timeouts through `FlutterError.reportError`, so turning
-logging off never hides an error completely.
-
-## Output
-
-Every level has its own publisher, so the format and the destination can be
-replaced per level:
+`ScopeObserver` is a class of nine methods, every one of them empty. A subclass
+overrides what it wants and inherits the silence of the rest, so an observer
+that only cares about failures is one method long:
 
 ```dart
-ScopeConfig.logger[ScopeLogLevel.debug].publisher = ScopeLogFormatter(
-  format: ScopeLogger.defaultFormat,
+final class CrashReporter extends ScopeObserver {
+  const CrashReporter();
+
+  @override
+  void onError(
+    ScopeObservable target,
+    ScopePhase phase,
+    Object error,
+    StackTrace? stackTrace,
+  ) =>
+      crashlytics.recordError(
+        error,
+        stackTrace,
+        reason: '${target.debugLabel}: ${phase.name}',
+      );
+}
+```
+
+`ScopeObserver` is a `base class`, so a subclass of your own is declared `base`
+or `final` — `final` unless you mean it to be extended further.
+
+The hooks are called synchronously, from the build, the initialization or the
+teardown they belong to. That is what makes them useful — the order the lines
+come out in is the order the package did the work — and it is also why one that
+throws is caught rather than left to escape; see "When the observer itself
+fails" below.
+
+## The nine hooks
+
+| hook | what happened |
+| ---------------------------- | ----------------------------------------- |
+| `onInit(target)` | an initialization has begun |
+| `onProgress(target, progress)` | one step of it is done |
+| `onReady(target)` | it finished successfully |
+| `onCancelled(target)` | it was cancelled before it finished |
+| `onDispose(target)` | a teardown has begun |
+| `onDisposed(target)` | a teardown has finished |
+| `onError(target, phase, error, stackTrace)` | something failed |
+| `onTimeout(target, what)` | a bounded wait expired |
+| `onTrace(target, message)` | a step of the machinery below the lifecycle |
+
+### Who sends them
+
+A family with no initialization phase of its own — `ScopeWidget`, `ScopeModel`,
+`ScopeNotifier`, `AsyncScopeCoordinator` — reports a bare pair: `onInit` when
+its element is initialized and `onDisposed` when the element is gone. That is
+all such a scope has to say, and before this pair existed it said nothing at
+all: its lifecycle was visible only to a debugger.
+
+A family that runs an initialization — everything built on the asynchronous
+element: `AsyncScope`, `AsyncDataScope`, `AsyncControllerScope`, `LiteScope`
+and `Scope` — reports that phase instead, in the detail the phase has:
+`onInit`, then `onProgress` per step, then `onReady` or `onCancelled`; and, on
+the way out, `onDispose` and `onDisposed`. Nothing reports both halves — the
+structural pair is suppressed for these families, so a `LiteScope` produces one
+`onInit`, not two.
+
+The container of automatic dependencies of a `Scope` reports its own lifecycle
+under its own label, beside the scope that owns it: `onInit`, `onProgress` per
+dependency initialized, `onReady` or `onCancelled`, and then `onDispose`,
+`onProgress` per dependency released, `onDisposed`.
+
+A single dependency sends nothing but `onTrace`: the two points where it
+handles an error of its own, and the steps of the guarded stream its `init()`
+and `dispose()` run through.
+
+### What `onProgress` carries
+
+`progress` is an `Object?` because the three sources report different things,
+each already typed on its own terms:
+
+- from a scope, the value its initialization reported as progress: whatever
+  the application yielded — a `String` on the splash screen, in most of them;
+- from a dependency container that is initializing, a
+  `ScopeAutoDependenciesProgress`, which carries the `path` of the dependency
+  just built along with `name`, `number`, `total` and `value`. A `Scope` whose
+  container builds its dependencies passes the same value on, so it arrives
+  twice: once under the container's label and once under the scope's;
+- from a dependency container that is disposing, the bare `String` path of the
+  dependency just released.
+
+Wrapping those three in a common type would have meant inventing a fourth.
+
+### `onError` and `ScopePhase`
+
+`phase` says what was running when the failure happened:
+
+| `ScopePhase` | what was running |
+| ------------------------------ | ------------------------------------------ |
+| `initialization` | the initialization, either half of it |
+| `initializationCancellation` | cancelling an initialization still running |
+| `preparationForDisposal` | the synchronous half of the teardown |
+| `unmount` | the `onUnmount` hook |
+| `disposal` | `disposeScope`, or a dependency's `dispose` |
+| `abandonedWait` | a wait that failed after its waiter was gone |
+
+The enum can grow, so a `switch` over it in your own code wants a `default`
+branch.
+
+An error reaching `onError` is never the only way it is reported: a scope also
+hands its initialization failures to `buildOnError`, and the failures nobody
+else can be handed go to `FlutterError.reportError`. Leaving
+`ScopeConfig.observer` at `null` therefore hides no error completely.
+
+### What `onTimeout` covers
+
+Three bounded waits report an expiry through the observer, and `what` names the
+one that expired: `its own teardown` (a scope waiting out `disposeScope`),
+`its initialization to be cancelled`, and `the disposal` (a dependency
+container waiting for the tree it built to be released).
+
+The two remaining bounded waits — for a `scopeKey` and for child scopes — do
+not reach the observer. They report through `FlutterError.reportError` and
+through the `onScopeKeyTimeout` and `onWaitForChildrenTimeout` callbacks of the
+scope itself, which is where they were before the observer existed.
+
+### What `onTrace` covers
+
+Everything below the lifecycle: preparing for initialization and for disposal,
+the `scopeKey` queue (waiting for access, obtaining it, giving it up, leaving),
+waiting for child scopes, waiting for an initialization to finish, the two
+points inside a dependency where an error is handled, and the seven steps of
+the guarded stream that every dependency's `init()` and `dispose()` runs
+through.
+
+A scope produces a dozen of these where it produces one of everything else,
+which is why `ScopePrintObserver` leaves them off. They are what to turn on
+when a scope hangs, initializes in an unexpected order, or is disposed of too
+late — and nothing else.
+
+## Who the event is about
+
+The first argument of every hook is a `ScopeObservable`, and its only member is
+the name the source calls itself by:
+
+| source | `debugLabel` |
+| ----------------------------- | ------------------------------------------ |
+| a scope element, any family | `CounterScope(#4e0b7)` or `CounterScope(cart)` |
+| the container of dependencies | `AppDependencies(#25f53)` |
+| a single dependency | its declared name; `[group]` if the group is anonymous |
+
+A `tag` is therefore the cheapest way to tell two scopes of the same type apart
+in the output — and the only way to get a label that is the same on every run,
+since the short hash is not.
+
+`ScopeObservable` is deliberately not implemented by `ScopeDependencies` or
+`ScopeDependency`: those are yours to implement, and a new required member on
+them would break the code that already does. Only the classes of the package
+produce events, so only they carry the marker.
+
+An observer that wants one kind of source narrows with a pattern rather than a
+cast:
+
+```dart
+final class ScopeAnalytics extends ScopeObserver {
+  const ScopeAnalytics();
+
+  @override
+  void onReady(ScopeObservable target) {
+    if (target case ScopeInheritedElement(:final widget)) {
+      analytics.logEvent('scope_ready', {'type': '${widget.runtimeType}'});
+    }
+  }
+}
+```
+
+## ScopePrintObserver
+
+The observer that comes with the package writes a line per event:
+
+```dart
+ScopeConfig.observer = const ScopePrintObserver();
+```
+
+```text
+scopo | CounterScope(#4e0b7) | initialize…
+scopo | AppDependencies(#25f53) | progress: prefs (1/2)
+scopo | CounterScope(#4e0b7) | initialized
+scopo | CounterScope(#4e0b7) | initialization failed: Exception: no network
+```
+
+The shape is `scopo | <label> | <what happened>`. A failure adds `: <error>`,
+and the stack trace on a line of its own when the event carries one.
+
+The phase of a failure is spelled out as English rather than as the name of the
+`ScopePhase` value: `initialization failed`, `initialization cancellation
+failed`, `preparation for disposal failed`, `unmount failed`, `disposal
+failed`, and — the one that does not fit that shape — `an abandoned wait ended
+in a failure`.
+
+Two parameters, both optional:
+
+```dart
+ScopeConfig.observer = ScopePrintObserver(
   output: debugPrint,
+  trace: true,
 );
 ```
 
-`ScopeLogFormatter` is the `ScopeLogPublisher` built from two functions:
-`format` turns a `ScopeLog` into something (usually a `String`) and `output`
-receives the result. Assigning `ScopeConfig.logger.publisher` instead of
-`ScopeConfig.logger[level].publisher` replaces the publisher of all levels at
-once. By default every level formats with `ScopeLogger.defaultFormat` and
-prints with `print`.
+`output` is where a line goes; `print` by default. `trace` decides whether
+`onTrace` is printed at all, and is `false` by default — which is the whole of
+what a level threshold used to do here.
 
-A `ScopeLog` carries the `timestamp`, the `path` of the logger that produced it,
-the `message`, the numeric `level` with its `levelName` and `shortLevelName`,
-and the optional `error` and `stackTrace`. `ScopeLogger.defaultFormat` lays them
-out like this:
+The constructor is `const`, and the observer above is not: `debugPrint` is a
+variable Flutter lets you replace, so it is not a constant. `const` works with
+the default `output` and with a function of your own that is one.
 
-```text
-[d] scopo | TestDependencies(#25f53) | progress: dep1 (1/10)
-[i] scopo | CounterScope(#4e0b7) | initialized
-[e] scopo | CounterScope(#4e0b7) | initialization failed: Exception: no network
-```
+## When the observer itself fails
 
-The path starts with the name of the root logger (`scopo`) and gains a segment
-per nested logger — for a scope, the widget type with its short hash, or with
-its `tag` when one is given. The segments are joined with
-`ScopeLogger.pathSeparator` (` | ` by default; assign it on `ScopeConfig.logger`
-and the sub-loggers created afterwards inherit it). The message is followed by
-`: <error>` when the event carries one, and by the stack trace on a line of its
-own when it carries a non-empty one.
+The observer is your code, and the package calls it from a build, from an
+initialization and from a teardown. A hook that threw out of one of those would
+take the scope with it: a scope that never built its ready branch, or a
+teardown that stopped halfway with a `scopeKey` still held.
 
-`ScopeLogCallback` is the signature of the four logging methods of `ScopeLogger` (`v`,
-`d`, `i`, `e`): a message plus an optional `error` and `stackTrace`. The message
-is an `Object?`, and a callback passed as the message is only invoked when the
-level is enabled — which is why the calls inside the package look like
-`_log.d(() => 'progress: $path')`.
+So every call goes through a guard. A hook that throws is reported through
+`FlutterError.reportError` with `library: 'scopo'` — a red screen in debug,
+`FlutterError.onError` in release — and whatever was reporting the event goes
+on. Nothing is swallowed, and nothing is retried.
 
-`ScopeLevelLogger` is the object behind `ScopeConfig.logger[level]`: it holds
-that level's `name`, `shortName`, and `publisher`.
-
-### Filtering and rewriting
-
-A transformer runs on every log of every level just before it is published.
-Returning `null` drops the log, which is how noisy paths are filtered out
-without turning the level off:
-
-```dart
-ScopeConfig.logger.transformer = (log) =>
-    log.path.contains('AnimationScope') ? null : log;
-```
-
-Its signature is `ScopeLogTransformer`. Sub-loggers inherit the transformer the
-same way they inherit `level` and publishers, so assigning one on
-`ScopeConfig.logger` covers the whole package. A transformer that throws drops
-the log rather than publishing it untransformed, and the failure goes where the
-next section sends it.
-
-### When the logging itself fails
-
-The publisher and the transformer are yours, and a throwing one used to come
-back out of the logging call. Inside this package that call sits in a build, in
-an initialization or in a teardown, so a logger that failed took the scope with
-it: a scope that never built its ready branch, or a teardown that stopped
-halfway with a `scopeKey` still held.
-
-The package therefore ships a handler on its logger. A failure of the logging
-path — a throwing publisher, a throwing transformer, a publisher that logs
-through the level it publishes for — is reported through
-`FlutterError.reportError` with `library: 'scopo'`, which is a red screen in
-debug and `FlutterError.onError` in release. Nothing is swallowed, and the path
-that was writing the log line goes on.
-
-```dart
-// Your own handler replaces the package's:
-ScopeConfig.logger.onError = (error, stackTrace) => crashlytics.record(error);
-
-// And this brings back what a throwing publisher did before -- come out of
-// the logging call, into whatever was logging:
-ScopeConfig.logger.onError = null;
-```
-
-`ScopeConfig.reset()` leaves this alone, as it leaves the rest of the logger
-alone.
-
-### Per-level colors
-
-The pattern used by both example applications — one ANSI printer per level:
-
-```dart
-import 'dart:io';
-
-import 'package:ansi_escape_codes/ansi_escape_codes.dart' as ansi;
-import 'package:scopo/scopo.dart';
-
-void setLogPrinter(int level, ansi.Color foreground) {
-  final printer = ansi.Printer(
-    ansiCodesEnabled: !Platform.isIOS,
-    defaultStyle: ansi.Style(foreground: foreground),
-  );
-
-  ScopeConfig.logger[level].publisher = ScopeLogFormatter(
-    format: ScopeLogger.defaultFormat,
-    output: printer.print,
-  );
-}
-
-void main() {
-  ScopeConfig.logger.level = ScopeLogLevel.info;
-
-  setLogPrinter(ScopeLogLevel.verbose, ansi.Color256.gray7);
-  setLogPrinter(ScopeLogLevel.debug, ansi.Color256.gray12);
-  setLogPrinter(ScopeLogLevel.info, ansi.Color256.rgb345);
-  setLogPrinter(ScopeLogLevel.error, ansi.Color256.rgb400);
-
-  runApp(const App());
-}
-```
-
-A publisher does not have to format anything: any `ScopeLogPublisher` will do,
-which is the way to collect the events into a list and assert on them.
+The same guard refuses re-entry. An observer that produces a scope event while
+it is being notified — one that mounts a scope from inside a hook, say — would
+otherwise recurse without end; the second notification is refused and reported
+once, and the first one runs to its end.
 
 ## Timeouts
 
@@ -241,32 +313,103 @@ void main() {
 ```
 
 `setUp` works as well, and covers a test that failed before its own teardown
-ran. The logger is left alone: it is an object with publishers and a
-transformer of its own rather than a switch, and the level it was given is
-usually the whole point of the run it was given for.
+ran. The observer is left alone: it is an object rather than a switch, and it is
+usually the whole point of the run it was assigned for. A suite that wants it
+gone puts it back itself — `ScopeConfig.observer = null`.
 
 ## In tests
 
-The whole setup for a test suite is the threshold plus a publisher pointing at
-wherever the test output goes:
+An observer that records instead of printing turns the lifecycle into a value a
+test can assert on. Compare the whole list at once: that catches a missing event
+and one too many alike, which a `verify` per event does not.
 
 ```dart
-void logInit() {
-  ScopeConfig.logger.level = ScopeLogLevel.debug;
-  ScopeConfig.logger.publisher = const ScopeLogFormatter(
-    format: ScopeLogger.defaultFormat,
-    output: print,
-  );
+final class RecordingObserver extends ScopeObserver {
+  final events = <String>[];
+
+  @override
+  void onInit(ScopeObservable target) =>
+      events.add('init ${target.debugLabel}');
+
+  @override
+  void onReady(ScopeObservable target) =>
+      events.add('ready ${target.debugLabel}');
+
+  @override
+  void onDisposed(ScopeObservable target) =>
+      events.add('disposed ${target.debugLabel}');
+}
+
+void main() {
+  late RecordingObserver observer;
+
+  setUp(() {
+    observer = RecordingObserver();
+    ScopeConfig.observer = observer;
+    ScopeConfig.pauseAfterInitializationEnabled = false;
+  });
+
+  tearDown(() {
+    ScopeConfig.observer = null;
+    ScopeConfig.reset();
+  });
+
+  testWidgets('the scope initializes once and is disposed of once',
+      (tester) async {
+    await tester.pumpWidget(const CounterScope(tag: 'counter'));
+    await tester.pumpAndSettle();
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpAndSettle();
+
+    expect(observer.events, [
+      'init CounterScope(counter)',
+      'ready CounterScope(counter)',
+      'disposed CounterScope(counter)',
+    ]);
+  });
 }
 ```
 
-Keep it opt-in: at `debug` a single scope produces a dozen lines, which buries
-the reason a test failed. `ScopeLogLevel.off` between investigations, and
-`ScopeConfig.pauseAfterInitializationEnabled = false` so that the pauses do not
-have to be pumped through.
+Two things that expectation depends on. The scope is tagged, because an untagged
+one labels itself with a short hash that is different on every run — tag it, or
+strip the `(…)` off the label before comparing. And the observer is cleared in
+the teardown, because `ScopeConfig.reset()` does not clear it: an observer left
+behind goes on recording into the next test's list.
+
+Keep `trace` out of it unless the trace is what the test is about. At that level
+a single scope produces a dozen events, and an expectation that lists them all
+fails on every unrelated change to the coordination.
 
 See
 [example/minimal](https://github.com/vi-k/scopo/blob/main/example/minimal/lib/main.dart)
 for the setup of a real application, and
 [example/scopo_demo](https://github.com/vi-k/scopo/tree/main/example/scopo_demo)
-for a demo that logs every lifecycle call of every scope family side by side.
+for a demo that shows every lifecycle call of every scope family side by side.
+
+## Coming from 0.9.x
+
+`ScopeConfig.logger` is gone, and with it the nine public names built on
+`logger_builder`: `ScopeLogger`, `ScopeLevelLogger`, `ScopeLog`,
+`ScopeLogPublisher`, `ScopeLogFormatter`, `ScopeLogTransformer`,
+`ScopeLogLevel` and `ScopeLogCallback`. The package has no external
+dependencies now.
+
+What each of them was for:
+
+- `ScopeConfig.logger.level = ScopeLogLevel.info` →
+  `ScopeConfig.observer = const ScopePrintObserver()`;
+- `ScopeLogLevel.debug` → `const ScopePrintObserver(trace: true)`;
+- `ScopeLogLevel.off` → `ScopeConfig.observer = null`;
+- a publisher that formatted and printed → the `output` of
+  `ScopePrintObserver`, or a `ScopeObserver` of your own;
+- a publisher that collected the logs into a list to assert on → an observer
+  that records, as under "In tests" above;
+- a transformer that dropped the logs of one path → an `if` inside the hook,
+  on `target.debugLabel` or on the type of `target`;
+- routing failures onward by parsing `ScopeLog.message` → `onError`, with the
+  error, the stack trace and a `ScopePhase` already separated.
+
+There is no threshold any more, and nothing that takes its place as one value.
+Its three jobs are split: `ScopeConfig.observer = null` turns everything off,
+an empty hook body turns off one kind of event, and `trace` turns off the
+noisiest kind.

@@ -36,7 +36,7 @@ lib/src/scope/e_async_scope/   + асинхронный жизненный ци�
 lib/src/scope/f_async_data_scope/ + одно значение данных
 lib/src/scope/g_lite_scope/    + State, close(), экран закрытия
 lib/src/scope/h_scope/         + контейнер зависимостей
-lib/src/environment/           ScopeConfig и ScopeLogger
+lib/src/environment/           ScopeConfig и ScopeObserver
 lib/src/utils/                 самостоятельные утилиты, часть публична
 ```
 
@@ -280,13 +280,13 @@ debug-сборке об этом сообщают подробно. Правил
 наверх собирает путь (`group/subgroup/dep`); анонимная группа (`name == ''`) в
 путь не добавляется.
 
-## 9. Конфигурация и логирование
+## 9. Конфигурация и оповещения
 
 `ScopeConfig` (в `lib/src/environment/`) — статические настройки:
 
 | Поле | Смысл |
 | --- | --- |
-| `logger` | `ScopeLogger`, по умолчанию `ScopeLogLevel.off` |
+| `observer` | `ScopeObserver?`, по умолчанию `null` — пакет молчит |
 | `pauseAfterInitializationEnabled` | Глобальный выключатель искусственных пауз `pauseAfterInitialization` (нужен в тестах) |
 | `defaultScopeKeysTimeout` | Ожидание освобождения `scopeKey`, по умолчанию 3 с |
 | `defaultWaitForChildrenTimeout` | Ожидание утилизации дочерних скоупов, по умолчанию 3 с |
@@ -294,10 +294,26 @@ debug-сборке об этом сообщают подробно. Правил
 У обоих таймаутов `null` — ожидание без ограничения, `Duration.zero` —
 истечение немедленно.
 
-`ScopeLogger` построен на внешнем пакете `logger_builder` (свой пакет автора,
-локально `~/development/my/logger_builder`): четыре уровня — `verbose`,
-`debug`, `info`, `error`, — и у каждого свой `publisher`, так что формат и
-вывод заменяются по уровням.
+`ScopeObserver` (`lib/src/environment/scope_observer.dart`) — девять пустых
+хуков: `onInit`, `onProgress`, `onReady`, `onCancelled`, `onDispose`,
+`onDisposed`, `onError` (с `ScopePhase` из шести значений), `onTimeout`,
+`onTrace`. Первый аргумент каждого — `ScopeObservable`, маркер с `debugLabel`;
+его реализуют элементы скоупов всех семейств, контейнер автоматических
+зависимостей и одна зависимость. Внешних зависимостей у пакета нет: до 0.10.0
+на этом месте стоял `ScopeLogger` поверх `logger_builder`, и он убран целиком.
+
+Зовут хуки через `notifyObserver` из `scope_config.dart` — единственную точку,
+не экспортируемую из `scopo.dart`. Она держит `try`/`catch` (упавший хук уходит
+в `FlutterError.reportError` с `library: 'scopo'`, вызывающий продолжается) и
+флаг `_notifying`, отбивающий рекурсию, когда наблюдатель сам порождает событие
+из хука. `ScopePrintObserver` — готовый наблюдатель из комплекта, печатает
+`scopo | <метка> | <что случилось>`; `trace: false` по умолчанию.
+
+Семейство без своей фазы инициализации (`ScopeWidget`, `ScopeModel`,
+`ScopeNotifier`, `AsyncScopeCoordinator`) шлёт голую пару `onInit`/`onDisposed`
+из `ScopeWidgetElementBase`; семейство со своей фазой (всё на
+`AsyncScopeElementBase`) шлёт эту фазу вместо пары. Разводит их переключатель
+`ScopeWidgetElementBase.reportsOwnLifecycle`.
 
 ## 10. Утилиты (`lib/src/utils/`)
 
@@ -327,8 +343,8 @@ debug-сборке об этом сообщают подробно. Правил
 | `test/async_scope_test.dart` | Пост-фрейм-колбэки, провал инициализации, ошибка после `Ready` |
 | `test/lite_scope_test.dart` | `close()` во всех вариантах, гонка инициализации с утилизацией, `ScreenshotReplacer` |
 | `test/scope_auto_dependencies_test.dart` | Дерево зависимостей: пути, группы, повторная инициализация, сохранение ошибок |
-| `test/async_scope_state_test.dart`, `test/scope_logger_test.dart`, `test/compare_utils_test.dart` | Точечные проверки |
-| `test/utils/` | Настройка логирования и обёртка `fake_async` |
+| `test/async_scope_state_test.dart`, `test/scope_observer_test.dart`, `test/compare_utils_test.dart` | Точечные проверки |
+| `test/utils/` | Накопитель событий наблюдателя и обёртка `fake_async` |
 
 Слои `a_base`…`g_lite_scope` собственных наборов тестов не имеют — покрыты
 только регрессионными сценариями 0.10.0. Актуальные пробелы перечислены в

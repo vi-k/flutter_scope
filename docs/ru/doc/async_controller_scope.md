@@ -1,6 +1,6 @@
 # AsyncControllerScope
 
-> Перевод `doc/async_controller_scope.md` (blob `2b94d8d583929116a97b5ff04f314d915be5bd49`).
+> Перевод `doc/async_controller_scope.md` (blob `db0745aad7456ca38bb3214585a3969f4c55e5f3`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 Скоуп, всё содержимое которого — контроллер: объект со своим жизненным циклом,
@@ -173,7 +173,7 @@ final position = AsyncControllerScopeBase.select<Player, PlayerController, int>(
 **Ничего не делает с провалом инициализации** сверх того, что делает любое
 семейство: ошибка приезжает в `buildOnError`, который обязателен именно затем,
 чтобы решение принимали, а не получали по умолчанию. Оттуда её и направляют
-дальше — или включают логгер пакета, тема `debug` описывает и то и другое.
+дальше — или ставят `ScopeObserver`, тема `debug` описывает и то и другое.
 
 ## Куда дальше
 
@@ -182,4 +182,4 @@ final position = AsyncControllerScopeBase.select<Player, PlayerController, int>(
 | `AsyncDataScope` | машинерия под низом: состояния, порядок разбора, `scopeKey` |
 | `AsyncScope` | тот же жизненный цикл вовсе без значения |
 | `ScopeNotifier` | как сделать наблюдаемым сам контроллер |
-| `debug` | четыре таймаута и журнал |
+| `debug` | четыре таймаута и наблюдатель |

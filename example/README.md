@@ -14,41 +14,14 @@ handles loading states and errors gracefully. Full source on GitHub:
 [minimal](https://github.com/vi-k/scopo/tree/main/example/minimal).
 
 ```dart
-import 'dart:io';
-
-import 'package:ansi_escape_codes/ansi_escape_codes.dart' as ansi;
 import 'package:flutter/material.dart';
 import 'package:scopo/scopo.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
-  ScopeConfig.logger.level = ScopeLogLevel.info;
+  ScopeConfig.observer = const ScopePrintObserver();
 
-  void setLogPrinter(
-    int level,
-    ansi.Color foreground, {
-    ansi.Color? background,
-  }) {
-    final printer = ansi.Printer(
-      ansiCodesEnabled: !Platform.isIOS,
-      defaultStyle: ansi.Style(
-        foreground: foreground,
-        background: background,
-      ),
-    );
-
-    ScopeConfig.logger[level].publisher = ScopeLogFormatter(
-      format: ScopeLogger.defaultFormat,
-      output: printer.print,
-    );
-  }
-
-  setLogPrinter(ScopeLogLevel.verbose, ansi.Color256.gray7);
-  setLogPrinter(ScopeLogLevel.debug, ansi.Color256.gray12);
-  setLogPrinter(ScopeLogLevel.info, ansi.Color256.rgb345);
-  setLogPrinter(ScopeLogLevel.error, ansi.Color256.rgb400);
-
-  runApp(App(title: 'scopo minimal demo'));
+  runApp(const App(title: 'scopo minimal demo'));
 }
 
 /// [App] scope.
@@ -217,7 +190,7 @@ final class AppState extends ScopeState<App, AppDependencies, AppState> {
 
   @override
   Widget build(BuildContext context) {
-    return HomeScreen();
+    return const HomeScreen();
   }
 }
 
@@ -281,7 +254,7 @@ class HomeScreen extends StatelessWidget {
           // Access [AppState] and call [AppState.increment].
           App.of(context).increment();
         },
-        child: Icon(Icons.add),
+        child: const Icon(Icons.add),
       ),
     );
   }

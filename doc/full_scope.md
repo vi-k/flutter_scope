@@ -333,8 +333,8 @@ sequential('', [
 
 the paths are `dep1`, `concurrent1/dep2` and `concurrent1/sequential1/dep3`.
 The same strings appear in three places: in `ScopeAutoDependenciesProgress.path`,
-in the `debug` log of the initialization and of the disposal, and in
-`ScopeDependencyException.name`.
+in what the container reports to `ScopeConfig.observer` while it initializes and
+while it disposes, and in `ScopeDependencyException.name`.
 
 `ScopeDependencyInfo.path` is the one that is not the whole path but the prefix
 of it. The walk it comes from visits the groups as well as the leaves, so each
