@@ -693,7 +693,7 @@ CI отвечает через несколько минут и на чисто�
 
 | проверка | результат |
 | --- | --- |
-| `fvm flutter test` | **384 теста, все зелёные, leak-трекер включён** |
+| `fvm flutter test` | **388 тестов, все зелёные, leak-трекер включён** |
 | `fvm flutter analyze` (корень) | `No issues found!` |
 | `analyze` во всех трёх `example/*` | `No issues found!` в каждом |
 | `fvm dart format --set-exit-if-changed lib test` | 97 файлов, 0 changed |
@@ -847,7 +847,16 @@ CI отвечает через несколько минут и на чисто�
   подписывается `_performAsyncInit`. Ветку ошибки поднимать `async*`-потоком,
   который бросает после первого события; `Stream.error` — только внутри
   `tester.runAsync`. Разбор:
-  `docs/records/2026-08-12[1]-stream-error-under-test-binding-report.md`.
+  `docs/records/2026-08-12[1]-stream-error-under-test-binding-report.md`;
+- **два прогона `fvm flutter test` зависли без вывода при работе над
+  `ScopeConfig.observer`.** План `2026-08-19[2]`, задача 1: наблюдатель, чей
+  `onInit` реентерно зовёт `tester.pumpWidget` из уже строящегося дерева, и
+  отдельная проба, подменявшая `FlutterError.reportError` на `print` внутри
+  `notifyObserver`. Оба раза `flutter test` не падал и ничего не печатал —
+  прогон снимали руками (`TaskStop`). Причина не установлена; в обоих сценариях
+  тест держал свою подмену `FlutterError.onError`, как и в грабле про волну 13
+  выше — тот ли это механизм, не проверено. Закоммиченный код и тесты задачи 1
+  не висят; разбор — `task-1-report.md` в каталоге плана.
 
 ## Известные проблемы
 
