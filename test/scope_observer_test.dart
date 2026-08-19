@@ -70,12 +70,46 @@ void main() {
     // `ScopeWidgetBase` -- `_PlainScope`'s family -- goes no further than
     // `ScopeWidgetElementBase` itself: it runs no initialization of its own,
     // so `reportsOwnLifecycle` keeps its default `false` and this is the bare
-    // pair from `ScopeWidgetElementBase`, nothing more.
+    // reporting `ScopeWidgetElementBase` gives every such family: `onInit`,
+    // then `onDispose` and `onDisposed` as a pair around the teardown.
     expect(observer.events, ['init _PlainScope']);
 
     await tester.pumpWidget(const SizedBox());
 
-    expect(observer.events, ['init _PlainScope', 'disposed _PlainScope']);
+    expect(observer.events, [
+      'init _PlainScope',
+      'dispose _PlainScope',
+      'disposed _PlainScope',
+    ]);
+  });
+
+  testWidgets(
+      'a scope whose init() throws reports neither half of the structural '
+      'pair', (tester) async {
+    await tester.pumpWidget(
+      const Directionality(
+        textDirection: TextDirection.ltr,
+        child: _FailingInitScope(),
+      ),
+    );
+
+    expect(tester.takeException(), isA<StateError>());
+
+    // `init()` threw before `_initPhase` ever reached `done`, so `build()`
+    // never sent `onInit` -- and the teardown pair belongs to a scope that
+    // announced one: `unmountScope()`/`dispose()` still run internally (the
+    // "symmetry, not success" comment on `unmount()`), but nothing is
+    // reported for a teardown nobody was told had opened.
+    expect(observer.events, isEmpty);
+
+    await tester.pumpWidget(const SizedBox());
+
+    expect(
+      observer.events,
+      isEmpty,
+      reason: 'no onInit was ever sent, so the teardown reports no '
+          'onDispose/onDisposed either',
+    );
   });
 
   testWidgets('a throwing observer does not reach the scope', (tester) async {
@@ -284,7 +318,8 @@ void main() {
       );
       await settle(tester, until: () => done);
 
-      expect(observer.events, [
+      final eventsAfterClose = List.of(observer.events);
+      expect(eventsAfterClose, [
         'init _ClosingScope',
         'ready _ClosingScope',
         'error _ClosingScope unmount Bad state: onUnmount failed',
@@ -297,10 +332,22 @@ void main() {
         reason: 'the caller of close() still hears the first failure',
       );
 
-      // Asserted before the tree comes down: a closed scope stays mounted,
-      // and taking it off the tree afterwards runs a second teardown over it.
+      // A closed scope stays mounted, and taking it off the tree afterwards
+      // does *not* run a second teardown over it:
+      // `LiteScopeElementBase._performAsyncDispose()` returns the
+      // `_closeCompleter.future` that `close()` above already completed,
+      // rather than running its body again, so the framework's own
+      // `unmount()` reports nothing new. Now that the pair is a counting
+      // contract, that is asserted rather than left to the comment above.
       await tester.pumpWidget(const SizedBox.shrink());
       await settle(tester, until: () => false);
+
+      expect(
+        observer.events,
+        eventsAfterClose,
+        reason: 'no second onDispose/onDisposed for a teardown that already '
+            'ran',
+      );
     },
   );
 
@@ -764,6 +811,30 @@ final class _PlainScope extends ScopeWidgetBase<_PlainScope> {
 
   @override
   Widget build(BuildContext context) => child;
+}
+
+/// A scope whose `init()` throws before it can announce `onInit`.
+final class _FailingInitScope
+    extends ScopeWidgetCore<_FailingInitScope, _FailingInitScopeElement> {
+  const _FailingInitScope();
+
+  @override
+  _FailingInitScopeElement createScopeElement() =>
+      _FailingInitScopeElement(this);
+}
+
+final class _FailingInitScopeElement extends ScopeWidgetElementBase<
+    _FailingInitScope, _FailingInitScopeElement> {
+  _FailingInitScopeElement(super.widget);
+
+  @override
+  void init() {
+    super.init();
+    throw StateError('init failed');
+  }
+
+  @override
+  Widget buildChild() => const SizedBox.shrink();
 }
 
 /// Fails every hook it is asked for.

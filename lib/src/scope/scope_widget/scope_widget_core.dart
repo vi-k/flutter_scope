@@ -198,6 +198,16 @@ abstract base class ScopeWidgetElementBase<W extends ScopeWidgetCore<W, E>,
 
   @override
   void unmount() {
+    // The observer's pair belongs to a scope that announced `onInit`: an
+    // `init()` that threw, or one that never ran, reports neither half of
+    // it, even though the teardown below still runs for it -- see the next
+    // comment.
+    final reportsTeardown = !reportsOwnLifecycle && _didInit;
+
+    if (reportsTeardown) {
+      notifyObserver((observer) => observer.onDispose(this));
+    }
+
     // Symmetry, not success: an attempt that failed halfway may still have
     // taken something, and this is the only place left to give it back. The
     // families make their own disposers tolerate that partial state.
@@ -210,7 +220,7 @@ abstract base class ScopeWidgetElementBase<W extends ScopeWidgetCore<W, E>,
         }
       }
     } finally {
-      if (!reportsOwnLifecycle) {
+      if (reportsTeardown) {
         notifyObserver((observer) => observer.onDisposed(this));
       }
       super.unmount();

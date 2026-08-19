@@ -322,7 +322,13 @@
   span tracker — got it wrong either way. `onCancelled` is documented as what
   it is: a scope cancelled while still queued for its `scopeKey` sends it
   without any `onInit` before it, because it never started an initialization
-  of its own.
+  of its own. The structural pair joins the same guarantee: a family with no
+  initialization phase of its own — `ScopeWidget`, `ScopeModel`,
+  `ScopeNotifier`, `AsyncScopeCoordinator` — used to send `onDisposed` alone,
+  with no `onDispose` before it. It now sends both, and only for an element
+  whose `init()` actually succeeded: one that threw, or never ran, reports
+  neither half — the opposite of the phase-reporting families above, where the
+  pair can still close a teardown that opened with no `onInit` at all.
 * Fix an anonymous dependency group — the common shape for the root of a tree,
   `sequential('', […])` or `concurrent('', […])` — reporting through
   `ScopeConfig.observer` under an empty label instead of `[group]`.
