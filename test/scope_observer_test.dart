@@ -292,6 +292,23 @@ void main() {
       expect(tester.takeException(), isA<TimeoutException>());
     },
   );
+
+  test('a dependency container reports its lifecycle through the observer',
+      () async {
+    final dependencies = _TestDependencies();
+
+    await dependencies.init(null).drain<void>();
+    await dependencies.dispose();
+
+    expect(observer.events, [
+      'init _TestDependencies',
+      'progress _TestDependencies dep1 (1/2)',
+      'progress _TestDependencies dep2 (2/2)',
+      'ready _TestDependencies',
+      'dispose _TestDependencies',
+      'disposed _TestDependencies',
+    ]);
+  });
 }
 
 /// A minimal [LiteScope]: nothing to initialize asynchronously, and [child]
@@ -371,4 +388,16 @@ final class _AsyncScopeElement
 
   @override
   Widget buildOnState(AsyncScopeState state) => const SizedBox.shrink();
+}
+
+/// A container with two dependencies, driven directly: its `C` is `void`, so
+/// nothing above it -- a widget included -- is needed to call
+/// [ScopeAutoDependencies.init].
+final class _TestDependencies
+    extends ScopeAutoDependencies<_TestDependencies, void> {
+  @override
+  ScopeDependency buildDependencies(void context) => sequential('', [
+        dep('dep1', (handle) {}),
+        dep('dep2', (handle) {}),
+      ]);
 }

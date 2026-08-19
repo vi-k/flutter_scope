@@ -285,6 +285,23 @@
   exact stream `AsyncScope`'s does. The coordination below the lifecycle — the
   `scopeKey` queue, cancelling an initialization, waiting for children —
   reports through `onTrace`.
+* The dependency container and a single dependency now report through
+  `ScopeConfig.observer` too, the same eleven points that used to log:
+  `ScopeAutoDependencies` reports `onInit`, `onProgress` (a
+  `ScopeAutoDependenciesProgress` while it initializes, the bare path of each
+  step while it disposes), `onReady` or `onCancelled`, `onDispose`,
+  `onDisposed`, and `onError` for each phase that can fail here — `onUnmount`,
+  an abandoned wait for its own disposal, and disposal itself — plus
+  `onTimeout` for that same abandoned wait giving up. Its `debugLabel` is
+  `T(#hash)`, the shape its `logger` name already had; a single dependency's is
+  its own `name`. The two diagnostic lines inside `ScopeDependencyMixin` —
+  handling an error, handling one after a cancellation — report through
+  `onTrace` instead, the error folded into the message rather than kept as a
+  separate field. `runStreamGuarded`, which every dependency's `init()` and
+  `dispose()` run through, has no `ScopeObservable` of its own — it is a
+  function, not an object — so it gained an optional `observable` parameter:
+  its two callers here pass their own, and its seven internal steps report
+  through `onTrace` under that label; left unset, a run traces nothing.
 * The bookkeeping that decides which build a dependent's selectors belong to asks
   for a frame when nothing else will bring one. The reset runs in a post-frame
   callback, and a build is not always inside a frame — `runApp` builds the first
