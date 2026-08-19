@@ -9,6 +9,7 @@ import 'package:flutter/foundation.dart';
 import 'package:logger_builder/logger_builder.dart';
 
 part 'scope_logger.dart';
+part 'scope_observer.dart';
 
 /// {@category debug}
 abstract final class ScopeConfig {
@@ -51,6 +52,17 @@ abstract final class ScopeConfig {
           context: ErrorDescription('while publishing a log line'),
         ),
       );
+
+  /// Where the package reports its lifecycle.
+  ///
+  /// `null` by default: the package says nothing until an observer is
+  /// assigned. [reset] leaves it alone, as it leaves the logger alone: it is
+  /// an object rather than a switch, and it is usually the whole point of the
+  /// run it was assigned for.
+  static ScopeObserver? observer;
+
+  /// Whether a notification is already running.
+  static bool _notifying = false;
 
   /// Whether a `pauseAfterInitialization` is honoured at all.
   ///
@@ -120,5 +132,54 @@ abstract final class ScopeConfig {
     defaultWaitForChildrenTimeout = _timeout;
     defaultDisposeScopeTimeout = _timeout;
     defaultInitCancellationTimeout = _timeout;
+  }
+}
+
+/// Calls [call] on [ScopeConfig.observer], guarded.
+///
+/// Not exported: the package notifies, an application observes.
+///
+/// The observer is consumer code called from a build, an initialization or a
+/// teardown — the same three places a throwing logger used to take a scope
+/// down from. A failure is reported through [FlutterError.reportError] and the
+/// caller goes on. An observer that produces an event of its own — one that
+/// builds a scope from a hook — would otherwise recurse without end, so the
+/// second entry is refused and reported once.
+void notifyObserver(void Function(ScopeObserver observer) call) {
+  final observer = ScopeConfig.observer;
+  if (observer == null) {
+    return;
+  }
+
+  if (ScopeConfig._notifying) {
+    FlutterError.reportError(
+      FlutterErrorDetails(
+        exception: StateError(
+          'A scope observer produced a scope event while it was being '
+          'notified. The second notification is refused: it would not end.',
+        ),
+        library: 'scopo',
+        context: ErrorDescription('while notifying a scope observer'),
+      ),
+    );
+
+    return;
+  }
+
+  ScopeConfig._notifying = true;
+  try {
+    call(observer);
+    // ignore: avoid_catching_errors
+  } on Object catch (error, stackTrace) {
+    FlutterError.reportError(
+      FlutterErrorDetails(
+        exception: error,
+        stack: stackTrace,
+        library: 'scopo',
+        context: ErrorDescription('while notifying a scope observer'),
+      ),
+    );
+  } finally {
+    ScopeConfig._notifying = false;
   }
 }

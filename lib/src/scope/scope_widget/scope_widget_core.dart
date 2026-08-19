@@ -140,10 +140,13 @@ abstract base class ScopeWidgetCore<W extends ScopeWidgetCore<W, E>,
 /// {@category ScopeWidget}
 abstract base class ScopeWidgetElementBase<W extends ScopeWidgetCore<W, E>,
         E extends ScopeWidgetElementBase<W, E>> extends InheritedElement
-    implements ScopeInheritedElement<W> {
+    implements ScopeInheritedElement<W>, ScopeObservable {
   late final _log = log.withAddedName(
     () => widget.toStringShort(showHashCode: true),
   );
+
+  @override
+  String get debugLabel => widget.toStringShort(showHashCode: true);
 
   /// The dependencies of the element on itself.
   ///
@@ -211,6 +214,7 @@ abstract base class ScopeWidgetElementBase<W extends ScopeWidgetCore<W, E>,
         }
       }
     } finally {
+      notifyObserver((observer) => observer.onDisposed(this));
       super.unmount();
     }
   }
@@ -526,6 +530,7 @@ abstract base class ScopeWidgetElementBase<W extends ScopeWidgetCore<W, E>,
       }
 
       _initPhase = _InitPhase.done;
+      notifyObserver((observer) => observer.onInit(this));
     } else if (_initFailure case (final error, final stackTrace)) {
       // There is no scope to build on. Raising the original failure again --
       // with its own stack trace -- keeps the boundary showing what actually

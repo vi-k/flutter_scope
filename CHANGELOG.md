@@ -262,6 +262,15 @@
   one that was written down: the note said a throwing logger escaped from a
   `Stream.listen(onData:)`, and the measurement said it escaped from every one
   of the package's ninety-odd logging calls.
+* Add `ScopeConfig.observer`: an application assigns a typed `ScopeObserver` to
+  hear about a scope's lifecycle, the first step of replacing
+  `ScopeConfig.logger` with it. Two hooks are wired so far, `onInit` and
+  `onDisposed`, on `ScopeWidgetElementBase` — the ancestor of every scope family
+  — so a family that never reported anything of its own, `LiteScope` included,
+  now reports through the observer the same as the rest. A hook that throws is
+  reported through `FlutterError.reportError` rather than reaching the scope,
+  and a nested notification — an observer producing a scope event of its own
+  from inside a hook — is refused rather than left to recurse.
 * The bookkeeping that decides which build a dependent's selectors belong to asks
   for a frame when nothing else will bring one. The reset runs in a post-frame
   callback, and a build is not always inside a frame — `runApp` builds the first
