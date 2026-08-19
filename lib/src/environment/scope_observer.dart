@@ -144,10 +144,10 @@ final class ScopePrintObserver extends ScopeObserver {
     Object error,
     StackTrace? stackTrace,
   ) {
-    final trace = stackTrace == null || stackTrace == StackTrace.empty
+    final suffix = stackTrace == null || stackTrace == StackTrace.empty
         ? ''
         : '\n$stackTrace';
-    _write(target, '${phase.name} failed: $error$trace');
+    _write(target, '${_failureMessage(phase)}: $error$suffix');
   }
 
   @override
@@ -161,3 +161,29 @@ final class ScopePrintObserver extends ScopeObserver {
     }
   }
 }
+
+/// The message [ScopePrintObserver.onError] writes for [phase], without the
+/// error or stack trace that follow it.
+///
+/// This is exhaustive on purpose, with no `default`: [ScopePhase] is defined
+/// in this same file, so a phase added later fails this switch at compile
+/// time instead of falling through to a name nobody wrote a phrase for. The
+/// advice on [ScopePhase] to give an outside `switch` a `default` branch is
+/// for callers who cannot make that promise about a release they have not
+/// seen yet; this one can.
+///
+/// Five of the six read as `'<phrase> failed'`; [ScopePhase.abandonedWait]
+/// does not, because the deleted logger this mirrors named what the wait was
+/// for (`'an abandoned wait for $what ended in a failure'`), and the
+/// observer has no `$what` to put there. Rather than force that phrase into
+/// the `'<phrase> failed'` shape it does not fit, it stands as the whole
+/// message.
+String _failureMessage(ScopePhase phase) => switch (phase) {
+      ScopePhase.initialization => 'initialization failed',
+      ScopePhase.initializationCancellation =>
+        'initialization cancellation failed',
+      ScopePhase.preparationForDisposal => 'preparation for disposal failed',
+      ScopePhase.unmount => 'unmount failed',
+      ScopePhase.disposal => 'disposal failed',
+      ScopePhase.abandonedWait => 'an abandoned wait ended in a failure',
+    };

@@ -309,10 +309,16 @@
   `ScopePrintObserver`: `ScopeConfig.observer = const ScopePrintObserver();`
   prints one line per event — `scopo | <label> | <what happened>`, a failure's
   error and stack trace included — the same shape `ScopeLogger.defaultFormat`
-  wrote, minus the level and the logger path. `trace: true` also prints what
-  `onTrace` carries, off by default: that is where the coordination below the
-  lifecycle reports, and a scope produces a dozen such lines where it produces
-  one of the rest.
+  wrote, minus the level and the logger path. A failure line spells out its
+  phase as English instead of the bare `ScopePhase` name — `preparation for
+  disposal failed`, not `preparationForDisposal failed` — the same wording
+  `ScopeLogger.defaultFormat` used for the same six phases; the one phrase
+  that does not end in "failed", `an abandoned wait ended in a failure`, is
+  the old logger's `an abandoned wait for $what ended in a failure` with the
+  `$what` left out, since the observer has none to put there. `trace: true`
+  also prints what `onTrace` carries, off by default: that is where the
+  coordination below the lifecycle reports, and a scope produces a dozen such
+  lines where it produces one of the rest.
 * Fix an anonymous dependency group — the common shape for the root of a tree,
   `sequential('', […])` or `concurrent('', […])` — reporting through
   `ScopeConfig.observer` under an empty label instead of `[group]`.

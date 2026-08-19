@@ -392,6 +392,39 @@ void main() {
     expect(lines, [expected]);
   });
 
+  test('the print observer spells out every failed phase in English', () {
+    final lines = <String>[];
+    const scope = _FakeObservable('CounterScope(#4e0b7)');
+    final error = StateError('boom');
+
+    ScopePrintObserver(output: lines.add)
+      ..onError(scope, ScopePhase.initialization, error, null)
+      ..onError(scope, ScopePhase.initializationCancellation, error, null)
+      ..onError(scope, ScopePhase.preparationForDisposal, error, null)
+      ..onError(scope, ScopePhase.unmount, error, null)
+      ..onError(scope, ScopePhase.disposal, error, null)
+      ..onError(scope, ScopePhase.abandonedWait, error, null);
+
+    const cancellationFailed =
+        'scopo | CounterScope(#4e0b7) | initialization cancellation failed: '
+        'Bad state: boom';
+    const preparationFailed =
+        'scopo | CounterScope(#4e0b7) | preparation for disposal failed: '
+        'Bad state: boom';
+    const abandonedWaitFailed =
+        'scopo | CounterScope(#4e0b7) | an abandoned wait ended in a '
+        'failure: Bad state: boom';
+
+    expect(lines, [
+      'scopo | CounterScope(#4e0b7) | initialization failed: Bad state: boom',
+      cancellationFailed,
+      preparationFailed,
+      'scopo | CounterScope(#4e0b7) | unmount failed: Bad state: boom',
+      'scopo | CounterScope(#4e0b7) | disposal failed: Bad state: boom',
+      abandonedWaitFailed,
+    ]);
+  });
+
   test('an anonymous dependency group is not printed with a doubled space', () {
     final lines = <String>[];
     final group = ScopeDependency.sequential('', const []) as ScopeObservable;
