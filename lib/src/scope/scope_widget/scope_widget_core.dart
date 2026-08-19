@@ -140,10 +140,9 @@ abstract base class ScopeWidgetCore<W extends ScopeWidgetCore<W, E>,
 /// {@category ScopeWidget}
 abstract base class ScopeWidgetElementBase<W extends ScopeWidgetCore<W, E>,
         E extends ScopeWidgetElementBase<W, E>> extends InheritedElement
-    implements ScopeInheritedElement<W> {
-  late final _log = log.withAddedName(
-    () => widget.toStringShort(showHashCode: true),
-  );
+    implements ScopeInheritedElement<W>, ScopeObservable {
+  @override
+  String get debugLabel => widget.toStringShort(showHashCode: true);
 
   /// The dependencies of the element on itself.
   ///
@@ -211,9 +210,22 @@ abstract base class ScopeWidgetElementBase<W extends ScopeWidgetCore<W, E>,
         }
       }
     } finally {
+      if (!reportsOwnLifecycle) {
+        notifyObserver((observer) => observer.onDisposed(this));
+      }
       super.unmount();
     }
   }
+
+  /// Whether this element reports its own initialization and teardown.
+  ///
+  /// `false` here: a family with no phase of its own is announced by this
+  /// class, at the two points a bare element has. A family that runs an
+  /// initialization — everything on [AsyncScopeElementBase] — overrides this
+  /// to `true` and reports the phase itself, in more detail than a pair of
+  /// events could carry.
+  @protected
+  bool get reportsOwnLifecycle => false;
 
   /// Runs [onUnmount] once, whichever way out reaches it first.
   ///
@@ -526,6 +538,9 @@ abstract base class ScopeWidgetElementBase<W extends ScopeWidgetCore<W, E>,
       }
 
       _initPhase = _InitPhase.done;
+      if (!reportsOwnLifecycle) {
+        notifyObserver((observer) => observer.onInit(this));
+      }
     } else if (_initFailure case (final error, final stackTrace)) {
       // There is no scope to build on. Raising the original failure again --
       // with its own stack trace -- keeps the boundary showing what actually

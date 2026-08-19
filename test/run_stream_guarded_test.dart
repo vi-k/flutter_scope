@@ -1,36 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:scopo/scopo.dart';
 import 'package:scopo/src/utils/stream/run_stream_guarded.dart';
 
+import 'utils/observer.dart';
+
 void main() {
   group('runStreamGuarded', () {
-    test('does not build a sub-logger for every call', () async {
-      // Warm the one logger the function keeps, so what is counted below is
-      // the steady state rather than the very first call.
-      await runStreamGuarded(Stream<int>.empty, _ignore).drain<Object?>();
-
-      ScopeConfig.logger.pruneSubloggers();
-      final before = ScopeConfig.logger.subLoggersCount;
-
-      // Held on purpose: the root keeps its sub-loggers weakly, and a count
-      // taken over collectable objects would prove nothing.
-      final streams = [
-        for (var i = 0; i < 5; i++)
-          runStreamGuarded(Stream<int>.empty, _ignore, debugName: 'dep$i'),
-      ];
-      for (final stream in streams) {
-        await stream.drain<Object?>();
-      }
-
-      ScopeConfig.logger.pruneSubloggers();
-      expect(
-        ScopeConfig.logger.subLoggersCount,
-        before,
-        reason: 'this runs twice for every dependency of every scope',
-      );
-      expect(streams, hasLength(5));
-    });
-
     // A factory that throws before there is a stream at all has nowhere to
     // raise: the caller is holding a `Stream`, not a future. So the failure
     // is handed back as the stream, and a caller that subscribes hears it
@@ -48,30 +25,71 @@ void main() {
       await expectLater(stream, emitsError(same(failure)));
     });
 
-    test('tells its callers apart in the message', () async {
-      final lines = <String>[];
-      final logger = ScopeConfig.logger;
-      final level = logger.level;
-      final publisher = logger[ScopeLogLevel.verbose].publisher;
+    test(
+        'reports the steps of a cancellation through onTrace, one caller '
+        'told apart from another by debugName', () async {
+      final observer = RecordingObserver(trace: true);
+      ScopeConfig.observer = observer;
+      addTearDown(() => ScopeConfig.observer = null);
 
-      addTearDown(() {
-        logger.level = level;
-        logger[ScopeLogLevel.verbose].publisher = publisher;
-      });
+      final source = StreamController<int>();
+      addTearDown(source.close);
 
-      logger.level = ScopeLogLevel.verbose;
-      logger[ScopeLogLevel.verbose].publisher = ScopeLogFormatter<String>(
-        format: (entry) => entry.message,
-        output: lines.add,
+      final guarded = runStreamGuarded(
+        () => source.stream,
+        _ignore,
+        debugName: 'db',
+        observable: const _FakeObservable(),
       );
 
-      await runStreamGuarded(Stream<int>.empty, _ignore, debugName: 'db')
-          .drain<Object?>();
+      final received = <int>[];
+      final subscription = guarded.listen(received.add);
 
-      expect(lines, isNotEmpty);
-      expect(lines.every((line) => line.contains('(db)')), isTrue);
+      source.add(1);
+      await Future<void>.delayed(Duration.zero);
+      await subscription.cancel();
+
+      expect(received, [1]);
+      expect(observer.events, [
+        'trace _FakeObservable (db) cancel',
+        'trace _FakeObservable (db) await subscription.cancel()',
+        'trace _FakeObservable (db) await subscription.cancel() done',
+        'trace _FakeObservable (db) cancel done',
+      ]);
+    });
+
+    test(
+        'reports nothing through onTrace when the observer does not record '
+        'traces', () async {
+      final observer = RecordingObserver();
+      ScopeConfig.observer = observer;
+      addTearDown(() => ScopeConfig.observer = null);
+
+      final source = StreamController<int>();
+      addTearDown(source.close);
+
+      final guarded = runStreamGuarded(
+        () => source.stream,
+        _ignore,
+        debugName: 'db',
+        observable: const _FakeObservable(),
+      );
+
+      final subscription = guarded.listen((_) {});
+      await subscription.cancel();
+
+      expect(observer.events, isEmpty);
     });
   });
 }
 
 void _ignore(Object error, StackTrace stackTrace) {}
+
+/// A [ScopeObservable] with no scope behind it, for a test that calls
+/// [runStreamGuarded] directly rather than through a dependency.
+final class _FakeObservable implements ScopeObservable {
+  const _FakeObservable();
+
+  @override
+  String get debugLabel => '_FakeObservable';
+}

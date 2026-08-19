@@ -3,13 +3,9 @@
 import 'dart:async';
 
 import 'package:scopo/scopo.dart';
-import 'package:scopo/src/environment/scope_config.dart';
 import 'package:test/test.dart';
 
-import 'utils/logging.dart';
 import 'utils/my_fake_async.dart';
-
-final _log = log.withAddedName('test');
 
 final class TestDependencies
     extends ScopeAutoDependencies<TestDependencies, void> {
@@ -27,18 +23,13 @@ final class TestDependencies
     bool dispose = true,
   }) =>
       (dep) async {
-        _log.v(() => 'init: ${dep.name} delay');
         await Future<void>.delayed(delay);
-        _log.v(() => 'init: ${dep.name} after delay');
         if (failed.contains(dep.name)) {
-          _log.d(() => 'init: ${dep.name} fail');
           throw Exception('${dep.name} failed');
         }
         if (dispose) {
           dep.dispose = () async {
-            _log.v(() => 'dispose: ${dep.name}');
             await Future<void>.delayed(step);
-            _log.v(() => 'dispose: ${dep.name} after delay');
           };
         }
       };
@@ -95,11 +86,8 @@ final class TestDependenciesAnonNested
 
   FutureOr<void> Function(ScopeDependencyHandle) initDep(Duration delay) =>
       (dep) async {
-        _log.v(() => 'init: ${dep.name} delay');
         await Future<void>.delayed(delay);
-        _log.v(() => 'init: ${dep.name} after delay');
         if (failed.contains(dep.name)) {
-          _log.d(() => 'init: ${dep.name} fail');
           throw Exception('${dep.name} failed');
         }
       };
@@ -178,9 +166,7 @@ final class TestDependenciesConcurrentNoDispose
 
   FutureOr<void> Function(ScopeDependencyHandle) initDep(Duration delay) =>
       (dep) async {
-        _log.v(() => 'init: ${dep.name} delay');
         await Future<void>.delayed(delay);
-        _log.v(() => 'init: ${dep.name} after delay');
         // Намеренно НЕ назначаем dep.dispose: ни одна из зависимостей не
         // требует disposal, поэтому у concurrent-группы при dispose()
         // набор стримов для объединения оказывается пустым.
@@ -272,7 +258,6 @@ List<String> handleInitFor<T extends ScopeAutoDependencies<T, void>>(
   }
 
   void stateToBuf(ScopeInitState<ScopeAutoDependenciesProgress, T> state) {
-    _log.withAddedName('handleInitFor').v(() => 'state=$state');
     progress.add(
       switch (state) {
         ScopeProgress(:final progress) => '$progress',
@@ -299,8 +284,6 @@ List<String> handleInitFor<T extends ScopeAutoDependencies<T, void>>(
 }
 
 void main() {
-  logInit();
-
   group('TestDependencies', () {
     Future<List<String>> handleInit(
       TestDependencies dependencies, {
@@ -316,7 +299,6 @@ void main() {
       void stateToBuf(
         ScopeInitState<ScopeAutoDependenciesProgress, TestDependencies> state,
       ) {
-        _log.withAddedName('handleInit').v(() => 'state=$state');
         progress.add(
           switch (state) {
             ScopeProgress(:final progress) => '$progress',

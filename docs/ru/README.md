@@ -1,6 +1,6 @@
 # scopo
 
-> Перевод `README.md` (blob `f2c18304cb4ebec94d934a5b3a4c9834e91db783`).
+> Перевод `README.md` (blob `056da1b0ec7455cbf7e2a00186f50f6bb7726ca8`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 [![pub version](https://img.shields.io/pub/v/scopo)](https://pub.dev/packages/scopo)
@@ -30,7 +30,8 @@ Flutter-пакет для управления скоупами: внедрен�
 - **Специализированные скоупы**: облегчённые варианты для параметров виджета,
   обычных моделей, `Listenable` и для асинхронной работы, которой не нужен
   контейнер зависимостей.
-- **Журнал**: встроенный уровневый логгер со сменными форматированием и выводом.
+- **Наблюдаемый жизненный цикл**: типизированному наблюдателю сообщают о каждой
+  инициализации, шаге прогресса, отказе и разборе.
 
 ## Установка
 
@@ -525,20 +526,17 @@ await AsyncScopeCoordinator.waitForChildren(context);
 `TimeoutException` уходит в `FlutterError.reportError`, если не задан колбэк
 `onTimeout`.
 
-## Журнал и настройка
+## Наблюдение и настройка
 
-Журнал по умолчанию выключен. Уровни — `verbose`, `debug`, `info`, `error`, и у
-каждого уровня свой публикатор, поэтому форматирование и вывод можно заменять
-поуровнево.
+Пакет молчит, пока не присвоен `ScopeConfig.observer`. У `ScopeObserver` по
+хуку на событие жизненного цикла — `onInit`, `onProgress`, `onReady`,
+`onCancelled`, `onDispose`, `onDisposed`, `onError`, `onTimeout`, `onTrace`, —
+и все они пустые, так что наследник переопределяет только нужное.
+`ScopePrintObserver` едет в комплекте и пишет по строке на событие.
 
 ```dart
 void main() {
-  ScopeConfig.logger.level = ScopeLogLevel.info;
-
-  ScopeConfig.logger[ScopeLogLevel.debug].publisher = ScopeLogFormatter(
-    format: ScopeLogger.defaultFormat,
-    output: debugPrint,
-  );
+  ScopeConfig.observer = const ScopePrintObserver();
 
   // Сколько скоуп ждёт свой `scopeKey` и утилизации своих детей (по три
   // секунды по умолчанию; `null` — без ограничения).
@@ -600,5 +598,5 @@ void main() {
 | [AsyncControllerScope](https://github.com/vi-k/scopo/blob/main/doc/async_controller_scope.md) | то же, где это значение — контроллер с собственным жизненным циклом |
 | [LiteScope](https://github.com/vi-k/scopo/blob/main/doc/lite_scope.md) | класса состояния с этим циклом и `close()` |
 | [Scope](https://github.com/vi-k/scopo/blob/main/doc/full_scope.md) | полного семейства: зависимости, состояние, четыре ветки |
-| [debug](https://github.com/vi-k/scopo/blob/main/doc/debug.md) | журнала, таймаутов и настройки для тестов |
+| [debug](https://github.com/vi-k/scopo/blob/main/doc/debug.md) | наблюдателя, таймаутов и настройки для тестов |
 | [utils](https://github.com/vi-k/scopo/blob/main/doc/utils.md) | хелперов, которые едут вместе с пакетом |

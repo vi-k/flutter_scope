@@ -18,8 +18,9 @@ typedef ScopeAutoDependenciesStream<T extends ScopeDependencies>
 ///
 /// {@category Scope}
 abstract base class ScopeAutoDependencies<T extends ScopeAutoDependencies<T, C>,
-    C extends Object?> implements ScopeDependencies {
-  late final _log = log.withAddedName(() => '$T(#${shortHash(this)})');
+    C extends Object?> implements ScopeDependencies, ScopeObservable {
+  @override
+  String get debugLabel => '$T(#${shortHash(this)})';
 
   /// Whether a failed initialization disposes of what it managed to build.
   ///
@@ -95,20 +96,25 @@ abstract base class ScopeAutoDependencies<T extends ScopeAutoDependencies<T, C>,
     final progressIterator = ProgressIterator(dependencies.count);
 
     try {
-      _log.d('initialize…');
+      notifyObserver((observer) => observer.onInit(this));
       yield* dependencies.init().map((path) {
         final step = progressIterator.nextStep();
-        _log.d(() => 'progress: $path ($step)');
+        notifyObserver(
+          (observer) => observer.onProgress(
+            this,
+            ScopeAutoDependenciesProgress(path, step),
+          ),
+        );
         return ScopeProgress(ScopeAutoDependenciesProgress(path, step));
       });
 
       if (dependencies.isInitialized) {
         yield ScopeReady(this as T);
-        _log.d('initialized');
+        notifyObserver((observer) => observer.onReady(this));
       }
     } finally {
       if (!dependencies.isInitialized) {
-        _log.d('not initialized');
+        notifyObserver((observer) => observer.onCancelled(this));
 
         // `unmount` is promised to run exactly once and always before
         // `dispose`, whichever way the scope goes -- and this is one of the
@@ -131,7 +137,10 @@ abstract base class ScopeAutoDependencies<T extends ScopeAutoDependencies<T, C>,
           // initialization is already carrying, and a hook that throws here
           // would replace it with itself. The disposal below reports its own
           // failures the same way and for the same reason.
-          _log.e('unmount error', error: error, stackTrace: stackTrace);
+          notifyObserver(
+            (observer) =>
+                observer.onError(this, ScopePhase.unmount, error, stackTrace),
+          );
           FlutterError.reportError(
             FlutterErrorDetails(
               exception: error,
@@ -203,10 +212,13 @@ abstract base class ScopeAutoDependencies<T extends ScopeAutoDependencies<T, C>,
     // the silence this method exists to break.
     unawaited(
       released.catchError((Object error, StackTrace stackTrace) {
-        _log.e(
-          'an abandoned wait for the disposal ended in a failure',
-          error: error,
-          stackTrace: stackTrace,
+        notifyObserver(
+          (observer) => observer.onError(
+            this,
+            ScopePhase.abandonedWait,
+            error,
+            stackTrace,
+          ),
         );
         FlutterError.reportError(
           FlutterErrorDetails(
@@ -219,7 +231,7 @@ abstract base class ScopeAutoDependencies<T extends ScopeAutoDependencies<T, C>,
       }),
     );
 
-    _log.e('gave up waiting for the disposal');
+    notifyObserver((observer) => observer.onTimeout(this, 'the disposal'));
     FlutterError.reportError(
       FlutterErrorDetails(
         exception: TimeoutException(
@@ -247,18 +259,21 @@ abstract base class ScopeAutoDependencies<T extends ScopeAutoDependencies<T, C>,
 
     final completer = Completer<void>();
 
-    _log.d('dispose…');
+    notifyObserver((observer) => observer.onDispose(this));
     dependencies.dispose().listen(
       (path) {
-        _log.d(path);
+        notifyObserver((observer) => observer.onProgress(this, path));
       },
       onError: (Object error, StackTrace stackTrace) {
-        _log.e('dispose error', error: error, stackTrace: stackTrace);
+        notifyObserver(
+          (observer) =>
+              observer.onError(this, ScopePhase.disposal, error, stackTrace),
+        );
 
-        // And reported, not only logged. This method never re-throws -- the
-        // teardown above it goes on whatever the dependencies say -- so a
-        // report is the one way out a failure has, and the log it used to
-        // have to itself is off by default.
+        // Reported through FlutterError too, not only the observer: this
+        // method never re-throws -- the teardown above it goes on whatever
+        // the dependencies say -- so this is the one way out a failure has
+        // when nothing is assigned to `ScopeConfig.observer` at all.
         FlutterError.reportError(
           FlutterErrorDetails(
             exception: error,
@@ -273,7 +288,7 @@ abstract base class ScopeAutoDependencies<T extends ScopeAutoDependencies<T, C>,
     );
 
     await completer.future;
-    _log.d('disposed');
+    notifyObserver((observer) => observer.onDisposed(this));
   }
 
   /// A single dependency called [name].

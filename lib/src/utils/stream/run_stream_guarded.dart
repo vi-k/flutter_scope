@@ -2,15 +2,6 @@ import 'dart:async';
 
 import '../../environment/scope_config.dart';
 
-/// The logger of every call, made once for the library.
-///
-/// Not one per call: creating a sub-logger walks the live sub-loggers of the
-/// root and relinks four levels against it, and this function runs twice for
-/// every dependency of every scope — all of it wasted with the level at its
-/// default of `off`. The call is told apart by [runStreamGuarded]'s
-/// `debugName` in the message instead of by a name of its own in the path.
-final _log = log.withAddedName('runStreamGuarded');
-
 /// Runs a stream in a guarded environment until its first error.
 ///
 /// - If [streamFactory] throws, the exception is passed to the resulting
@@ -25,10 +16,16 @@ final _log = log.withAddedName('runStreamGuarded');
 /// The cancellation runs when the stream ends with an error and when the
 /// subscription to the resulting stream is cancelled, so [onPostCancelError]
 /// may be called on either path — but never when the source simply closes.
+///
+/// [observable] tells [ScopeObserver.onTrace] who this run belongs to. This
+/// function has no [ScopeObservable] of its own — it is a function, not an
+/// object — so its two callers each pass their own; left `null`, the run
+/// traces nothing.
 Stream<T> runStreamGuarded<T>(
   Stream<T> Function() streamFactory,
   void Function(Object, StackTrace) onPostCancelError, {
   String? debugName,
+  ScopeObservable? observable,
 }) {
   final Stream<T> stream;
 
@@ -55,7 +52,11 @@ Stream<T> runStreamGuarded<T>(
   /// Cancels every subscription, waits for them to finish and forwards the
   /// errors that occur.
   Future<void> cancel() async {
-    _log.v(() => '${label}cancel');
+    if (observable case final observable?) {
+      notifyObserver(
+        (observer) => observer.onTrace(observable, '${label}cancel'),
+      );
+    }
 
     var innerCompleter = cancelCompleter;
     if (innerCompleter == null) {
@@ -65,12 +66,33 @@ Stream<T> runStreamGuarded<T>(
       cancelCompleter = innerCompleter;
 
       try {
-        _log.v(() => '${label}await subscription.cancel()');
+        if (observable case final observable?) {
+          notifyObserver(
+            (observer) => observer.onTrace(
+              observable,
+              '${label}await subscription.cancel()',
+            ),
+          );
+        }
         await subscription?.cancel();
-        _log.v(() => '${label}await subscription.cancel() done');
+        if (observable case final observable?) {
+          notifyObserver(
+            (observer) => observer.onTrace(
+              observable,
+              '${label}await subscription.cancel() done',
+            ),
+          );
+        }
         // ignore: avoid_catching_errors
       } on Object catch (error, stackTrace) {
-        _log.v(() => '${label}onPostCancelError($error)');
+        if (observable case final observable?) {
+          notifyObserver(
+            (observer) => observer.onTrace(
+              observable,
+              '${label}onPostCancelError($error)',
+            ),
+          );
+        }
         onPostCancelError(error, stackTrace);
       } finally {
         subscription = null;
@@ -79,7 +101,11 @@ Stream<T> runStreamGuarded<T>(
     }
 
     await innerCompleter.future;
-    _log.v(() => '${label}cancel done');
+    if (observable case final observable?) {
+      notifyObserver(
+        (observer) => observer.onTrace(observable, '${label}cancel done'),
+      );
+    }
   }
 
   controller
@@ -90,12 +116,26 @@ Stream<T> runStreamGuarded<T>(
       subscription = stream.listen(
         controller.add,
         onError: (Object error, StackTrace stacktrace) {
-          _log.v(() => '${label}controller.addError($error)');
+          if (observable case final observable?) {
+            notifyObserver(
+              (observer) => observer.onTrace(
+                observable,
+                '${label}controller.addError($error)',
+              ),
+            );
+          }
           controller.addError(error, stacktrace);
           cancel(); // ignore: discarded_futures
         },
         onDone: () {
-          _log.v(() => '${label}subscription.onDone');
+          if (observable case final observable?) {
+            notifyObserver(
+              (observer) => observer.onTrace(
+                observable,
+                '${label}subscription.onDone',
+              ),
+            );
+          }
           subscription = null;
           controller.close(); // ignore: discarded_futures
         },

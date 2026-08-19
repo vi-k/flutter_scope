@@ -1,6 +1,6 @@
 # minimal
 
-One scope, in as few files as it takes: `lib/main.dart`, 270 lines.
+One scope, in as few files as it takes: `lib/main.dart`, 245 lines.
 
 ```sh
 cd example/minimal
@@ -28,15 +28,16 @@ The three branches are each built with their own `MaterialApp`, which is what
 the file exists exactly for that. `pauseAfterInitialization` is set to 500 ms so
 that the splash screen can be seen at all on a fast machine.
 
-`main()` also sets up the logger: `ScopeLogLevel.info` by default and one ANSI
-colour per level. Run it and the console shows the scope initializing,
-reporting progress, becoming ready, and — when the app is closed — disposing of
-itself in order.
+`main()` also assigns the observer — `ScopeConfig.observer = const
+ScopePrintObserver()` — which prints a line per lifecycle event. Run it and the
+console shows the scope initializing, reporting progress, becoming ready, and —
+when the app is closed — disposing of itself in order.
 
 ## What to try
 
-- Change `ScopeConfig.logger.level` to `ScopeLogLevel.debug` in `main()` to see
-  every step of the lifecycle instead of the milestones.
+- Pass `trace: true` to the `ScopePrintObserver` in `main()` to see the
+  machinery under the lifecycle — the `scopeKey` queue, the guarded streams —
+  and not only the milestones.
 - Make `AppDependencies.init` throw after the first `yield` to land on the
   error branch.
 - Set `ScopeConfig.pauseAfterInitializationEnabled = false` to see how fast the

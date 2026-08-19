@@ -394,4 +394,4 @@ exactly as above: reported, not thrown.
 | `LiteScope` | a state class with the same lifecycle, and `close()` |
 | `Scope` | the full family: a dependency container on top of all this |
 | `ScopeNotifier` | the state models this family is built on |
-| `debug` | the log of every step above, and the timeout settings |
+| `debug` | the observer that reports every step above, and the timeouts |

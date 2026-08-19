@@ -90,6 +90,16 @@ abstract base class ScopeDependencyGroup with ScopeDependencyMixin {
   @override
   String get wrappedName => '[${name.isEmpty ? 'group' : name}]';
 
+  // `ScopeDependencyMixin.debugLabel` falls back to `name`, which a leaf
+  // dependency's constructor asserts is never empty but an anonymous group's
+  // is by design — the root of a tree is usually one, and so is a nested
+  // group with nothing to call itself. Left alone, an anonymous group's
+  // report reads `scopo |  | …`, the label collapsed to nothing. `[group]` is
+  // the same fallback [wrappedName] already uses for the same case; a named
+  // group keeps reporting under its own name, unwrapped, same as before.
+  @override
+  String get debugLabel => name.isEmpty ? '[group]' : name;
+
   @override
   String stateToString() {
     switch (state) {

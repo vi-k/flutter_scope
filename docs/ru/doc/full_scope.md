@@ -1,6 +1,6 @@
 # Scope
 
-> Перевод `doc/full_scope.md` (blob `fa45fdd6d5c89ab1d55a9ef2c9447a95181d23e1`).
+> Перевод `doc/full_scope.md` (blob `1290c78fce013dd6a33b4d46ec808d2a6c7ed911`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 `Scope` — основной строительный блок пакета: виджет, который владеет контейнером
@@ -337,8 +337,8 @@ sequential('', [
 
 пути будут `dep1`, `concurrent1/dep2` и `concurrent1/sequential1/dep3`. Те же
 строки встречаются в трёх местах: в `ScopeAutoDependenciesProgress.path`, в
-журнале уровня `debug` при инициализации и утилизации и в
-`ScopeDependencyException.name`.
+том, что контейнер сообщает в `ScopeConfig.observer` при инициализации и при
+утилизации, и в `ScopeDependencyException.name`.
 
 `ScopeDependencyInfo.path` — единственное место, где лежит не весь путь, а его
 начало. Обход, из которого он берётся, заходит и в группы, и в листья, поэтому

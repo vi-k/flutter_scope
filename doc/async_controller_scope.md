@@ -172,7 +172,7 @@ worth naming belongs in `AsyncDataScope`, whose stream reports them.
 **It does nothing with a failed initialization** beyond what every family
 does: the error reaches `buildOnError`, which is required precisely so that
 the decision is made rather than defaulted. Route it onward from there, or
-turn on the package logger — the `debug` topic has both.
+assign a `ScopeObserver` — the `debug` topic has both.
 
 ## Where next
 
@@ -181,4 +181,4 @@ turn on the package logger — the `debug` topic has both.
 | `AsyncDataScope` | the machinery underneath: states, teardown order, `scopeKey` |
 | `AsyncScope` | the same lifecycle with no value at all |
 | `ScopeNotifier` | making the controller itself observable |
-| `debug` | the four timeouts and the log |
+| `debug` | the four timeouts and the observer |

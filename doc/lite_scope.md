@@ -197,4 +197,4 @@ which is private here; see the `AsyncScope` topic.
 | `AsyncScope` | the lifecycle in full: states, teardown order, `scopeKey`, the coordinator |
 | `Scope` | a dependency container in front of the same state |
 | `ScopeWidget` | what `notifyDependents` does to the subtree |
-| `debug` | the log of every step, and the timeout settings |
+| `debug` | the observer that reports every step, and the timeouts |

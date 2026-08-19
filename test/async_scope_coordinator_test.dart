@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:scopo/scopo.dart';
 
 import 'utils/leaks.dart';
+import 'utils/observer.dart';
 import 'utils/settle.dart';
 
 void main() {
@@ -96,25 +97,15 @@ void main() {
     );
   });
 
-  // Giving up a place in a queue is logged with the key that was taken, not
+  // Giving up a place in a queue is reported with the key that was taken, not
   // with whatever the getter answers now. `scopeKey` is user code: a message
-  // built lazily would run it again from a teardown that has already begun, and
-  // the package promises to read it once.
-  testWidgets('cancelling a pending wait logs the key without asking again',
+  // built eagerly would run it again from a teardown that has already begun,
+  // and the package promises to read it once.
+  testWidgets('cancelling a pending wait reports the key without asking again',
       (tester) async {
-    final lines = <String>[];
-    final level = ScopeConfig.logger[ScopeLogLevel.debug];
-    final publisher = level.publisher;
-    final logLevel = ScopeConfig.logger.level;
-    addTearDown(() {
-      level.publisher = publisher;
-      ScopeConfig.logger.level = logLevel;
-    });
-    level.publisher = ScopeLogFormatter<String>(
-      format: (entry) => entry.message,
-      output: lines.add,
-    );
-    ScopeConfig.logger.level = ScopeLogLevel.debug;
+    final observer = RecordingObserver(trace: true);
+    ScopeConfig.observer = observer;
+    addTearDown(() => ScopeConfig.observer = null);
 
     final gate = Completer<void>();
     Widget build({required bool withSuccessor}) => Directionality(
@@ -153,16 +144,16 @@ void main() {
     );
 
     final readsBefore = successor.scopeKeyReads;
-    lines.clear();
+    observer.events.clear();
 
     // The successor leaves while its wait is still pending.
     await tester.pumpWidget(build(withSuccessor: false));
     await tester.pump();
 
     expect(
-      lines,
-      contains('cancel waiting for access to [shared]'),
-      reason: 'the line names the key the scope took',
+      observer.events,
+      contains('trace _TestScope cancel waiting for access to [shared]'),
+      reason: 'the trace names the key the scope took',
     );
     expect(
       successor.scopeKeyReads,

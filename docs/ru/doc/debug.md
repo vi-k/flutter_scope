@@ -1,177 +1,269 @@
 # debug
 
-> Перевод `doc/debug.md` (blob `f0eb45762c2331a3abac1c75d7bb7e30b40341e5`).
+> Перевод `doc/debug.md` (blob `ecbf54e773c84f040f80164c274ebf2e51338c8e`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
-Журнал и глобальные настройки пакета. Всё на этой странице статическое и живёт в
-`ScopeConfig`, поэтому обычное место для настройки — `main()`, до `runApp`.
+Наблюдатель и глобальные настройки пакета. Всё на этой странице статическое и
+живёт в `ScopeConfig`, поэтому обычное место для настройки — `main()`, до
+`runApp`.
 
-## Уровни
+## Наблюдатель
 
-Журнал по умолчанию выключен: `ScopeConfig.logger.level` равен
-`ScopeLogLevel.off`. Присвоение более низкого порога включает все уровни, чьё
-значение больше или равно ему.
+Пакет молчит, пока ему не дадут, куда говорить. `ScopeConfig.observer` по
+умолчанию `null`; присвойте ему `ScopeObserver` — и каждый скоуп приложения
+начнёт отчитываться через него.
 
 ```dart
 void main() {
-  ScopeConfig.logger.level = ScopeLogLevel.info;
+  ScopeConfig.observer = const ScopePrintObserver();
 
   runApp(const App());
 }
 ```
 
-`ScopeLogLevel` собирает пороги, которыми пользуется пакет. Это обычные
-константы `int` (те же `Levels` из `logger_builder`), так что `level` примет и
-промежуточное значение.
-
-| Константа | Значение | Что пишет пакет |
-| --- | --- | --- |
-| `ScopeLogLevel.all` | 0 | самый низкий возможный порог: всё |
-| `ScopeLogLevel.verbose` | 400 | зарегистрирован, но пакетом не используется |
-| `ScopeLogLevel.debug` | 500 | весь жизненный цикл, шаг за шагом |
-| `ScopeLogLevel.info` | 800 | вехи асинхронного скоупа |
-| `ScopeLogLevel.error` | 1000 | провалы инициализации и утилизации |
-| `ScopeLogLevel.off` | 2000 | самый высокий возможный порог: ничего |
-
-`info` — разумное значение по умолчанию для приложения: сообщает
-`initialize…`/`initialized`, значения прогресса, `dispose…`/`disposed` и отмену
-прерванной инициализации.
-
-`debug` — то, что включают, когда скоуп подвисает, инициализируется в
-неожиданном порядке или утилизируется слишком поздно. Сверх сообщений уровня
-`info` он рассказывает о подготовке к инициализации и утилизации, об ожидании
-`scopeKey`, об ожидании дочерних скоупов и о каждой зависимости
-`ScopeAutoDependencies` в момент её инициализации или утилизации.
-
-`error` сообщает `initialization failed`, `disposal failed` и ошибки,
-возникшие при утилизации зависимостей, — каждую с её `error` и `stackTrace`.
-Учтите, что скоуп и без журнала отдаёт ошибки инициализации в `buildOnError`, а
-таймауты — в `FlutterError.reportError`, так что выключенный журнал никогда не
-прячет ошибку целиком.
-
-## Вывод
-
-У каждого уровня свой публикатор, поэтому формат и назначение можно заменить
-поуровнево:
+`ScopeObserver` — класс из девяти методов, и все девять пустые. Наследник
+переопределяет то, что ему нужно, и наследует молчание остальных, так что
+наблюдатель, которому интересны только отказы, состоит из одного метода:
 
 ```dart
-ScopeConfig.logger[ScopeLogLevel.debug].publisher = ScopeLogFormatter(
-  format: ScopeLogger.defaultFormat,
+final class CrashReporter extends ScopeObserver {
+  const CrashReporter();
+
+  @override
+  void onError(
+    ScopeObservable target,
+    ScopePhase phase,
+    Object error,
+    StackTrace? stackTrace,
+  ) =>
+      crashlytics.recordError(
+        error,
+        stackTrace,
+        reason: '${target.debugLabel}: ${phase.name}',
+      );
+}
+```
+
+`ScopeObserver` — `base class`, поэтому свой наследник объявляется как `base`
+или `final`; `final`, если вы не имеете в виду наследоваться дальше.
+
+Хуки зовутся синхронно — из той сборки, инициализации или разбора, которым они
+принадлежат. Именно это делает их полезными: порядок строк — это порядок, в
+котором пакет делал работу. По той же причине упавший хук ловится, а не
+выпускается наружу; об этом — раздел «Когда падает сам наблюдатель».
+
+## Девять хуков
+
+| хук | что произошло |
+| ---------------------------- | ----------------------------------------- |
+| `onInit(target)` | началась инициализация |
+| `onProgress(target, progress)` | сделан один её шаг |
+| `onReady(target)` | она успешно закончилась |
+| `onCancelled(target)` | она отменена, не дойдя до конца |
+| `onDispose(target)` | начался разбор |
+| `onDisposed(target)` | разбор закончился |
+| `onError(target, phase, error, stackTrace)` | что-то упало |
+| `onTimeout(target, what)` | истекло ограниченное ожидание |
+| `onTrace(target, message)` | шаг механики под жизненным циклом |
+
+### Кто их шлёт
+
+Семейство без собственной фазы инициализации — `ScopeWidget`, `ScopeModel`,
+`ScopeNotifier`, `AsyncScopeCoordinator` — шлёт голую пару: `onInit`, когда его
+элемент проинициализирован, и `onDisposed`, когда элемента больше нет. Это всё,
+что такому скоупу есть сказать, — и до появления этой пары он не говорил
+ничего: его жизненный цикл был виден только отладчику.
+
+Семейство, у которого есть своя инициализация, — всё, что построено на
+асинхронном элементе: `AsyncScope`, `AsyncDataScope`, `AsyncControllerScope`,
+`LiteScope` и `Scope`, — шлёт вместо неё эту фазу, во всех подробностях,
+которые у фазы есть: `onInit`, затем `onProgress` на каждый шаг, затем `onReady`
+или `onCancelled`; а на выходе — `onDispose` и `onDisposed`. Обе половины не
+шлёт никто: у этих семейств структурная пара подавлена, поэтому `LiteScope`
+даёт один `onInit`, а не два.
+
+Два обстоятельства, которых этот порядок не называет, и оба важны наблюдателю,
+который складывает события в пары:
+
+- **`onCancelled` не всегда идёт следом за `onInit`.** Скоуп, который сняли с
+  дерева, пока он ещё стоял в очереди за своим `scopeKey`, собственной
+  инициализации не начинал — объявлять было нечего: вся его запись это
+  `onCancelled`, `onDispose`, `onDisposed`. Отмена и правда происходит в
+  очереди, до той инициализации, о которой это семейство иначе отчиталось бы;
+- **`onDispose` и `onDisposed` всегда приходят парой.** `onDispose` шлёт любой
+  разбор, в том числе разбор скоупа, который так и не стал готовым и своего
+  освобождать не будет, а `onDisposed` шлётся и тогда, когда разбор упал, —
+  после `onError`, который об этом сказал, а не вместо него. Так что счётчик
+  утечек или трекер интервалов, который открывается на одном и закрывается на
+  другом, остаётся сведённым, куда бы скоуп ни ушёл.
+
+Контейнер автоматических зависимостей `Scope` отчитывается о собственном
+жизненном цикле под своей меткой, рядом со скоупом, которому принадлежит:
+`onInit`, `onProgress` на каждую проинициализированную зависимость, `onReady`
+или `onCancelled`, а дальше `onDispose`, `onProgress` на каждую освобождённую
+зависимость и `onDisposed`.
+
+Одна зависимость не шлёт ничего, кроме `onTrace`: две точки, где она
+разбирается с собственной ошибкой, и шаги защищённого потока, через который
+проходят её `init()` и `dispose()`.
+
+### Что несёт `onProgress`
+
+`progress` имеет тип `Object?`, потому что три источника сообщают разное, и
+каждое уже типизировано по-своему:
+
+- от скоупа — значение, которое его инициализация сообщила как прогресс: то,
+  что выдало приложение; в большинстве приложений это `String` на заставке;
+- от контейнера зависимостей, который инициализируется, —
+  `ScopeAutoDependenciesProgress`: он несёт `path` только что построенной
+  зависимости, а вместе с ним `name`, `number`, `total` и `value`. `Scope`,
+  чей контейнер строит зависимости, передаёт то же значение дальше, поэтому
+  оно приходит дважды: под меткой контейнера и под меткой скоупа;
+- от контейнера зависимостей, который утилизируется, — голый `String` с путём
+  только что освобождённой зависимости.
+
+Обернуть эти три в общий тип значило бы выдумать четвёртый.
+
+### `onError` и `ScopePhase`
+
+`phase` говорит, что выполнялось в момент отказа:
+
+| `ScopePhase` | что выполнялось |
+| ------------------------------ | ------------------------------------------ |
+| `initialization` | инициализация, любая её половина |
+| `initializationCancellation` | отмена ещё идущей инициализации |
+| `preparationForDisposal` | синхронная половина разбора |
+| `unmount` | хук `onUnmount` |
+| `disposal` | `disposeScope` или `dispose` зависимости |
+| `abandonedWait` | ожидание, упавшее, когда ждать было уже некому |
+
+Перечисление может пополниться, поэтому `switch` по нему в вашем коде хочет
+ветку `default`.
+
+Ошибка, дошедшая до `onError`, никогда не сообщается только этим путём: ошибки
+инициализации скоуп отдаёт ещё и в `buildOnError`, а те, что отдать больше
+некому, уходят в `FlutterError.reportError`. Так что `ScopeConfig.observer`,
+оставленный в `null`, не прячет ни одной ошибки целиком.
+
+### Что покрывает `onTimeout`
+
+Об истечении через наблюдателя сообщают четыре ограниченных ожидания, и `what`
+называет то, которое истекло: `its own teardown` (скоуп ждёт `disposeScope`),
+`its initialization to be cancelled`, `its controller to be released`
+(`AsyncControllerScope` возвращает контроллер, который его собственная
+инициализация так и не передала дальше) и `the disposal` (контейнер
+зависимостей ждёт освобождения построенного им дерева).
+
+Два оставшихся ограниченных ожидания — `scopeKey` и дочерних скоупов — до
+наблюдателя не доходят. Они сообщают через `FlutterError.reportError` и через
+собственные колбэки скоупа `onScopeKeyTimeout` и `onWaitForChildrenTimeout` —
+там же, где были и до появления наблюдателя.
+
+### Что покрывает `onTrace`
+
+Всё, что лежит под жизненным циклом: подготовка к инициализации и к разбору,
+очередь `scopeKey` (ожидание доступа, его получение, отказ от него, выход),
+ожидание дочерних скоупов, ожидание конца инициализации, две точки внутри
+зависимости, где разбирается ошибка, и семь шагов защищённого потока, через
+который проходят `init()` и `dispose()` каждой зависимости.
+
+Скоуп даёт с десяток таких событий там, где даёт одно любое другое, — поэтому
+`ScopePrintObserver` их не печатает. Это то, что включают, когда скоуп
+подвисает, инициализируется в неожиданном порядке или утилизируется слишком
+поздно, и больше ни для чего.
+
+## О ком событие
+
+Первый аргумент каждого хука — `ScopeObservable`, и единственный его член —
+имя, которым источник себя называет:
+
+| источник | `debugLabel` |
+| ----------------------------- | ------------------------------------------ |
+| элемент любого скоупа | `CounterScope(#4e0b7)` или `CounterScope(cart)` |
+| контейнер зависимостей | `AppDependencies(#25f53)` |
+| одна зависимость | её объявленное имя; `[group]`, если группа анонимна |
+
+Поэтому `tag` — самый дешёвый способ отличить в выводе два скоупа одного типа и
+единственный способ получить метку, одинаковую от прогона к прогону: короткий
+хеш таким не бывает.
+
+`ScopeObservable` намеренно не реализуют `ScopeDependencies` и
+`ScopeDependency`: их пишете вы, и новый обязательный член сломал бы уже
+написанный код. События порождают только классы пакета, поэтому маркер несут
+только они.
+
+Наблюдатель, которому нужен один вид источника, сужает шаблоном, а не
+приведением:
+
+```dart
+final class ScopeAnalytics extends ScopeObserver {
+  const ScopeAnalytics();
+
+  @override
+  void onReady(ScopeObservable target) {
+    if (target case ScopeInheritedElement(:final widget)) {
+      analytics.logEvent('scope_ready', {'type': '${widget.runtimeType}'});
+    }
+  }
+}
+```
+
+## ScopePrintObserver
+
+Наблюдатель, который едет в комплекте, пишет по строке на событие:
+
+```dart
+ScopeConfig.observer = const ScopePrintObserver();
+```
+
+```text
+scopo | CounterScope(#4e0b7) | initialize…
+scopo | AppDependencies(#25f53) | progress: prefs (1/2)
+scopo | CounterScope(#4e0b7) | initialized
+scopo | CounterScope(#4e0b7) | initialization failed: Exception: no network
+```
+
+Форма строки — `scopo | <метка> | <что случилось>`. Отказ добавляет
+`: <ошибка>`, а если событие несёт стек вызовов — и его, отдельной строкой.
+
+Фаза отказа проговаривается по-английски, а не именем значения `ScopePhase`:
+`initialization failed`, `initialization cancellation failed`, `preparation for
+disposal failed`, `unmount failed`, `disposal failed` и — единственная, что не
+влезает в эту форму, — `an abandoned wait ended in a failure`.
+
+Два параметра, оба необязательные:
+
+```dart
+ScopeConfig.observer = ScopePrintObserver(
   output: debugPrint,
+  trace: true,
 );
 ```
 
-`ScopeLogFormatter` — это `ScopeLogPublisher`, собранный из двух функций:
-`format` превращает `ScopeLog` во что-нибудь (обычно в `String`), а `output`
-получает результат. Присвоение `ScopeConfig.logger.publisher` вместо
-`ScopeConfig.logger[level].publisher` заменяет публикатор сразу всех уровней. По
-умолчанию каждый уровень форматирует через `ScopeLogger.defaultFormat` и печатает
-через `print`.
+`output` — куда уходит строка; по умолчанию `print`. `trace` решает, печатается
+ли `onTrace` вообще, и по умолчанию `false` — это и есть всё, что раньше делал
+здесь порог уровней.
 
-`ScopeLog` несёт `timestamp`, `path` породившего его логгера, `message`,
-числовой `level` с его `levelName` и `shortLevelName`, а также необязательные
-`error` и `stackTrace`. `ScopeLogger.defaultFormat` раскладывает это так:
+Конструктор `const`, а наблюдатель выше — нет: `debugPrint` — переменная,
+которую Flutter разрешает подменять, то есть не константа. С `output` по
+умолчанию и со своей функцией, которая константа, `const` работает.
 
-```text
-[d] scopo | TestDependencies(#25f53) | progress: dep1 (1/10)
-[i] scopo | CounterScope(#4e0b7) | initialized
-[e] scopo | CounterScope(#4e0b7) | initialization failed: Exception: no network
-```
+## Когда падает сам наблюдатель
 
-Путь начинается с имени корневого логгера (`scopo`) и получает по сегменту на
-каждый вложенный логгер — для скоупа это тип виджета с коротким хешем или с его
-`tag`, если тег задан. Сегменты склеиваются через `ScopeLogger.pathSeparator`
-(по умолчанию ` | `; присвойте его на `ScopeConfig.logger`, и созданные после
-этого подлоггеры его унаследуют). За сообщением идёт `: <error>`, если событие
-несёт ошибку, и стек вызовов отдельной строкой, если он непустой.
+Наблюдатель — ваш код, и пакет зовёт его из сборки, из инициализации и из
+разбора. Хук, упавший наружу из любого из трёх, унёс бы скоуп с собой: скоуп,
+который так и не построил готовую ветку, или разбор, остановившийся на полпути
+с удержанным `scopeKey`.
 
-`ScopeLogCallback` — сигнатура четырёх методов журналирования у `ScopeLogger` (`v`,
-`d`, `i`, `e`): сообщение плюс необязательные `error` и `stackTrace`. Сообщение
-имеет тип `Object?`, и переданный вместо него колбэк вызывается, только когда
-уровень включён, — поэтому вызовы внутри пакета выглядят как
-`_log.d(() => 'progress: $path')`.
+Поэтому каждый вызов идёт через защиту. Упавший хук сообщается через
+`FlutterError.reportError` с `library: 'scopo'` — красный экран в debug,
+`FlutterError.onError` в release, — а то, что сообщало о событии, продолжается.
+Ничего не проглатывается и ничего не повторяется.
 
-`ScopeLevelLogger` — объект за `ScopeConfig.logger[level]`: он держит `name`,
-`shortName` и `publisher` своего уровня.
-
-### Фильтрация и переписывание
-
-Трансформер выполняется для каждой записи каждого уровня прямо перед
-публикацией. Возврат `null` выбрасывает запись — так отсекают шумные пути, не
-выключая уровень целиком:
-
-```dart
-ScopeConfig.logger.transformer = (log) =>
-    log.path.contains('AnimationScope') ? null : log;
-```
-
-Его сигнатура — `ScopeLogTransformer`. Подлоггеры наследуют трансформер так же,
-как наследуют `level` и публикаторов, поэтому присвоение на
-`ScopeConfig.logger` покрывает весь пакет. Трансформер, который бросил
-исключение, выбрасывает запись, а не публикует её непреобразованной, а сам
-отказ уходит туда, куда его отправляет следующий раздел.
-
-### Когда падает само журналирование
-
-Публикатор и трансформер — ваши, и упавший раньше возвращался наружу из вызова
-журналирования. Внутри пакета этот вызов стоит в сборке, в инициализации и в
-разборе, так что упавший логгер уносил скоуп с собой: скоуп, который так и не
-построил готовую ветку, или разбор, остановившийся на полпути с удержанным
-`scopeKey`.
-
-Поэтому пакет ставит на свой логгер обработчик. Отказ пути публикации — упавший
-публикатор, упавший трансформер, публикатор, который журналирует через уровень,
-для которого сам публикует, — сообщается через `FlutterError.reportError` с
-`library: 'scopo'`: красный экран в debug и `FlutterError.onError` в release.
-Ничего не проглатывается, а путь, писавший строку журнала, продолжается.
-
-```dart
-// Свой обработчик заменяет обработчик пакета:
-ScopeConfig.logger.onError = (error, stackTrace) => crashlytics.record(error);
-
-// А так возвращается прежнее поведение упавшего публикатора — выйти наружу
-// из вызова журналирования, в то, что журналировало:
-ScopeConfig.logger.onError = null;
-```
-
-`ScopeConfig.reset()` это не трогает, как не трогает и остальной логгер.
-
-### Цвета по уровням
-
-Приём, которым пользуются оба примера, — свой ANSI-принтер на уровень:
-
-```dart
-import 'dart:io';
-
-import 'package:ansi_escape_codes/ansi_escape_codes.dart' as ansi;
-import 'package:scopo/scopo.dart';
-
-void setLogPrinter(int level, ansi.Color foreground) {
-  final printer = ansi.Printer(
-    ansiCodesEnabled: !Platform.isIOS,
-    defaultStyle: ansi.Style(foreground: foreground),
-  );
-
-  ScopeConfig.logger[level].publisher = ScopeLogFormatter(
-    format: ScopeLogger.defaultFormat,
-    output: printer.print,
-  );
-}
-
-void main() {
-  ScopeConfig.logger.level = ScopeLogLevel.info;
-
-  setLogPrinter(ScopeLogLevel.verbose, ansi.Color256.gray7);
-  setLogPrinter(ScopeLogLevel.debug, ansi.Color256.gray12);
-  setLogPrinter(ScopeLogLevel.info, ansi.Color256.rgb345);
-  setLogPrinter(ScopeLogLevel.error, ansi.Color256.rgb400);
-
-  runApp(const App());
-}
-```
-
-Публикатор не обязан ничего форматировать: подойдёт любой
-`ScopeLogPublisher` — так события собирают в список и проверяют в тестах.
+Та же защита отбивает повторный вход. Наблюдатель, который порождает событие
+скоупа, пока его оповещают, — например, монтирует скоуп прямо из хука, — иначе
+ушёл бы в бесконечную рекурсию; второе оповещение отбивается и репортится — по
+одному разу на каждый отбитый вызов, — а первое доходит до конца.
 
 ## Таймауты
 
@@ -241,32 +333,103 @@ void main() {
 ```
 
 `setUp` подходит не хуже и вдобавок покрывает тест, упавший до собственного
-teardown. Логгер не трогается: это объект со своими издателями и
-трансформером, а не переключатель, и заданный ему уровень — обычно и есть
-смысл того прогона, ради которого его задавали.
+teardown. Наблюдателя это не трогает: он объект, а не переключатель, и обычно
+он и есть смысл того прогона, ради которого его поставили. Сьюта, которой он
+нужен убранным, убирает его сама — `ScopeConfig.observer = null`.
 
 ## В тестах
 
-Вся настройка для тестового набора — это порог плюс публикатор, направленный
-туда, куда идёт вывод тестов:
+Наблюдатель, который записывает вместо того, чтобы печатать, превращает
+жизненный цикл в значение, о котором тест может делать утверждения. Сравнивайте
+список целиком: так ловится и пропущенное событие, и лишнее, чего проверка
+каждого события по отдельности не даёт.
 
 ```dart
-void logInit() {
-  ScopeConfig.logger.level = ScopeLogLevel.debug;
-  ScopeConfig.logger.publisher = const ScopeLogFormatter(
-    format: ScopeLogger.defaultFormat,
-    output: print,
-  );
+final class RecordingObserver extends ScopeObserver {
+  final events = <String>[];
+
+  @override
+  void onInit(ScopeObservable target) =>
+      events.add('init ${target.debugLabel}');
+
+  @override
+  void onReady(ScopeObservable target) =>
+      events.add('ready ${target.debugLabel}');
+
+  @override
+  void onDisposed(ScopeObservable target) =>
+      events.add('disposed ${target.debugLabel}');
+}
+
+void main() {
+  late RecordingObserver observer;
+
+  setUp(() {
+    observer = RecordingObserver();
+    ScopeConfig.observer = observer;
+    ScopeConfig.pauseAfterInitializationEnabled = false;
+  });
+
+  tearDown(() {
+    ScopeConfig.observer = null;
+    ScopeConfig.reset();
+  });
+
+  testWidgets('скоуп инициализируется один раз и один раз утилизируется',
+      (tester) async {
+    await tester.pumpWidget(const CounterScope(tag: 'counter'));
+    await tester.pumpAndSettle();
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpAndSettle();
+
+    expect(observer.events, [
+      'init CounterScope(counter)',
+      'ready CounterScope(counter)',
+      'disposed CounterScope(counter)',
+    ]);
+  });
 }
 ```
 
-Держите это включаемым по требованию: на `debug` один скоуп даёт с десяток
-строк, и они хоронят причину падения теста. Между расследованиями —
-`ScopeLogLevel.off`, и `ScopeConfig.pauseAfterInitializationEnabled = false`,
-чтобы паузы не приходилось прокручивать кадрами.
+Две вещи, от которых это ожидание зависит. Скоуп с тегом — потому что скоуп без
+тега называет себя коротким хешем, а он от прогона к прогону другой: ставьте
+`tag` или срезайте `(…)` с метки перед сравнением. И наблюдатель убирается в
+teardown — потому что `ScopeConfig.reset()` его не убирает: оставленный
+наблюдатель продолжит писать в список следующего теста.
+
+Не включайте `trace`, если тест не про трассировку. На этом уровне один скоуп
+даёт с десяток событий, и ожидание, перечисляющее их все, падает от любой
+посторонней правки в координации.
 
 Настройку настоящего приложения смотрите в
 [example/minimal](https://github.com/vi-k/scopo/blob/main/example/minimal/lib/main.dart),
-а демонстрацию, где рядом журналируется каждый вызов жизненного цикла каждого
-семейства скоупов, — в
+а демонстрацию, где рядом видны все вызовы жизненного цикла всех семейств
+скоупов, — в
 [example/scopo_demo](https://github.com/vi-k/scopo/tree/main/example/scopo_demo).
+
+## Если вы пришли с 0.9.x
+
+Девять публичных имён, построенных на `logger_builder`, удалены:
+`ScopeConfig.logger`, `ScopeLogger`, `ScopeLevelLogger`, `ScopeLog`,
+`ScopeLogPublisher`, `ScopeLogFormatter`, `ScopeLogTransformer`,
+`ScopeLogLevel` и `ScopeLogCallback`. Внешних зависимостей у пакета теперь нет
+вовсе.
+
+Чем было каждое из них:
+
+- `ScopeConfig.logger.level = ScopeLogLevel.info` →
+  `ScopeConfig.observer = const ScopePrintObserver()`;
+- `ScopeLogLevel.debug` → `const ScopePrintObserver(trace: true)`;
+- `ScopeLogLevel.off` → `ScopeConfig.observer = null`;
+- публикатор, который форматировал и печатал, → `output` у
+  `ScopePrintObserver` или свой `ScopeObserver`;
+- публикатор, который собирал записи в список для проверок, → наблюдатель,
+  который записывает, как в разделе «В тестах» выше;
+- трансформер, выбрасывавший записи одного пути, → `if` внутри хука, по
+  `target.debugLabel` или по типу `target`;
+- отправка отказов дальше через разбор `ScopeLog.message` → `onError`, где
+  ошибка, стек вызовов и `ScopePhase` уже разделены.
+
+Порога больше нет, и ничего одного вместо него не появилось. Его три задачи
+разошлись: `ScopeConfig.observer = null` выключает всё, пустое тело хука
+выключает один вид событий, а `trace` — самый шумный из них.

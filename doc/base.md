@@ -28,7 +28,7 @@ abstract base class ScopeInheritedWidget extends InheritedWidget {
 ```
 
 `tag` names one particular scope. Two scopes of the same type are otherwise
-indistinguishable in a log, where an untagged scope appears as
+indistinguishable in the output, where an untagged scope appears as
 `CounterScope(#4e0b7)` and a tagged one as `CounterScope(cart)` — see the
 `debug` topic for the format. Every family forwards a `tag` parameter to this
 constructor, so any scope can be tagged.
@@ -227,4 +227,4 @@ scope of a different family.
 | `AsyncControllerScope` | a scope whose whole content is a controller with a lifecycle of its own |
 | `LiteScope` | a scope without a dependency container |
 | `Scope` | the full family: dependencies, state, and the four build branches |
-| `debug` | logging, timeouts and what a `tag` looks like in the output |
+| `debug` | the observer, timeouts and what a `tag` looks like in the output |

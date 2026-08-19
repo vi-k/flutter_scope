@@ -1,10 +1,9 @@
 part of '../../../scope.dart';
 
 /// {@category Scope}
-mixin ScopeDependencyMixin implements ScopeDependency {
-  late final _log = log.withAddedName(
-    () => '$ScopeDependencyMixin(#${shortHash(this)})',
-  );
+mixin ScopeDependencyMixin implements ScopeDependency, ScopeObservable {
+  @override
+  String get debugLabel => name;
 
   @override
   ScopeDependencyState get state => _state;
@@ -76,6 +75,7 @@ mixin ScopeDependencyMixin implements ScopeDependency {
         _runInit,
         _handleInitializationPostCancelError,
         debugName: name,
+        observable: this,
       ).handleError(_handleInitializationError);
       if (_state is! ScopeDependencyFailed) {
         _state = const ScopeDependencyInitialized();
@@ -109,6 +109,7 @@ mixin ScopeDependencyMixin implements ScopeDependency {
         _runDispose,
         _handleDisposalPostCancelError,
         debugName: name,
+        observable: this,
       ).handleError(_handleDisposalError);
       _state = switch (_state) {
         final _ScopeDependencyWithErrors state when state.hasErrors => state,
@@ -145,7 +146,10 @@ mixin ScopeDependencyMixin implements ScopeDependency {
     ScopeDependencyAnyFailed Function(Object error, StackTrace stackTrace)
         defaultState,
   ) {
-    _log.d(() => '[handleError] $wrappedName', error: error);
+    notifyObserver(
+      (observer) =>
+          observer.onTrace(this, '[handleError] $wrappedName: $error'),
+    );
 
     // Add the error to the state.
     _addErrorToState(error, stackTrace, defaultState);
@@ -193,7 +197,12 @@ mixin ScopeDependencyMixin implements ScopeDependency {
     ScopeDependencyAnyCancelled Function(Object error, StackTrace stackTrace)
         defaultState,
   ) {
-    _log.d(() => '[handlePostCancelError] $wrappedName', error: error);
+    notifyObserver(
+      (observer) => observer.onTrace(
+        this,
+        '[handlePostCancelError] $wrappedName: $error',
+      ),
+    );
 
     if (error is ParallelWaitError<void, List<AsyncError?>>) {
       for (final error in error.errors.nonNulls) {

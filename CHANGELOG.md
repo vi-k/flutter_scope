@@ -141,26 +141,16 @@
   again — twice per rebuild, to every listener above the node — for a page that
   had not changed. While `child` and `isRoot` are the same objects, nothing is
   handed over anew.
-* `logger_builder` is `^0.6.1`, up from `^0.5.0`. Nothing in this package had to
-  change for it — the surface it uses is the same — and what arrives with it is
-  worth knowing: a level logger can no longer be registered on the `all`/`off`
-  thresholds, a sublogger holds its parent strongly (so a logger nobody kept no
-  longer stops passing `level`, `publisher` and `transformer` down), a level
-  registered on a sublogger takes the parent's publisher for that level rather
-  than its common one, and a synchronous publisher that logs into the level it
-  publishes for is caught instead of overflowing the stack. The `meta` constraint
-  it relaxed to `^1.15.0` is also what used to hold this package's Flutter floor
-  at 3.29.0; on the strength of it the floor came back down, which is the entry
-  below.
 * [breaking changes] The Flutter floor is `>=3.27.0`, down from the `>=3.29.0`
   raised earlier in this same release. Nothing here ever needed 3.29 — the floor
-  went up because `logger_builder` asked for `meta ^1.16.0` while the
-  `flutter_test` of 3.27 pins `meta` to 1.15.0 — and 0.6.1 gave that constraint
-  up. `ansi_escape_codes` sat in the same trap and is now `^4.0.1`, which is
-  where it let `meta` back down; `fake_async` and `leak_tracker_flutter_testing`
-  are asked for a patch lower, `^1.3.1` and `^3.0.8`, the versions 3.27 pins.
-  All three are dev dependencies, so nothing a consumer resolves changed except
-  the floor itself. `sdk: ^3.6.0` is untouched and now reaches something real:
+  went up because `logger_builder`, then a dependency, asked for `meta ^1.16.0`
+  while the `flutter_test` of 3.27 pins `meta` to 1.15.0. Its 0.6.1 relaxed that
+  to `^1.15.0`, which is what let the floor back down; later in this same
+  release the dependency goes away altogether, so nothing external is left to
+  push the floor up again. `fake_async` and `leak_tracker_flutter_testing` are
+  asked for a patch lower, `^1.3.1` and `^3.0.8`, the versions 3.27 pins; both
+  are dev dependencies, so nothing a consumer resolves changed except the floor
+  itself. `sdk: ^3.6.0` is untouched and now reaches something real:
   3.27.0 carries exactly Dart 3.6.0, so the language version the formatter reads
   is the floor's own and not one above it. Tests, formatter, dartdoc, publish dry
   run, translations and both example suites are run on 3.27.0, and CI pins the
@@ -177,9 +167,9 @@
   they read at a call site — `state is ScopeDependencyAnyFailed`. `DepHelper` is
   `ScopeDependencyHandle` and has a file of its own: everything else in that
   family spells `Dependency` out, and "Helper" said nothing about the handle it
-  is. `ScopeLogFn` and `ScopeInitFunction` are `ScopeLogCallback` and
-  `ScopeInitCallback`, one suffix instead of two for the same idea, and
-  `ScopeInitBuilder` is `ScopeProgressBuilder` after the state it builds for.
+  is. `ScopeInitFunction` is `ScopeInitCallback`, `Callback` being the one
+  suffix this package uses for the idea, and `ScopeInitBuilder` is
+  `ScopeProgressBuilder` after the state it builds for.
   `Progress.progress` is `Progress.value` — a fraction inside a class already
   called `Progress` explained itself worse than the pair `number`/`total` beside
   it — and `ScopeAutoDependenciesProgress.progress` follows it.
@@ -248,20 +238,99 @@
   scope's initialization is `createController()` and the controller's own
   `init()`, and neither reports steps. The reason was a comment in the
   implementation, where the person reading the signature never sees it.
-* A logger that fails can no longer take a scope down with it. The publisher and
-  the transformer are consumer code, and a throwing one came back out of the
-  logging call — which, inside this package, meant out of a build, an
-  initialization or a teardown: a scope that never built its ready branch, or a
-  teardown that stopped halfway with a `scopeKey` still held. `ScopeConfig.logger`
-  now ships with an `onError` of its own, so a failure of the logging path is
-  reported through `FlutterError.reportError` with `library: 'scopo'` — visible
-  as every other failure of consumer code here is — and whatever was writing the
-  log line goes on. Assigning your own handler replaces it, and
-  `ScopeConfig.logger.onError = null` brings the old behaviour back. This is
-  what `logger_builder` 0.6.1 arrived with, and it closes a hole wider than the
-  one that was written down: the note said a throwing logger escaped from a
-  `Stream.listen(onData:)`, and the measurement said it escaped from every one
-  of the package's ninety-odd logging calls.
+* Add `ScopeConfig.observer`: an application assigns a typed `ScopeObserver` to
+  hear about a scope's lifecycle. Nine hooks, every one of them empty by
+  default — `onInit`, `onProgress`, `onReady`, `onCancelled`, `onDispose`,
+  `onDisposed`, `onError`, `onTimeout` and `onTrace` — so a subclass overrides
+  only what it needs; the first argument of each is a `ScopeObservable`,
+  carrying the `debugLabel` its source names itself by. The field is `null` by
+  default, so the package says nothing until one is assigned. The structural
+  pair `onInit`/`onDisposed` lives on `ScopeWidgetElementBase` — the ancestor of
+  every scope family — so a family that never reported anything of its own
+  now reports through the observer the same as the rest. A hook that throws is
+  reported through `FlutterError.reportError` rather than reaching the scope,
+  and a nested notification — an observer producing a scope event of its own
+  from inside a hook — is refused rather than left to recurse.
+* `AsyncScope`'s own lifecycle now reports through `ScopeConfig.observer` too
+  — and with it every family built on the same element: `AsyncDataScope`,
+  `AsyncControllerScope`, `LiteScope` and `Scope`. `onProgress`, `onReady`,
+  `onCancelled`, `onDispose`, `onTimeout` for an expired wait, and `onError`
+  for each phase that can fail (initialization, its cancellation, preparation
+  for disposal, `onUnmount`, disposal, a wait nobody was left to hear the end
+  of). A family that runs its own initialization reports it in place of the
+  structural pair `ScopeWidgetElementBase` fires for the rest, rather than
+  alongside it — `ScopeWidgetElementBase.reportsOwnLifecycle`, `false` by
+  default, `true` on `AsyncScopeElementBase` — so `onInit`/`onDisposed` are not
+  doubled for `LiteScope` and `Scope`, whose default `initScope()` runs the
+  exact stream `AsyncScope`'s does. The coordination below the lifecycle — the
+  `scopeKey` queue, cancelling an initialization, waiting for children —
+  reports through `onTrace`.
+* The dependency container and a single dependency now report through
+  `ScopeConfig.observer` too, the same eleven points that used to log:
+  `ScopeAutoDependencies` reports `onInit`, `onProgress` (a
+  `ScopeAutoDependenciesProgress` while it initializes, the bare path of each
+  step while it disposes), `onReady` or `onCancelled`, `onDispose`,
+  `onDisposed`, and `onError` for each phase that can fail here — `onUnmount`,
+  an abandoned wait for its own disposal, and disposal itself — plus
+  `onTimeout` for that same abandoned wait giving up. Its `debugLabel` is
+  `T(#hash)`, the shape its `logger` name already had; a single dependency's is
+  its own `name`. The two diagnostic lines inside `ScopeDependencyMixin` —
+  handling an error, handling one after a cancellation — report through
+  `onTrace` instead, the error folded into the message rather than kept as a
+  separate field. `runStreamGuarded`, which every dependency's `init()` and
+  `dispose()` run through, is internal and not exported — it has no
+  `ScopeObservable` of its own either, being a function rather than an object
+  — so it gained an optional `observable` parameter: its two callers inside
+  the package pass their own, and its seven internal steps report through
+  `onTrace` under that label.
+* **Breaking:** `logger_builder` is no longer a dependency. Nine public names
+  built on it are gone: `ScopeConfig.logger`, `ScopeLogger`, `ScopeLevelLogger`,
+  `ScopeLog`, `ScopeLogPublisher`, `ScopeLogFormatter`, `ScopeLogTransformer`,
+  `ScopeLogLevel` and `ScopeLogCallback`. In their place, a ready-made
+  `ScopePrintObserver`: `ScopeConfig.observer = const ScopePrintObserver();`
+  prints one line per event — `scopo | <label> | <what happened>`, a failure's
+  error and stack trace included — the same shape `ScopeLogger.defaultFormat`
+  wrote, minus the level and the logger path. A failure line spells out its
+  phase as English instead of the bare `ScopePhase` name — `preparation for
+  disposal failed`, not `preparationForDisposal failed` — the same wording
+  `ScopeLogger.defaultFormat` used for the same six phases; the one phrase
+  that does not end in "failed", `an abandoned wait ended in a failure`, is
+  the old logger's `an abandoned wait for $what ended in a failure` with the
+  `$what` left out, since the observer has none to put there. `trace: true`
+  also prints what `onTrace` carries, off by default: that is where the
+  coordination below the lifecycle reports, and a scope produces a dozen such
+  lines where it produces one of the rest.
+* Fix a failure that outlives its scope reaching `ScopeConfig.observer` as a
+  failure of the observer. A bounded wait that expired is abandoned rather
+  than forgotten, and the work behind it reports through `onError` with
+  `ScopePhase.abandonedWait` if it falls over later — by which time the scope
+  has given its widget back, so reading `target.debugLabel` raised a
+  `TypeError` inside the hook and the guard reported *that* instead. The
+  teardown now keeps the label it had while it still had a widget, so the
+  three calls that can reach a consumer after it is over — the scope's own
+  `disposeScope`, the cancellation of its initialization, and an
+  `AsyncControllerScope` giving back a controller — deliver the failure they
+  were written to deliver.
+* **Behaviour change:** `ScopeObserver.onDispose` and
+  `ScopeObserver.onDisposed` now always come as a pair. `onDispose` is sent by
+  every teardown, not only by one that follows a successful initialization, so
+  a scope taken down while it was still loading no longer reports the end of a
+  teardown nobody was told had begun; and `onDisposed` is sent even when the
+  teardown failed, after the `onError` that says so rather than instead of it.
+  Separately each half was defensible; together they made the pair unreliable
+  in both directions, and a consumer that counts with it — a leak counter, a
+  span tracker — got it wrong either way. `onCancelled` is documented as what
+  it is: a scope cancelled while still queued for its `scopeKey` sends it
+  without any `onInit` before it, because it never started an initialization
+  of its own.
+* Fix an anonymous dependency group — the common shape for the root of a tree,
+  `sequential('', […])` or `concurrent('', […])` — reporting through
+  `ScopeConfig.observer` under an empty label instead of `[group]`.
+  `ScopeDependencyMixin.debugLabel` fell back to `name`, empty by design for
+  such a group, so a line about it printed with a doubled space where the
+  label should have been; `[group]` is the same fallback `wrappedName` already
+  used for the same case, and a named group still reports under its own name,
+  unwrapped.
 * The bookkeeping that decides which build a dependent's selectors belong to asks
   for a frame when nothing else will bring one. The reset runs in a post-frame
   callback, and a build is not always inside a frame — `runApp` builds the first
@@ -287,12 +356,6 @@
   `AsyncScopeCore`; and the `dispose` comment no longer justifies itself with
   "a failed leaf is never disposed of at all", which stopped being true when a
   failed leaf started giving back what it had taken.
-* `ScopeLog.message` is declared `String` rather than `String?`. It never
-  answered `null`: the message is held as a `LazyString`, which renders anything
-  that is not a string — `null` included — through `toString()`, so a log written
-  without one reads as `'null'`. A formatter of your own had a fallback branch
-  that could never run; the analyzer now says so. Two such branches were in this
-  package's own tests.
 * An expired `AsyncScopeParent.waitForChildren` names the scope after its widget,
   which is the name carrying `tag`, instead of after its element, which is a type
   and a hash. The two neighbouring waits —
@@ -342,9 +405,11 @@
   back where they started. They are global and outlive the code that changed
   them, and until now every suite saved and restored them by hand — a
   convention, and one a test that forgot it could break for its neighbours.
-  The logger is left alone. The dartdoc of `pauseAfterInitializationEnabled`
-  described what setting it to `false` does while documenting a field whose
-  value is `true`; it now says what the field is.
+  `ScopeConfig.observer` is left alone: it is an object rather than a switch,
+  and it is usually the whole point of the run it was assigned for. The dartdoc
+  of `pauseAfterInitializationEnabled` described what setting it to `false` does
+  while documenting a field whose value is `true`; it now says what the field
+  is.
 * `AsyncDataScopeContext.hasData` says whether the initialization has produced
   its value. For a nullable `T` nothing else could: `dataOrNull` is `null` on
   both sides of the moment the value arrives, since `null` is a value the
@@ -909,11 +974,6 @@
     `AsyncScopeCoordinator` above them (the usual place is above
     `MaterialApp`) and await
     `AsyncScopeCoordinator.waitForChildren(context)`.
-* Upgrade logger_builder to 0.5.0: logs are now published through
-  `publishLog`, so `ScopeConfig.logger.transformer` can now rewrite or drop
-  them. scopo's own API is unaffected, since `ScopeLogPublisher` and
-  `ScopeLogFormatter` are unchanged in 0.5.0. Add the `ScopeLogTransformer`
-  typedef and document it on the `debug` page.
 * [breaking changes] Unify dependency path format: no leading `/` in
   `ScopeDependencyException.name`, `ScopeDependencyInfo.path` and progress
   paths; anonymous groups add no separator.
