@@ -67,10 +67,10 @@ fails" below.
 ### Who sends them
 
 A family with no initialization phase of its own — `ScopeWidget`, `ScopeModel`,
-`ScopeNotifier`, `AsyncScopeCoordinator` — reports a bare pair: `onInit` when
-its element is initialized and `onDisposed` when the element is gone. That is
-all such a scope has to say, and before this pair existed it said nothing at
-all: its lifecycle was visible only to a debugger.
+`ScopeNotifier`, `AsyncScopeCoordinator` — reports `onInit` when its element is
+initialized, and `onDispose`/`onDisposed` as a pair around its teardown. That
+is all such a scope has to say, and before this reporting existed it said
+nothing at all: its lifecycle was visible only to a debugger.
 
 A family that runs an initialization — everything built on the asynchronous
 element: `AsyncScope`, `AsyncDataScope`, `AsyncControllerScope`, `LiteScope`
@@ -80,8 +80,8 @@ the way out, `onDispose` and `onDisposed`. Nothing reports both halves — the
 structural pair is suppressed for these families, so a `LiteScope` produces one
 `onInit`, not two.
 
-Two things that order does not say, and both matter to an observer that pairs
-events up:
+Three things that order does not say, and all three matter to an observer
+that pairs events up:
 
 - **`onCancelled` does not always follow an `onInit`.** A scope still queued
   for its `scopeKey` when it is taken off the tree never started an
@@ -94,7 +94,16 @@ events up:
   nothing of its own to release, and `onDisposed` is sent even when the
   teardown failed — after the `onError` that says so, not instead of it. So a
   leak counter or a span tracker that opens on one and closes on the other
-  stays balanced whichever way the scope went.
+  stays balanced whichever way the scope went;
+- **for a family with no phase of its own, that same pair requires the
+  `onInit` that would open it.** `ScopeWidget`, `ScopeModel`, `ScopeNotifier`
+  and `AsyncScopeCoordinator` report `onDispose`/`onDisposed` only for an
+  element whose `init()` succeeded; one that threw, or never ran, reports
+  neither half — nothing was announced as open, so nothing is announced as
+  closed, even though the element still tears itself down internally. This is
+  the one point where the two kinds of family differ: the phase-reporting
+  families above can still close a teardown that opened with no `onInit` at
+  all, as the previous bullet shows.
 
 The container of automatic dependencies of a `Scope` reports its own lifecycle
 under its own label, beside the scope that owns it: `onInit`, `onProgress` per
