@@ -1116,6 +1116,17 @@ release-слепота `isBuilding`, записанная там как прин
   скоупа `onScopeKeyTimeout`/`onWaitForChildrenTimeout` — так было и при
   журнале. Расхождение описано в теме `debug` как факт; сводить ли все шесть к
   одному хуку — решение владельца.
+- **провал `init()` структурного семейства невидим наблюдателю.**
+  `ScopeWidgetElementBase.build()` ловит отказ `init()`, ставит `_initPhase` в
+  `failed` и перебрасывает — на этом пути нет ни одного
+  `notifyObserver(onError(...))`. Сам отказ виден: фреймворк гасит его на
+  месте потомка через собственный `FlutterError.reportError` (отсюда и
+  `ErrorWidget`), но до `ScopeConfig.observer.onError` он не доходит вовсе —
+  ни у `ScopeWidget`, ни у `ScopeModel`/`ScopeNotifier`/`AsyncScopeCoordinator`.
+  Асинхронная ветка в этом смысле полнее: там `onError(…,
+  ScopePhase.initialization, …)` шлётся всегда. Найдено попутно с задачей про
+  структурную пару `onDispose`/`onDisposed` (коммит `cb0a871`), не чинилось —
+  другая находка, другая работа (§8).
 
 ### Тулчейн и окружение
 
