@@ -80,10 +80,10 @@ base class ScopeObserver {
 
   /// A teardown has begun.
   ///
-  /// Sent by every family's teardown, exactly once, whatever became of the
-  /// initialization it followed: a scope taken down while it was still
-  /// loading reports this too, with nothing of its own to release.
-  /// [onDisposed] always follows.
+  /// [onDisposed] always follows. Not always sent, though: the pair belongs
+  /// to a scope that announced [onInit], so a structural family (no
+  /// initialization phase of its own) reports neither half for a scope whose
+  /// `init()` threw or never ran, even though its teardown still runs.
   void onDispose(ScopeObservable target) {}
 
   /// A teardown has finished.
