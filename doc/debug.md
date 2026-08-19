@@ -80,6 +80,22 @@ the way out, `onDispose` and `onDisposed`. Nothing reports both halves — the
 structural pair is suppressed for these families, so a `LiteScope` produces one
 `onInit`, not two.
 
+Two things that order does not say, and both matter to an observer that pairs
+events up:
+
+- **`onCancelled` does not always follow an `onInit`.** A scope still queued
+  for its `scopeKey` when it is taken off the tree never started an
+  initialization of its own, so there was nothing to announce: its whole
+  recording is `onCancelled`, `onDispose`, `onDisposed`. The cancellation
+  genuinely happens in the queue, before the initialization this family would
+  otherwise report;
+- **`onDispose` and `onDisposed` always come as a pair.** `onDispose` is sent
+  by every teardown, including one of a scope that never became ready and has
+  nothing of its own to release, and `onDisposed` is sent even when the
+  teardown failed — after the `onError` that says so, not instead of it. So a
+  leak counter or a span tracker that opens on one and closes on the other
+  stays balanced whichever way the scope went.
+
 The container of automatic dependencies of a `Scope` reports its own lifecycle
 under its own label, beside the scope that owns it: `onInit`, `onProgress` per
 dependency initialized, `onReady` or `onCancelled`, and then `onDispose`,
@@ -129,10 +145,12 @@ else can be handed go to `FlutterError.reportError`. Leaving
 
 ### What `onTimeout` covers
 
-Three bounded waits report an expiry through the observer, and `what` names the
+Four bounded waits report an expiry through the observer, and `what` names the
 one that expired: `its own teardown` (a scope waiting out `disposeScope`),
-`its initialization to be cancelled`, and `the disposal` (a dependency
-container waiting for the tree it built to be released).
+`its initialization to be cancelled`, `its controller to be released` (an
+`AsyncControllerScope` giving back a controller its own initialization never
+handed over), and `the disposal` (a dependency container waiting for the tree
+it built to be released).
 
 The two remaining bounded waits — for a `scopeKey` and for child scopes — do
 not reach the observer. They report through `FlutterError.reportError` and
@@ -244,8 +262,8 @@ on. Nothing is swallowed, and nothing is retried.
 
 The same guard refuses re-entry. An observer that produces a scope event while
 it is being notified — one that mounts a scope from inside a hook, say — would
-otherwise recurse without end; the second notification is refused and reported
-once, and the first one runs to its end.
+otherwise recurse without end; the second notification is refused and reported,
+once per refused call, and the first one runs to its end.
 
 ## Timeouts
 
