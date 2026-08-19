@@ -108,8 +108,35 @@ ScopeConfig.logger.transformer = (log) =>
 Its signature is `ScopeLogTransformer`. Sub-loggers inherit the transformer the
 same way they inherit `level` and publishers, so assigning one on
 `ScopeConfig.logger` covers the whole package. A transformer that throws drops
-the log rather than publishing it untransformed, and reports the error to the
-current zone.
+the log rather than publishing it untransformed, and the failure goes where the
+next section sends it.
+
+### When the logging itself fails
+
+The publisher and the transformer are yours, and a throwing one used to come
+back out of the logging call. Inside this package that call sits in a build, in
+an initialization or in a teardown, so a logger that failed took the scope with
+it: a scope that never built its ready branch, or a teardown that stopped
+halfway with a `scopeKey` still held.
+
+The package therefore ships a handler on its logger. A failure of the logging
+path — a throwing publisher, a throwing transformer, a publisher that logs
+through the level it publishes for — is reported through
+`FlutterError.reportError` with `library: 'scopo'`, which is a red screen in
+debug and `FlutterError.onError` in release. Nothing is swallowed, and the path
+that was writing the log line goes on.
+
+```dart
+// Your own handler replaces the package's:
+ScopeConfig.logger.onError = (error, stackTrace) => crashlytics.record(error);
+
+// And this brings back what a throwing publisher did before -- come out of
+// the logging call, into whatever was logging:
+ScopeConfig.logger.onError = null;
+```
+
+`ScopeConfig.reset()` leaves this alone, as it leaves the rest of the logger
+alone.
 
 ### Per-level colors
 

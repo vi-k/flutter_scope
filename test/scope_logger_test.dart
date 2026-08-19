@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:scopo/scopo.dart';
 
@@ -129,6 +130,88 @@ void main() {
     ScopeConfig.logger.d('noisy again');
     expect(out.last, 'scopo|noisy again');
   });
+
+  // The publisher is the one piece of the logging path a consumer writes, and
+  // a throwing one used to come back out of the logging call -- which, inside
+  // this package, meant out of a build or out of a teardown. The package now
+  // ships a handler on its logger, so a failure of the logging path is
+  // reported and the path that was logging goes on.
+  group('a publisher that throws', () {
+    test('is reported rather than thrown out of the logging call', () {
+      final reported = _captureReports();
+      _publishByThrowing();
+      ScopeConfig.logger.level = ScopeLogLevel.debug;
+
+      expect(
+        () => ScopeConfig.logger.d('a line nobody can publish'),
+        returnsNormally,
+      );
+      expect(reported, hasLength(1));
+      expect(reported.single.library, 'scopo');
+      expect(reported.single.exception, isA<StateError>());
+    });
+
+    testWidgets('does not take the scope down with it', (tester) async {
+      final reported = _captureReports();
+      _publishByThrowing();
+      ScopeConfig.logger.level = ScopeLogLevel.debug;
+
+      await tester.pumpWidget(
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: AsyncScope(
+            initScope: (context) async* {
+              yield AsyncScopeReady();
+            },
+            disposeScope: () {},
+            progressBuilder: (context, progress) => const Text('initializing'),
+            errorBuilder: (context, error, stackTrace, progress) =>
+                const Text('error'),
+            builder: (context) => const Text('ready'),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('ready'),
+        findsOneWidget,
+        reason: 'the scope built its ready branch, though every log line it '
+            'wrote on the way there failed to publish',
+      );
+      expect(tester.takeException(), isNull);
+      expect(
+        reported,
+        isNotEmpty,
+        reason: 'and the failures are visible rather than swallowed',
+      );
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: 'the teardown logs too, and it survives the same way',
+      );
+    });
+
+    test('comes back out of the call once the handler is cleared', () {
+      _publishByThrowing();
+      ScopeConfig.logger.level = ScopeLogLevel.debug;
+
+      final handler = ScopeConfig.logger.onError;
+      addTearDown(() => ScopeConfig.logger.onError = handler);
+      ScopeConfig.logger.onError = null;
+
+      expect(
+        () => ScopeConfig.logger.d('a line nobody can publish'),
+        throwsStateError,
+        reason: 'clearing the handler is the way back to the old behaviour, '
+            'and it has to keep working',
+      );
+    });
+  });
 }
 
 /// Every level of the package logger, written into one list by level name.
@@ -162,4 +245,37 @@ void _writeOneOfEach() {
     ..d('debug')
     ..i('info')
     ..e('error');
+}
+
+/// Makes every level publish by throwing, and puts the publishers back after.
+void _publishByThrowing() {
+  for (final level in const [
+    ScopeLogLevel.verbose,
+    ScopeLogLevel.debug,
+    ScopeLogLevel.info,
+    ScopeLogLevel.error,
+  ]) {
+    final levelLogger = ScopeConfig.logger[level];
+    final publisher = levelLogger.publisher;
+    addTearDown(() => levelLogger.publisher = publisher);
+    levelLogger.publisher = const _ThrowingPublisher();
+  }
+}
+
+/// A publisher of the only kind that matters here: one that fails.
+final class _ThrowingPublisher implements ScopeLogPublisher {
+  const _ThrowingPublisher();
+
+  @override
+  void publish(ScopeLog log) => throw StateError('publisher failed');
+}
+
+/// Collects what the package reports, and restores the handler after.
+List<FlutterErrorDetails> _captureReports() {
+  final reported = <FlutterErrorDetails>[];
+  final previous = FlutterError.onError;
+  addTearDown(() => FlutterError.onError = previous);
+  FlutterError.onError = reported.add;
+
+  return reported;
 }

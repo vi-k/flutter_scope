@@ -5,6 +5,7 @@
 // single-line `ignore` then lands on the wrong side of it.
 // ignore_for_file: avoid_classes_with_only_static_members
 
+import 'package:flutter/foundation.dart';
 import 'package:logger_builder/logger_builder.dart';
 
 part 'scope_logger.dart';
@@ -15,7 +16,41 @@ abstract final class ScopeConfig {
   ///
   /// Off by default. See the `debug` topic for levels, publishers and
   /// transformers.
-  static final logger = ScopeLogger('scopo')..level = ScopeLogLevel.off;
+  ///
+  /// It comes with a handler for failures of the logging path itself; what
+  /// that handler is for, and how to replace or remove it, is written on
+  /// [_reportLoggerFailure].
+  static final logger = ScopeLogger('scopo')
+    ..level = ScopeLogLevel.off
+    ..onError = _reportLoggerFailure;
+
+  /// Reports a failure of the logging path instead of letting it out.
+  ///
+  /// The publisher and the transformer are consumer code, and a throwing one
+  /// used to come back out of the logging call. Inside this package that call
+  /// sits in a build, in an initialization or in a teardown, so a logger that
+  /// failed took the scope with it: a scope that never built its ready branch,
+  /// or a teardown that stopped halfway with a `scopeKey` still held. A log
+  /// line is the one thing in a package that must not be able to do that.
+  ///
+  /// The failure is reported the way every other failure of consumer code
+  /// here is — through [FlutterError.reportError], a red screen in debug and
+  /// `FlutterError.onError` in release. Nothing is swallowed, and nothing that
+  /// was logging is interrupted.
+  ///
+  /// Assigning a handler of your own replaces this one, and
+  /// `ScopeConfig.logger.onError = null` brings back what a throwing publisher
+  /// did before: come out of the logging call. [reset] leaves it alone, as it
+  /// leaves the rest of the logger alone.
+  static void _reportLoggerFailure(Object error, StackTrace stackTrace) =>
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: error,
+          stack: stackTrace,
+          library: 'scopo',
+          context: ErrorDescription('while publishing a log line'),
+        ),
+      );
 
   /// Whether a `pauseAfterInitialization` is honoured at all.
   ///

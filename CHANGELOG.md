@@ -248,6 +248,20 @@
   scope's initialization is `createController()` and the controller's own
   `init()`, and neither reports steps. The reason was a comment in the
   implementation, where the person reading the signature never sees it.
+* A logger that fails can no longer take a scope down with it. The publisher and
+  the transformer are consumer code, and a throwing one came back out of the
+  logging call — which, inside this package, meant out of a build, an
+  initialization or a teardown: a scope that never built its ready branch, or a
+  teardown that stopped halfway with a `scopeKey` still held. `ScopeConfig.logger`
+  now ships with an `onError` of its own, so a failure of the logging path is
+  reported through `FlutterError.reportError` with `library: 'scopo'` — visible
+  as every other failure of consumer code here is — and whatever was writing the
+  log line goes on. Assigning your own handler replaces it, and
+  `ScopeConfig.logger.onError = null` brings the old behaviour back. This is
+  what `logger_builder` 0.6.1 arrived with, and it closes a hole wider than the
+  one that was written down: the note said a throwing logger escaped from a
+  `Stream.listen(onData:)`, and the measurement said it escaped from every one
+  of the package's ninety-odd logging calls.
 * The bookkeeping that decides which build a dependent's selectors belong to asks
   for a frame when nothing else will bring one. The reset runs in a post-frame
   callback, and a build is not always inside a frame — `runApp` builds the first
