@@ -388,11 +388,10 @@ for a demo that shows every lifecycle call of every scope family side by side.
 
 ## Coming from 0.9.x
 
-`ScopeConfig.logger` is gone, and with it the nine public names built on
-`logger_builder`: `ScopeLogger`, `ScopeLevelLogger`, `ScopeLog`,
-`ScopeLogPublisher`, `ScopeLogFormatter`, `ScopeLogTransformer`,
-`ScopeLogLevel` and `ScopeLogCallback`. The package has no external
-dependencies now.
+The nine public names built on `logger_builder` are gone: `ScopeConfig.logger`,
+`ScopeLogger`, `ScopeLevelLogger`, `ScopeLog`, `ScopeLogPublisher`,
+`ScopeLogFormatter`, `ScopeLogTransformer`, `ScopeLogLevel` and
+`ScopeLogCallback`. The package has no external dependencies now.
 
 What each of them was for:
 

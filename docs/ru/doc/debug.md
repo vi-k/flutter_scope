@@ -1,6 +1,6 @@
 # debug
 
-> Перевод `doc/debug.md` (blob `85de29019d9f89698f128df9e239724711149a01`).
+> Перевод `doc/debug.md` (blob `8bd4271d44f0b4ce8394d690b5a084ab1e54e362`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 Наблюдатель и глобальные настройки пакета. Всё на этой странице статическое и
@@ -392,8 +392,8 @@ teardown — потому что `ScopeConfig.reset()` его не убирае�
 
 ## Если вы пришли с 0.9.x
 
-`ScopeConfig.logger` больше нет, а вместе с ним нет и девяти публичных имён,
-построенных на `logger_builder`: `ScopeLogger`, `ScopeLevelLogger`, `ScopeLog`,
+Девять публичных имён, построенных на `logger_builder`, удалены:
+`ScopeConfig.logger`, `ScopeLogger`, `ScopeLevelLogger`, `ScopeLog`,
 `ScopeLogPublisher`, `ScopeLogFormatter`, `ScopeLogTransformer`,
 `ScopeLogLevel` и `ScopeLogCallback`. Внешних зависимостей у пакета теперь нет
 вовсе.

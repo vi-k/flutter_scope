@@ -1039,6 +1039,18 @@ release-слепота `isBuilding`, записанная там как прин
   закрывается всегда, но «утилизирован» после отказа звучит неправдой) или
   явный отказ от пары на этом пути, записанный в дартдоке. Найдено ревью
   задачи 4, не чинилось намеренно.
+- **`docs/architecture.md` разошёлся с деревом в двух местах, не связанных с
+  журналом.** Найдено при правке §9 задачей 5, не чинилось: это отдельная
+  работа, а не попутная (§8). Первое — таблица `ScopeConfig` (строка 291)
+  называет `defaultScopeKeysTimeout`, хотя поле зовётся
+  `defaultScopeKeyTimeout` с волны имён 2026-08-18, и перечисляет два таймаута
+  из четырёх (нет `defaultDisposeScopeTimeout` и
+  `defaultInitCancellationTimeout`). Второе — дерево каталогов и таблица слоёв
+  (строки 31–38 и ниже) держат имена `a_base`…`h_scope`, которых в `lib/` нет:
+  каталоги зовутся `base`, `scope_widget`, `scope_model`, `scope_notifier`,
+  `async_scope`, `async_data_scope`, `async_controller_scope`, `lite_scope`,
+  `full_scope`. Ни то ни другое гейт §6 поймать не может: `docs/` он не видит
+  вовсе.
 - **`onTimeout` покрывает три ограниченных ожидания из пяти.** До наблюдателя
   доходят `its own teardown`, `its initialization to be cancelled` и
   `the disposal` контейнера. Ожидание `scopeKey` и ожидание дочерних скоупов
