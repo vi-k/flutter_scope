@@ -227,7 +227,7 @@ void main() {
           await tester.pumpWidget(build(present: false));
           await settle(
             tester,
-            until: () => observer.events.any((e) => e.startsWith('error')),
+            until: () => observer.events.contains('disposed AsyncScope'),
           );
         },
         (error, stackTrace) => errors.add(error),
@@ -238,12 +238,315 @@ void main() {
         'ready AsyncScope',
         'dispose AsyncScope',
         'error AsyncScope disposal Bad state: dispose failed',
+        // After the failure and because of it, not instead of it: the scope
+        // is gone either way, and an observer that pairs `dispose` with
+        // `disposed` would otherwise count this teardown as still running.
+        'disposed AsyncScope',
       ]);
       expect(
         errors.single,
         isA<StateError>(),
         reason: 'the failure still reaches the zone, not just the observer',
       );
+    },
+  );
+
+  // `close()` is the only path on which the first stage of a teardown can
+  // fail at all: a scope taken off the tree has already been unmounted by the
+  // framework -- `ScopeWidgetElementBase.unmount()` runs `unmountScope()`
+  // before it starts the asynchronous half -- so by the time the teardown
+  // reaches that stage it is a no-op there.
+  testWidgets(
+    'a failing onUnmount reports onError for the unmount phase',
+    (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Center(child: _ClosingScope(failUnmount: true)),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      Object? failure;
+      var done = false;
+      unawaited(
+        tester
+            .element<_ClosingScopeElement>(
+              find.byType(_ClosingScope, skipOffstage: false),
+            )
+            .close()
+            .then(
+          (_) => done = true,
+          onError: (Object error) {
+            failure = error;
+            done = true;
+          },
+        ),
+      );
+      await settle(tester, until: () => done);
+
+      expect(observer.events, [
+        'init _ClosingScope',
+        'ready _ClosingScope',
+        'error _ClosingScope unmount Bad state: onUnmount failed',
+        'dispose _ClosingScope',
+        'disposed _ClosingScope',
+      ]);
+      expect(
+        failure,
+        isA<StateError>(),
+        reason: 'the caller of close() still hears the first failure',
+      );
+
+      // Asserted before the tree comes down: a closed scope stays mounted,
+      // and taking it off the tree afterwards runs a second teardown over it.
+      await tester.pumpWidget(const SizedBox.shrink());
+      await settle(tester, until: () => false);
+    },
+  );
+
+  // The second stage of the teardown, and the one place in it that reaches
+  // user code without a guard of its own: the expiry callback of the wait for
+  // the child scopes. The child below is held open, so the wait can only run
+  // out.
+  testWidgets(
+    'a failing onWaitForChildrenTimeout reports onError for the preparation '
+    'phase',
+    (tester) async {
+      final childGate = Completer<void>();
+      addTearDown(() {
+        if (!childGate.isCompleted) {
+          childGate.complete();
+        }
+      });
+      final errors = <Object>[];
+
+      Widget build({required bool present}) => Directionality(
+            textDirection: TextDirection.ltr,
+            child: present
+                ? AsyncScope(
+                    tag: 'parent',
+                    waitForChildrenTimeout: const Duration(milliseconds: 50),
+                    onWaitForChildrenTimeout: () =>
+                        throw StateError('onWaitForChildrenTimeout failed'),
+                    initScope: (context) => Stream.value(AsyncScopeReady()),
+                    disposeScope: () {},
+                    progressBuilder: (context, progress) => const Text('init'),
+                    errorBuilder: (context, error, stackTrace, progress) =>
+                        Text('$error'),
+                    builder: (context) => AsyncScope(
+                      tag: 'child',
+                      initScope: (context) => Stream.value(AsyncScopeReady()),
+                      disposeScope: () => childGate.future,
+                      progressBuilder: (context, progress) =>
+                          const Text('init'),
+                      errorBuilder: (context, error, stackTrace, progress) =>
+                          Text('$error'),
+                      builder: (context) => const Text('ready'),
+                    ),
+                  )
+                : const SizedBox.shrink(),
+          );
+
+      // The teardown runs on a future `dispose()` discards, so what it
+      // re-throws at the end is an uncaught error of the zone it ran in.
+      await runZonedGuarded(
+        () async {
+          await tester.pumpWidget(build(present: true));
+          await tester.pumpAndSettle();
+
+          await tester.pumpWidget(build(present: false));
+          await settle(
+            tester,
+            until: () =>
+                observer.events.contains('disposed AsyncScope(parent)'),
+          );
+        },
+        (error, stackTrace) => errors.add(error),
+      );
+
+      const preparationFailed =
+          'error AsyncScope(parent) preparationForDisposal Bad state: '
+          'onWaitForChildrenTimeout failed';
+
+      expect(observer.events, [
+        'init AsyncScope(parent)',
+        'ready AsyncScope(parent)',
+        'init AsyncScope(child)',
+        'ready AsyncScope(child)',
+        'dispose AsyncScope(child)',
+        preparationFailed,
+        'dispose AsyncScope(parent)',
+        'disposed AsyncScope(parent)',
+      ]);
+      expect(
+        tester.takeException(),
+        isA<TimeoutException>(),
+        reason: 'the expiry of the wait is reported as it always was',
+      );
+      expect(errors.single, isA<StateError>());
+
+      childGate.complete();
+      await settle(
+        tester,
+        until: () => observer.events.contains('disposed AsyncScope(child)'),
+      );
+    },
+  );
+
+  // The cancellation of an initialization is user code twice over -- the
+  // `finally` of the generator being cancelled, and the callback that says
+  // the wait for it ran out -- and both land in the same phase.
+  testWidgets(
+    'a failing onInitCancellationTimeout reports onError for the '
+    'cancellation phase',
+    (tester) async {
+      // Never completed, so the generator can never be resumed and the
+      // cancellation can only expire.
+      final hang = Completer<void>();
+
+      // Two failures are reported here, one after the other -- the expiry of
+      // the wait, and then the callback that made a failure of it -- and
+      // `takeException` collapses several of them into one summary string.
+      // Captured directly, so both can be seen.
+      final reported = <FlutterErrorDetails>[];
+      final previousOnError = FlutterError.onError;
+      FlutterError.onError = reported.add;
+      addTearDown(() => FlutterError.onError = previousOnError);
+
+      Widget build({required bool present}) => Directionality(
+            textDirection: TextDirection.ltr,
+            child: present
+                ? AsyncScope(
+                    initCancellationTimeout: const Duration(milliseconds: 50),
+                    onInitCancellationTimeout: () =>
+                        throw StateError('onInitCancellationTimeout failed'),
+                    initScope: (context) async* {
+                      await hang.future;
+                      yield AsyncScopeReady();
+                    },
+                    disposeScope: () {},
+                    progressBuilder: (context, progress) => const Text('init'),
+                    errorBuilder: (context, error, stackTrace, progress) =>
+                        Text('$error'),
+                    builder: (context) => const Text('ready'),
+                  )
+                : const SizedBox.shrink(),
+          );
+
+      await tester.pumpWidget(build(present: true));
+      await tester.pump();
+
+      await tester.pumpWidget(build(present: false));
+      await settle(
+        tester,
+        until: () => observer.events.contains('disposed AsyncScope'),
+      );
+
+      // Put back before the assertions below, and not only by the tear-down:
+      // while it is in place, a failing `expect` is reported through it and
+      // collected instead of ending the test.
+      FlutterError.onError = previousOnError;
+
+      const cancellationFailed =
+          'error AsyncScope initializationCancellation Bad state: '
+          'onInitCancellationTimeout failed';
+
+      expect(observer.events, [
+        'init AsyncScope',
+        'timeout AsyncScope its initialization to be cancelled',
+        cancellationFailed,
+        'cancelled AsyncScope',
+        // The scope never became ready, so there is nothing for
+        // `disposeScope` to release -- and the pair is reported all the same.
+        'dispose AsyncScope',
+        'disposed AsyncScope',
+      ]);
+      expect(
+        reported.map((details) => details.exception),
+        [
+          isA<TimeoutException>(),
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            'onInitCancellationTimeout failed',
+          ),
+        ],
+        reason: 'both go on being reported the way they always were, and the '
+            'observer hears them beside the report rather than instead of it',
+      );
+    },
+  );
+
+  // The one path on which a scope is cancelled without ever having reported
+  // an `onInit`: it never got as far as subscribing to its own
+  // initialization, because it was still queued behind another scope on the
+  // same `scopeKey` when it was taken off the tree.
+  testWidgets(
+    'a scope cancelled while queued for its scopeKey reports no onInit at all',
+    (tester) async {
+      final holderGate = Completer<void>();
+      addTearDown(() {
+        if (!holderGate.isCompleted) {
+          holderGate.complete();
+        }
+      });
+
+      Widget build({required bool successor}) => Directionality(
+            textDirection: TextDirection.ltr,
+            child: AsyncScopeCoordinator(
+              child: Column(
+                children: [
+                  AsyncScope(
+                    key: const ValueKey('holder'),
+                    tag: 'holder',
+                    scopeKey: 'shared',
+                    initScope: (context) => Stream.value(AsyncScopeReady()),
+                    disposeScope: () => holderGate.future,
+                    progressBuilder: (context, progress) => const Text('init'),
+                    errorBuilder: (context, error, stackTrace, progress) =>
+                        Text('$error'),
+                    builder: (context) => const Text('ready'),
+                  ),
+                  if (successor)
+                    AsyncScope(
+                      key: const ValueKey('successor'),
+                      tag: 'successor',
+                      scopeKey: 'shared',
+                      scopeKeyTimeout: const Duration(days: 1),
+                      initScope: (context) => Stream.value(AsyncScopeReady()),
+                      disposeScope: () {},
+                      progressBuilder: (context, progress) =>
+                          const Text('init'),
+                      errorBuilder: (context, error, stackTrace, progress) =>
+                          Text('$error'),
+                      builder: (context) => const Text('ready'),
+                    ),
+                ],
+              ),
+            ),
+          );
+
+      await tester.pumpWidget(build(successor: true));
+      await tester.pumpAndSettle();
+
+      observer.events.clear();
+
+      // The successor leaves while its wait for the key is still pending.
+      await tester.pumpWidget(build(successor: false));
+      await settle(
+        tester,
+        until: () => observer.events.contains('disposed AsyncScope(successor)'),
+      );
+
+      expect(observer.events, [
+        'cancelled AsyncScope(successor)',
+        'dispose AsyncScope(successor)',
+        'disposed AsyncScope(successor)',
+      ]);
+
+      holderGate.complete();
+      await tester.pumpWidget(const SizedBox.shrink());
+      await settle(tester, until: () => false);
     },
   );
 
@@ -526,4 +829,52 @@ final class _TestDependencies
         dep('dep1', (handle) {}),
         dep('dep2', (handle) {}),
       ]);
+}
+
+/// A scope that can be taken down with `close()` while it stays on screen.
+///
+/// The `LiteScope` family is used for the sake of that one method: it is the
+/// only way into a teardown whose *first* stage -- `onUnmount` -- has not
+/// already been run by the framework.
+final class _ClosingScope extends LiteScopeCore<_ClosingScope,
+    _ClosingScopeElement, _ClosingScopeState> {
+  /// Makes [_ClosingScopeState.onUnmount] fail.
+  final bool failUnmount;
+
+  const _ClosingScope({this.failUnmount = false});
+
+  @override
+  _ClosingScopeElement createScopeElement() => _ClosingScopeElement(this);
+}
+
+final class _ClosingScopeElement extends LiteScopeElementBase<_ClosingScope,
+    _ClosingScopeElement, _ClosingScopeState> {
+  _ClosingScopeElement(super.widget);
+
+  @override
+  Widget? buildOnWaiting() => const Text('waiting');
+
+  @override
+  Widget buildOnProgress(Object? progress) => const Text('initializing');
+
+  @override
+  Widget buildOnError(Object error, StackTrace stackTrace, Object? progress) =>
+      const Text('error');
+
+  @override
+  _ClosingScopeState createState() => _ClosingScopeState();
+}
+
+final class _ClosingScopeState extends LiteScopeCoreState<_ClosingScope,
+    _ClosingScopeElement, _ClosingScopeState> {
+  @override
+  void onUnmount() {
+    super.onUnmount();
+    if (params.failUnmount) {
+      throw StateError('onUnmount failed');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => const Text('ready');
 }

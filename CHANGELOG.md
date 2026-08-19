@@ -278,10 +278,11 @@
   handling an error, handling one after a cancellation — report through
   `onTrace` instead, the error folded into the message rather than kept as a
   separate field. `runStreamGuarded`, which every dependency's `init()` and
-  `dispose()` run through, has no `ScopeObservable` of its own — it is a
-  function, not an object — so it gained an optional `observable` parameter:
-  its two callers here pass their own, and its seven internal steps report
-  through `onTrace` under that label; left unset, a run traces nothing.
+  `dispose()` run through, is internal and not exported — it has no
+  `ScopeObservable` of its own either, being a function rather than an object
+  — so it gained an optional `observable` parameter: its two callers inside
+  the package pass their own, and its seven internal steps report through
+  `onTrace` under that label.
 * **Breaking:** `logger_builder` is no longer a dependency. Nine public names
   built on it are gone: `ScopeConfig.logger`, `ScopeLogger`, `ScopeLevelLogger`,
   `ScopeLog`, `ScopeLogPublisher`, `ScopeLogFormatter`, `ScopeLogTransformer`,
@@ -299,6 +300,29 @@
   also prints what `onTrace` carries, off by default: that is where the
   coordination below the lifecycle reports, and a scope produces a dozen such
   lines where it produces one of the rest.
+* Fix a failure that outlives its scope reaching `ScopeConfig.observer` as a
+  failure of the observer. A bounded wait that expired is abandoned rather
+  than forgotten, and the work behind it reports through `onError` with
+  `ScopePhase.abandonedWait` if it falls over later — by which time the scope
+  has given its widget back, so reading `target.debugLabel` raised a
+  `TypeError` inside the hook and the guard reported *that* instead. The
+  teardown now keeps the label it had while it still had a widget, so the
+  three calls that can reach a consumer after it is over — the scope's own
+  `disposeScope`, the cancellation of its initialization, and an
+  `AsyncControllerScope` giving back a controller — deliver the failure they
+  were written to deliver.
+* **Behaviour change:** `ScopeObserver.onDispose` and
+  `ScopeObserver.onDisposed` now always come as a pair. `onDispose` is sent by
+  every teardown, not only by one that follows a successful initialization, so
+  a scope taken down while it was still loading no longer reports the end of a
+  teardown nobody was told had begun; and `onDisposed` is sent even when the
+  teardown failed, after the `onError` that says so rather than instead of it.
+  Separately each half was defensible; together they made the pair unreliable
+  in both directions, and a consumer that counts with it — a leak counter, a
+  span tracker — got it wrong either way. `onCancelled` is documented as what
+  it is: a scope cancelled while still queued for its `scopeKey` sends it
+  without any `onInit` before it, because it never started an initialization
+  of its own.
 * Fix an anonymous dependency group — the common shape for the root of a tree,
   `sequential('', […])` or `concurrent('', […])` — reporting through
   `ScopeConfig.observer` under an empty label instead of `[group]`.

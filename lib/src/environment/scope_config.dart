@@ -100,7 +100,7 @@ abstract final class ScopeConfig {
 /// down from. A failure is reported through [FlutterError.reportError] and the
 /// caller goes on. An observer that produces an event of its own — one that
 /// builds a scope from a hook — would otherwise recurse without end, so the
-/// second entry is refused and reported once.
+/// second entry is refused and reported, once per refused call.
 void notifyObserver(void Function(ScopeObserver observer) call) {
   final observer = ScopeConfig.observer;
   if (observer == null) {

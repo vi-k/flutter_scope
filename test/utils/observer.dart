@@ -3,8 +3,12 @@ import 'package:scopo/scopo.dart';
 /// `target.debugLabel` without the trailing `(#hash)`.
 ///
 /// The hash changes from run to run, so an expectation that compared it
-/// verbatim would be comparing against a value nobody can predict.
-String _label(ScopeObservable target) => target.debugLabel.split('(').first;
+/// verbatim would be comparing against a value nobody can predict. A `tag` is
+/// left where it is: it is the half of a label the test chose itself, and the
+/// only way to tell two scopes of the same type apart in the recording — a
+/// parent from the child whose teardown it waits out, say.
+String _label(ScopeObservable target) =>
+    target.debugLabel.replaceFirst(RegExp(r'\(#[0-9a-f]+\)$'), '');
 
 /// Records what the package reports, in order, as plain strings.
 ///

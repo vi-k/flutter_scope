@@ -155,6 +155,24 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
   W get widget => _widget ?? super.widget;
   W? _widget;
 
+  /// The label taken while there was still a widget to take it from.
+  ///
+  /// Answered from [_debugLabel] once the teardown has given the widget back,
+  /// and from the widget itself until then -- so a scope that is still on the
+  /// tree names itself with its current `tag` rather than with a stale copy.
+  ///
+  /// The widget is the last thing the teardown lets go of and the first thing
+  /// this label needs, and everything reached after that -- an abandoned wait
+  /// ending in a failure, a controller released long afterwards -- asks an
+  /// element that has nothing left to answer from. Asking anyway raised a
+  /// `_TypeError` inside the observer's own hook, and the guard then reported
+  /// the observer as the thing that had failed: the failure the report exists
+  /// for reached nobody at all. See [_disposalFinished] for the rest of what
+  /// such code can no longer rely on.
+  @override
+  String get debugLabel => _debugLabel ?? super.debugLabel;
+  String? _debugLabel;
+
   // ignore: cancel_subscriptions
   StreamSubscription<void>? _subscription;
 
@@ -295,6 +313,9 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
   @override
   void dispose() {
     _widget = widget;
+    // Taken here, beside the widget it is taken from: this is the last moment
+    // at which there is certainly one. See [debugLabel].
+    _debugLabel = super.debugLabel;
     _performAsyncDispose(); // ignore: discarded_futures
     super.dispose();
   }
@@ -745,9 +766,9 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
           // initialized nothing and has nothing further coming, and that used
           // to be the quietest way for a scope to fail: the model stayed
           // [AsyncScopeWaiting], the loading branch stayed on screen for good,
-          // and the only trace was an `info` line in a logger that is off by
-          // default. It is the same silence the synchronous failure below was
-          // fixed for -- and the comment there names it in the same words.
+          // and the only trace was a diagnostic line nobody had turned on. It
+          // is the same silence the synchronous failure below was fixed for --
+          // and the comment there names it in the same words.
           final error = StateError(
             '$W was initialized by a stream that ended without '
             'AsyncScopeReady. That is how an `initScope` says it is done, so '
@@ -909,9 +930,19 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
         take(error, stackTrace);
       }
 
+      // Outside the `if` below, and outside the `try` after it, so that the
+      // pair an observer counts with -- a leak counter, a span tracker --
+      // opens once per teardown and closes once per teardown, whatever the
+      // teardown finds. Inside the `if`, as it was, a scope that never became
+      // ready reported the end of a teardown whose beginning nobody was told
+      // about; missing from the `finally`, a teardown that fell over told the
+      // observer of the failure and never that the scope was gone. Either way
+      // round the pair came apart, and a consumer that pairs them got it
+      // wrong in both directions.
+      notifyObserver((observer) => observer.onDispose(this));
+
       try {
         if (_initSucceeded) {
-          notifyObserver((observer) => observer.onDispose(this));
           final result = disposeScope();
           if (result is Future<void>) {
             // The same bound as the cancellation above, for the same reason:
@@ -937,8 +968,6 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
             (observer) => observer.onTrace(this, 'do not dispose of'),
           );
         }
-
-        notifyObserver((observer) => observer.onDisposed(this));
         // ignore: avoid_catching_errors
       } on Object catch (error, stackTrace) {
         notifyObserver(
@@ -946,6 +975,12 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
               observer.onError(this, ScopePhase.disposal, error, stackTrace),
         );
         take(error, stackTrace);
+      } finally {
+        // After the `onError` above, and never instead of it: "disposed of"
+        // here means the scope is gone, not that everything it held was
+        // returned. The failure says what was not; this says there will be no
+        // more of either.
+        notifyObserver((observer) => observer.onDisposed(this));
       }
     } finally {
       // Cleared, not just unregistered: the element outlives its disposal

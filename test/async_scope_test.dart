@@ -696,8 +696,8 @@ void main() {
     // A stream that ends without ever yielding `AsyncScopeReady` is a mistake
     // in the initialization, and it used to be a silent one: the model stayed
     // `AsyncScopeWaiting`, the scope went on showing its loading branch for
-    // good, and the only trace of it was an `info` line in a logger that is
-    // off by default.
+    // good, and the only trace of it was a diagnostic line nobody had turned
+    // on.
     testWidgets(
       'an initialization that ends without a ready state shows the error '
       'branch',

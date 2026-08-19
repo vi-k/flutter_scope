@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:scopo/scopo.dart';
 
+import 'utils/observer.dart';
 import 'utils/settle.dart';
 
 /// Cleanup is a promise, and a hook the user wrote is not part of it.
@@ -263,6 +264,16 @@ void main() {
       FlutterError.onError = reported.add;
       addTearDown(() => FlutterError.onError = previousOnError);
 
+      // The observer is the second half of the promise: the report above says
+      // the failure was not swallowed, and this says it arrived as the
+      // failure it is rather than as a failure of the observer. The scope has
+      // given its widget back by the time this hook runs, so a label read
+      // from the widget throws here -- and the guard would then hand the
+      // observer a report about itself instead of the abandoned teardown.
+      final observer = RecordingObserver();
+      ScopeConfig.observer = observer;
+      addTearDown(() => ScopeConfig.observer = null);
+
       await tester.pumpWidget(
         _wrap(
           _Async(
@@ -308,6 +319,27 @@ void main() {
             'the only way the failure reaches anyone at all',
       );
       expect(disposed, isEmpty, reason: 'it never got as far as releasing');
+      const abandonedFailure =
+          'error _Async abandonedWait Bad state: the teardown fell over at '
+          'last';
+
+      expect(
+        observer.events,
+        [
+          // `_wrap` puts the scope under a coordinator, which reports the
+          // bare structural pair of a family with no phase of its own; it
+          // stays on the tree here, so only the first half of the pair shows.
+          'init AsyncScopeCoordinator',
+          'init _Async',
+          'ready _Async',
+          'dispose _Async',
+          'timeout _Async its own teardown',
+          'disposed _Async',
+          abandonedFailure,
+        ],
+        reason: 'the observer hears the abandoned failure itself, under the '
+            'label the scope had while it still had a widget',
+      );
     });
 
     // The expiry callback runs while the scope still holds everything: its

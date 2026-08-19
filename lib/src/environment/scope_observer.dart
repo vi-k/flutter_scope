@@ -47,6 +47,9 @@ enum ScopePhase {
 /// throws is reported through [FlutterError.reportError] and does not reach
 /// the scope.
 ///
+/// This is a `base class`, so an observer of your own is declared `base`,
+/// `final` or `sealed` — `final` unless you mean it to be extended further.
+///
 /// {@category debug}
 base class ScopeObserver {
   /// Creates an observer that does nothing.
@@ -68,12 +71,29 @@ base class ScopeObserver {
   void onReady(ScopeObservable target) {}
 
   /// An initialization was cancelled before it finished.
+  ///
+  /// Not always preceded by [onInit]. A scope still queued for its `scopeKey`
+  /// when it is taken off the tree never started an initialization of its
+  /// own, so there was nothing to announce; the cancellation arrives on its
+  /// own.
   void onCancelled(ScopeObservable target) {}
 
   /// A teardown has begun.
+  ///
+  /// Sent by every teardown of a family that runs an initialization, whether
+  /// or not that initialization ever got anywhere: a scope taken down while
+  /// it was still loading reports this too, with nothing of its own to
+  /// release. [onDisposed] always follows. A family with no initialization of
+  /// its own sends neither — it reports [onInit] and [onDisposed], and
+  /// nothing in between.
   void onDispose(ScopeObservable target) {}
 
   /// A teardown has finished.
+  ///
+  /// The scope is gone, which is not the same as everything it held having
+  /// come back: a teardown that failed reports [onError] with
+  /// [ScopePhase.disposal] and then this, so the pair with [onDispose] closes
+  /// whichever way the teardown went.
   void onDisposed(ScopeObservable target) {}
 
   /// Something failed; [phase] says what was running.
