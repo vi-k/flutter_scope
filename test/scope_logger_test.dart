@@ -151,8 +151,14 @@ void main() {
       expect(reported.single.exception, isA<StateError>());
     });
 
+    // `AsyncScope` itself no longer writes a line to this logger at all --
+    // its lifecycle reports through `ScopeConfig.observer` now, which has
+    // the equivalent protection of its own (`scope_observer_test.dart`,
+    // "a throwing observer does not reach the scope"). What is still true,
+    // and still worth a scope-shaped test rather than the direct call
+    // above: a publisher wired to fail cannot reach into a scope's build or
+    // teardown, whether or not that scope happens to log anything.
     testWidgets('does not take the scope down with it', (tester) async {
-      final reported = _captureReports();
       _publishByThrowing();
       ScopeConfig.logger.level = ScopeLogLevel.debug;
 
@@ -176,15 +182,9 @@ void main() {
       expect(
         find.text('ready'),
         findsOneWidget,
-        reason: 'the scope built its ready branch, though every log line it '
-            'wrote on the way there failed to publish',
+        reason: 'the scope built its ready branch',
       );
       expect(tester.takeException(), isNull);
-      expect(
-        reported,
-        isNotEmpty,
-        reason: 'and the failures are visible rather than swallowed',
-      );
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
@@ -192,7 +192,7 @@ void main() {
       expect(
         tester.takeException(),
         isNull,
-        reason: 'the teardown logs too, and it survives the same way',
+        reason: 'the teardown survives the broken publisher the same way',
       );
     });
 

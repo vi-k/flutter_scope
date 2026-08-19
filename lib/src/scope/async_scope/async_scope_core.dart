@@ -251,6 +251,9 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
   bool get autoSelfDependence => true;
 
   @override
+  bool get reportsOwnLifecycle => true;
+
+  @override
   AsyncScopeState get state => model.state;
 
   @override
@@ -520,7 +523,9 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
   Future<void> _performAsyncInit() async {
     assert(model.state is AsyncScopeWaiting);
 
-    _log.d('prepare for initialization');
+    notifyObserver(
+      (observer) => observer.onTrace(this, 'prepare for initialization'),
+    );
 
     // Register with parent scope.
     //
@@ -567,7 +572,10 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
         final entry = AccessEntry(reportName);
         _asyncScopeEntry = entry;
         _acquiredCoordinator = coordinator;
-        _log.d(() => 'wait for access to [$scopeKey]');
+        notifyObserver(
+          (observer) =>
+              observer.onTrace(this, 'wait for access to [$scopeKey]'),
+        );
         await coordinator.enter(
           scopeKey,
           entry,
@@ -584,9 +592,15 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
           },
         );
         if (entry.isCancelled) {
-          _log.d(() => 'access to [$scopeKey] cancelled');
+          notifyObserver(
+            (observer) =>
+                observer.onTrace(this, 'access to [$scopeKey] cancelled'),
+          );
         } else {
-          _log.d(() => 'access to [$scopeKey] obtained');
+          notifyObserver(
+            (observer) =>
+                observer.onTrace(this, 'access to [$scopeKey] obtained'),
+          );
         }
 
         // `_isDisposing`, and not `mounted` alone: the disposal reaches the
@@ -599,7 +613,7 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
         // is meanwhile parked on `_initCompleter`, past the point where it
         // could have cancelled anything.
         if (entry.isCancelled || !mounted || _isDisposing) {
-          _log.i('initialization cancelled');
+          notifyObserver((observer) => observer.onCancelled(this));
           // The one completion of the seven that is not guarded by
           // `isCompleted`, because here it cannot be the second: the only other
           // hand on this completer before the subscription exists is
@@ -618,7 +632,7 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
         }
       }
 
-      _log.i('initialize…');
+      notifyObserver((observer) => observer.onInit(this));
       _subscription = initScope().asyncMap((state) {
         // `_initSucceeded`, not `_model.state`: the model only becomes
         // `AsyncScopeReady` inside the post-frame (or delayed) callback
@@ -635,7 +649,9 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
 
         switch (state) {
           case AsyncScopeProgress():
-            _log.i(() => 'progress: ${state.progress}');
+            notifyObserver(
+              (observer) => observer.onProgress(this, state.progress),
+            );
             _model.update(state);
           case AsyncScopeReady():
             if (pauseAfterInitialization case final pauseAfterInitialization?
@@ -665,7 +681,7 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
                 });
             }
             _initSucceeded = true;
-            _log.i('initialized');
+            notifyObserver((observer) => observer.onReady(this));
             if (!_initCompleter.isCompleted) {
               _initCompleter.complete();
             }
@@ -673,7 +689,14 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
       }).listen(
         (_) {},
         onError: (Object error, StackTrace stackTrace) {
-          _log.e('initialization failed', error: error, stackTrace: stackTrace);
+          notifyObserver(
+            (observer) => observer.onError(
+              this,
+              ScopePhase.initialization,
+              error,
+              stackTrace,
+            ),
+          );
 
           // A failure that arrives *after* [AsyncScopeReady] -- a stream that
           // keeps working once the scope is usable and then raises, or the
@@ -731,7 +754,14 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
             'a stream ending without it leaves the scope nothing to show and '
             'nothing to release.',
           );
-          _log.e('not initialized', error: error);
+          notifyObserver(
+            (observer) => observer.onError(
+              this,
+              ScopePhase.initialization,
+              error,
+              null,
+            ),
+          );
 
           // Before the model, and before anything that could throw:
           // `_performAsyncDispose` parks on this completer, and a failure on
@@ -757,7 +787,14 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
     } on Object catch (error, stackTrace) {
       // `_initSucceeded` stays false: nothing was initialized, so nothing is
       // disposed of either.
-      _log.e('initialization failed', error: error, stackTrace: stackTrace);
+      notifyObserver(
+        (observer) => observer.onError(
+          this,
+          ScopePhase.initialization,
+          error,
+          stackTrace,
+        ),
+      );
 
       // Settled before anything below is attempted. This future is discarded,
       // so nothing retries and nothing else settles the completer, while
@@ -850,7 +887,10 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
         unmountScope();
         // ignore: avoid_catching_errors
       } on Object catch (error, stackTrace) {
-        _log.e('unmount failed', error: error, stackTrace: stackTrace);
+        notifyObserver(
+          (observer) =>
+              observer.onError(this, ScopePhase.unmount, error, stackTrace),
+        );
         take(error, stackTrace);
       }
 
@@ -858,17 +898,20 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
         await _prepareForDisposal();
         // ignore: avoid_catching_errors
       } on Object catch (error, stackTrace) {
-        _log.e(
-          'preparation for disposal failed',
-          error: error,
-          stackTrace: stackTrace,
+        notifyObserver(
+          (observer) => observer.onError(
+            this,
+            ScopePhase.preparationForDisposal,
+            error,
+            stackTrace,
+          ),
         );
         take(error, stackTrace);
       }
 
       try {
         if (_initSucceeded) {
-          _log.i('dispose…');
+          notifyObserver((observer) => observer.onDispose(this));
           final result = disposeScope();
           if (result is Future<void>) {
             // The same bound as the cancellation above, for the same reason:
@@ -890,13 +933,18 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
             }
           }
         } else {
-          _log.d('do not dispose of');
+          notifyObserver(
+            (observer) => observer.onTrace(this, 'do not dispose of'),
+          );
         }
 
-        _log.i('disposed');
+        notifyObserver((observer) => observer.onDisposed(this));
         // ignore: avoid_catching_errors
       } on Object catch (error, stackTrace) {
-        _log.e('disposal failed', error: error, stackTrace: stackTrace);
+        notifyObserver(
+          (observer) =>
+              observer.onError(this, ScopePhase.disposal, error, stackTrace),
+        );
         take(error, stackTrace);
       }
     } finally {
@@ -912,7 +960,10 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
       if (_asyncScopeEntry case final asyncScopeEntry?) {
         // `_acquiredScopeKey`, not `scopeKey`: what is being released is the
         // key the queue was entered on, whatever the getter says by now.
-        _log.d(() => 'exit from [$_acquiredScopeKey]');
+        notifyObserver(
+          (observer) =>
+              observer.onTrace(this, 'exit from [$_acquiredScopeKey]'),
+        );
         asyncScopeEntry.exit();
         _asyncScopeEntry = null;
       }
@@ -987,10 +1038,13 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
     // lost in silence.
     unawaited(
       work.catchError((Object error, StackTrace stackTrace) {
-        _log.e(
-          'an abandoned wait for $what ended in a failure',
-          error: error,
-          stackTrace: stackTrace,
+        notifyObserver(
+          (observer) => observer.onError(
+            this,
+            ScopePhase.abandonedWait,
+            error,
+            stackTrace,
+          ),
         );
         FlutterError.reportError(
           FlutterErrorDetails(
@@ -1002,7 +1056,7 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
       }),
     );
 
-    _log.e('gave up waiting for $what');
+    notifyObserver((observer) => observer.onTimeout(this, what));
     FlutterError.reportError(
       FlutterErrorDetails(
         exception: TimeoutException(
@@ -1022,7 +1076,9 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
   /// Reaches user code through [onWaitForChildrenTimeout], so its failures are
   /// the caller's to absorb.
   Future<void> _prepareForDisposal() async {
-    _log.d('prepare for disposal');
+    notifyObserver(
+      (observer) => observer.onTrace(this, 'prepare for disposal'),
+    );
 
     // Cancel waiting for access if it has not finished yet.
     if (_asyncScopeEntry case final entry? when entry.isWaiting) {
@@ -1030,7 +1086,12 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
       // the initialization read, and the getter is user code -- a message
       // resolved lazily would run it again, from a teardown that has already
       // begun. The same reason the release below logs the field.
-      _log.d(() => 'cancel waiting for access to [$_acquiredScopeKey]');
+      notifyObserver(
+        (observer) => observer.onTrace(
+          this,
+          'cancel waiting for access to [$_acquiredScopeKey]',
+        ),
+      );
       entry.cancel();
     }
 
@@ -1072,10 +1133,13 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
           );
         }
       } on Object catch (error, stackTrace) {
-        _log.e(
-          'initialization cancellation failed',
-          error: error,
-          stackTrace: stackTrace,
+        notifyObserver(
+          (observer) => observer.onError(
+            this,
+            ScopePhase.initializationCancellation,
+            error,
+            stackTrace,
+          ),
         );
         FlutterError.reportError(
           FlutterErrorDetails(
@@ -1086,7 +1150,7 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
         );
       }
       if (!_initCompleter.isCompleted) {
-        _log.i('initialization cancelled');
+        notifyObserver((observer) => observer.onCancelled(this));
         _initCompleter.complete();
       }
     }
@@ -1100,12 +1164,19 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
     }
 
     if (!_initCompleter.isCompleted) {
-      _log.d('wait for initialization');
+      notifyObserver(
+        (observer) => observer.onTrace(this, 'wait for initialization'),
+      );
       await _initCompleter.future;
     }
 
     if (hasChildren) {
-      _log.d(() => 'wait for children (count: $childrenCount)');
+      notifyObserver(
+        (observer) => observer.onTrace(
+          this,
+          'wait for children (count: $childrenCount)',
+        ),
+      );
       await waitForChildren(
         timeout:
             waitForChildrenTimeout ?? ScopeConfig.defaultWaitForChildrenTimeout,

@@ -271,6 +271,20 @@
   reported through `FlutterError.reportError` rather than reaching the scope,
   and a nested notification — an observer producing a scope event of its own
   from inside a hook — is refused rather than left to recurse.
+* `AsyncScope`'s own lifecycle now reports through `ScopeConfig.observer` too
+  — and with it every family built on the same element: `AsyncDataScope`,
+  `AsyncControllerScope`, `LiteScope` and `Scope`. `onProgress`, `onReady`,
+  `onCancelled`, `onDispose`, `onTimeout` for an expired wait, and `onError`
+  for each phase that can fail (initialization, its cancellation, preparation
+  for disposal, `onUnmount`, disposal, a wait nobody was left to hear the end
+  of). A family that runs its own initialization reports it in place of the
+  structural pair `ScopeWidgetElementBase` fires for the rest, rather than
+  alongside it — `ScopeWidgetElementBase.reportsOwnLifecycle`, `false` by
+  default, `true` on `AsyncScopeElementBase` — so `onInit`/`onDisposed` are not
+  doubled for `LiteScope` and `Scope`, whose default `initScope()` runs the
+  exact stream `AsyncScope`'s does. The coordination below the lifecycle — the
+  `scopeKey` queue, cancelling an initialization, waiting for children —
+  reports through `onTrace`.
 * The bookkeeping that decides which build a dependent's selectors belong to asks
   for a frame when nothing else will bring one. The reset runs in a post-frame
   callback, and a build is not always inside a frame — `runApp` builds the first
