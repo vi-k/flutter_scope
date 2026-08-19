@@ -950,10 +950,6 @@
     `AsyncScopeCoordinator` above them (the usual place is above
     `MaterialApp`) and await
     `AsyncScopeCoordinator.waitForChildren(context)`.
-* Upgrade logger_builder to 0.5.0: logs are now published through
-  `publishLog`, so `ScopeConfig.logger.transformer` can now rewrite or drop
-  them. scopo's own API is unaffected, since `ScopeLogPublisher` and
-  `ScopeLogFormatter` are unchanged in 0.5.0.
 * [breaking changes] Unify dependency path format: no leading `/` in
   `ScopeDependencyException.name`, `ScopeDependencyInfo.path` and progress
   paths; anonymous groups add no separator.
