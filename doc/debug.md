@@ -163,17 +163,25 @@ else can be handed go to `FlutterError.reportError`. Leaving
 
 ### What `onTimeout` covers
 
-Four bounded waits report an expiry through the observer, and `what` names the
-one that expired: `its own teardown` (a scope waiting out `disposeScope`),
-`its initialization to be cancelled`, `its controller to be released` (an
-`AsyncControllerScope` giving back a controller its own initialization never
-handed over), and `the disposal` (a dependency container waiting for the tree
-it built to be released).
+Every bounded wait reports an expiry through the observer — all six of them —
+and `what` names the one that expired:
 
-The two remaining bounded waits — for a `scopeKey` and for child scopes — do
-not reach the observer. They report through `FlutterError.reportError` and
-through the `onScopeKeyTimeout` and `onWaitForChildrenTimeout` callbacks of the
-scope itself, which is where they were before the observer existed.
+| `what` | the wait |
+| --- | --- |
+| `access to its scopeKey` | a scope queued behind the previous one on the same key |
+| `its own teardown` | a scope waiting out `disposeScope` |
+| `its initialization to be cancelled` | a teardown that arrived while the initialization was still running |
+| `its controller to be released` | an `AsyncControllerScope` giving back a controller its own initialization never handed over |
+| `its child scopes` | a parent waiting for the scopes below it |
+| `the disposal` | a dependency container waiting for the tree it built to be released |
+
+An expiry is never announced through the observer alone. The first two of
+these also reach `onScopeKeyTimeout` and `onWaitForChildrenTimeout` — the
+scope's own callbacks — and every one of them is reported through
+`FlutterError.reportError` unless a callback of yours takes that place. Passing
+your own `onTimeout` to `waitForChildren` replaces that report, not this
+event: the observer is what the package says about itself, not your error
+handling.
 
 ### What `onTrace` covers
 

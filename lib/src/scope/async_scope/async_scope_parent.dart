@@ -17,8 +17,14 @@ part of '../scope.dart';
 /// scopes registered with the nearest coordinator rather than the children of
 /// one particular scope.
 ///
+/// The [ScopeObservable] constraint is what lets an expired wait for the
+/// children reach `ScopeConfig.observer` from here, under the same label the
+/// rest of the scope's events carry. Every element of the package already
+/// answers to it; a parent of your own has to, and [debugLabel] is all it
+/// asks for.
+///
 /// {@category AsyncScope}
-mixin AsyncScopeParent on Diagnosticable {
+mixin AsyncScopeParent on Diagnosticable implements ScopeObservable {
   final _childRegistry = ChildRegistry();
 
   /// The name a report about this parent's children is prefixed with.
@@ -79,17 +85,35 @@ mixin AsyncScopeParent on Diagnosticable {
       // package that can hang for ever, while the same method on
       // [AsyncScopeCoordinator] gives up on time.
       timeout: timeout ?? ScopeConfig.defaultWaitForChildrenTimeout,
-      onTimeout: onTimeout ??
-          (error, stackTrace) => FlutterError.reportError(
-                FlutterErrorDetails(
-                  exception: TimeoutException(
-                    '$name ${error.message}',
-                    error.duration,
-                  ),
-                  stack: stackTrace,
-                  library: 'scopo',
-                ),
-              ),
+      onTimeout: (error, stackTrace) {
+        // Before the caller's handler and independent of it: a custom
+        // [onTimeout] replaces the default *report*, not the reporting of the
+        // package about itself. This is the one point all three waits for
+        // children pass through -- a scope's own teardown, this method called
+        // from a parent, and [AsyncScopeCoordinator.waitForChildren] -- so
+        // announcing it here is what makes the expiry visible whichever way
+        // the wait was asked for.
+        notifyObserver(
+          (observer) => observer.onTimeout(this, 'its child scopes'),
+        );
+
+        if (onTimeout != null) {
+          onTimeout(error, stackTrace);
+
+          return;
+        }
+
+        FlutterError.reportError(
+          FlutterErrorDetails(
+            exception: TimeoutException(
+              '$name ${error.message}',
+              error.duration,
+            ),
+            stack: stackTrace,
+            library: 'scopo',
+          ),
+        );
+      },
     );
   }
 

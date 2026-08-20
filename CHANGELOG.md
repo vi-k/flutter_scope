@@ -380,6 +380,22 @@
   in or out reports through the observer; a `buildOnReady` and its siblings
   still do not, because a build belongs to Flutter's own error boundary, which
   answers it with an `ErrorWidget`.
+* All six bounded waits now report an expiry through `ScopeConfig.observer`.
+  Four already did; the wait for a `scopeKey` and the wait for child scopes
+  reported only through `FlutterError.reportError` and the scope's own
+  `onScopeKeyTimeout` / `onWaitForChildrenTimeout`, which is where they were
+  before the observer existed. `onTimeout` names them `access to its scopeKey`
+  and `its child scopes`. The wait for the children reports from
+  `AsyncScopeParent.waitForChildren`, the one point all three ways of asking
+  for it pass through — a scope's own teardown, a parent asked directly, and
+  `AsyncScopeCoordinator.waitForChildren` — and it reports even when you pass
+  an `onTimeout` of your own: a callback replaces the `FlutterError` report,
+  not what the package says about itself.
+* **Breaking:** the `AsyncScopeParent` mixin now implements `ScopeObservable`,
+  so a parent of your own has to answer `debugLabel`. That is what lets an
+  expired wait for the children reach the observer from the mixin, under the
+  same label the rest of the scope's events carry. Every element of the
+  package already answered to it.
 * Fix an anonymous dependency group — the common shape for the root of a tree,
   `sequential('', […])` or `concurrent('', […])` — reporting through
   `ScopeConfig.observer` under an empty label instead of `[group]`.

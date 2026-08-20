@@ -234,6 +234,103 @@ void main() {
     ]);
   });
 
+  testWidgets('an expired wait for a scopeKey reports onTimeout',
+      (tester) async {
+    final hang = Completer<void>();
+    addTearDown(() {
+      if (!hang.isCompleted) {
+        hang.complete();
+      }
+    });
+
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: AsyncScopeCoordinator(
+          child: Column(
+            children: [
+              _keyed(tag: 'first', gate: hang),
+              _keyed(tag: 'second', scopeKeyTimeout: _short),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    await settle(
+      tester,
+      until: () => observer.events.any((event) => event.startsWith('timeout ')),
+    );
+    expect(tester.takeException(), isA<TimeoutException>());
+
+    // The other four bounded waits have reported through the observer since
+    // the observer existed; this one and the wait for children reported only
+    // through `FlutterError` and the scope's own callback.
+    expect(
+      observer.events,
+      contains('timeout AsyncScope(second) access to its scopeKey'),
+    );
+
+    // Both scopes are still standing, and the first is still parked in its
+    // initialization. Letting it go and taking the tree away is what keeps
+    // the leak tracker looking at the package rather than at the gate this
+    // test holds: the model is disposed of by the last step of the teardown,
+    // and the teardown is a chain of real futures.
+    hang.complete();
+    await tester.pumpWidget(const SizedBox.shrink());
+    await settle(
+      tester,
+      until: () =>
+          observer.events.where((e) => e.startsWith('disposed ')).length >= 3,
+    );
+  });
+
+  testWidgets('an expired wait for the children reports onTimeout',
+      (tester) async {
+    final childGate = Completer<void>();
+    addTearDown(() {
+      if (!childGate.isCompleted) {
+        childGate.complete();
+      }
+    });
+
+    // No coordinator: a child registers with the nearest `AsyncScopeParent`,
+    // which here is the parent scope itself. The `Directionality` stays put
+    // and only the scope is swapped out -- the shape the neighbouring test of
+    // this same wait uses, and the one that leaves the leak tracker looking
+    // at the package rather than at a tree pulled out from under a teardown.
+    Widget build({required bool present}) => Directionality(
+          textDirection: TextDirection.ltr,
+          child: present
+              ? _parent(
+                  waitForChildrenTimeout: _short,
+                  child: _held(childGate),
+                )
+              : const SizedBox.shrink(),
+        );
+
+    await tester.pumpWidget(build(present: true));
+    await tester.pumpAndSettle();
+
+    await tester.pumpWidget(build(present: false));
+    await settle(
+      tester,
+      until: () => observer.events.contains('disposed AsyncScope(parent)'),
+    );
+
+    // The other four bounded waits have reported through the observer since
+    // the observer existed; this one and the wait for a `scopeKey` reported
+    // only through `FlutterError` and the scope's own callback.
+    expect(
+      observer.events,
+      contains('timeout AsyncScope(parent) its child scopes'),
+    );
+    expect(tester.takeException(), isA<TimeoutException>());
+
+    childGate.complete();
+    await settle(tester, until: () => false);
+  });
+
   testWidgets('a throwing observer does not reach the scope', (tester) async {
     final errors = <FlutterErrorDetails>[];
     final previous = FlutterError.onError;
@@ -543,6 +640,10 @@ void main() {
         'init AsyncScope(child)',
         'ready AsyncScope(child)',
         'dispose AsyncScope(child)',
+        // The expiry itself, then the failure of the hook it called. Both
+        // belong to the parent: the wait for the children now reports through
+        // the observer like the other five bounded waits.
+        'timeout AsyncScope(parent) its child scopes',
         preparationFailed,
         'dispose AsyncScope(parent)',
         'disposed AsyncScope(parent)',
@@ -1028,6 +1129,66 @@ final class _FailingController extends ScopeController {
 
 /// A model with nothing in it: what matters is its disposer.
 final class _Model {}
+
+const _short = Duration(milliseconds: 50);
+
+/// A scope on the shared `scopeKey`, optionally held in its initialization or
+/// in its teardown.
+Widget _keyed({
+  required String tag,
+  Completer<void>? gate,
+  Completer<void>? disposeGate,
+  Duration? scopeKeyTimeout,
+}) =>
+    AsyncScope(
+      tag: tag,
+      scopeKey: 'shared',
+      scopeKeyTimeout: scopeKeyTimeout,
+      initScope: (context) async* {
+        if (gate != null) {
+          await gate.future;
+        }
+        yield AsyncScopeReady();
+      },
+      disposeScope: () async {
+        if (disposeGate != null) {
+          await disposeGate.future;
+        }
+      },
+      progressBuilder: (context, progress) => const SizedBox.shrink(),
+      builder: (context) => const SizedBox.shrink(),
+      errorBuilder: (context, error, stackTrace, progress) =>
+          const SizedBox.shrink(),
+    );
+
+/// A child scope whose teardown is held until [gate] is completed.
+Widget _held(Completer<void> gate) => AsyncScope(
+      tag: 'child',
+      initScope: (context) => Stream.value(AsyncScopeReady()),
+      disposeScope: () => gate.future,
+      progressBuilder: (context, progress) => const SizedBox.shrink(),
+      builder: (context) => const SizedBox.shrink(),
+      errorBuilder: (context, error, stackTrace, progress) =>
+          const SizedBox.shrink(),
+    );
+
+/// A scope that waits for the scope below it before disposing of itself.
+Widget _parent({
+  required Widget child,
+  Duration? waitForChildrenTimeout,
+}) =>
+    AsyncScope(
+      tag: 'parent',
+      waitForChildrenTimeout: waitForChildrenTimeout,
+      initScope: (context) async* {
+        yield AsyncScopeReady();
+      },
+      disposeScope: () {},
+      progressBuilder: (context, progress) => const SizedBox.shrink(),
+      builder: (context) => child,
+      errorBuilder: (context, error, stackTrace, progress) =>
+          const SizedBox.shrink(),
+    );
 
 /// Fails every hook it is asked for.
 final class _ThrowingObserver extends ScopeObserver {

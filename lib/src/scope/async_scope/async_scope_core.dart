@@ -602,6 +602,9 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
           entry,
           timeout: scopeKeyTimeout ?? ScopeConfig.defaultScopeKeyTimeout,
           onTimeout: (error, stackTrace) {
+            notifyObserver(
+              (observer) => observer.onTimeout(this, 'access to its scopeKey'),
+            );
             FlutterError.reportError(
               FlutterErrorDetails(
                 exception: error,
