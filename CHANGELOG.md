@@ -329,6 +329,17 @@
   whose `init()` actually succeeded: one that threw, or never ran, reports
   neither half — the opposite of the phase-reporting families above, where the
   pair can still close a teardown that opened with no `onInit` at all.
+* Fix a synchronous initialization failure being invisible to
+  `ScopeConfig.observer`. `ScopeWidgetElementBase.build()` catches what
+  `init()` threw, records it and raises it again into Flutter's build error
+  boundary — which puts an `ErrorWidget` in the subtree but tells the observer
+  nothing. A structural family therefore reported no event at all for such a
+  scope: no `onInit`, and by the rule above no teardown pair either. A family
+  with a phase of its own fared no better, since that phase is started only
+  for an `init()` that returned. The hook now sends `onError` with
+  `ScopePhase.initialization` before it raises the failure again — the one
+  point both kinds of family pass through; for a structural scope that single
+  event is its whole recording.
 * Fix an anonymous dependency group — the common shape for the root of a tree,
   `sequential('', […])` or `concurrent('', […])` — reporting through
   `ScopeConfig.observer` under an empty label instead of `[group]`.

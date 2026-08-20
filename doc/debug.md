@@ -69,8 +69,10 @@ fails" below.
 A family with no initialization phase of its own — `ScopeWidget`, `ScopeModel`,
 `ScopeNotifier`, `AsyncScopeCoordinator` — reports `onInit` when its element is
 initialized, and `onDispose`/`onDisposed` as a pair around its teardown. That
-is all such a scope has to say, and before this reporting existed it said
-nothing at all: its lifecycle was visible only to a debugger.
+is all such a scope has to say when it works; one whose `init()` throws says
+`onError` with `ScopePhase.initialization` and nothing else. Before this
+reporting existed it said nothing at all: its lifecycle was visible only to a
+debugger.
 
 A family that runs an initialization — everything built on the asynchronous
 element: `AsyncScope`, `AsyncDataScope`, `AsyncControllerScope`, `LiteScope`
@@ -103,7 +105,9 @@ that pairs events up:
   closed, even though the element still tears itself down internally. This is
   the one point where the two kinds of family differ: the phase-reporting
   families above can still close a teardown that opened with no `onInit` at
-  all, as the previous bullet shows.
+  all, as the previous bullet shows. The failure itself is not lost either
+  way — `init()` is the one hook both kinds run before anything else, and a
+  throw from it reports `onError` with `ScopePhase.initialization` for both.
 
 The container of automatic dependencies of a `Scope` reports its own lifecycle
 under its own label, beside the scope that owns it: `onInit`, `onProgress` per
@@ -137,7 +141,7 @@ Wrapping those three in a common type would have meant inventing a fourth.
 
 | `ScopePhase` | what was running |
 | ------------------------------ | ------------------------------------------ |
-| `initialization` | the initialization, either half of it |
+| `initialization` | the initialization: the `init()` hook or the phase |
 | `initializationCancellation` | cancelling an initialization still running |
 | `preparationForDisposal` | the synchronous half of the teardown |
 | `unmount` | the `onUnmount` hook |

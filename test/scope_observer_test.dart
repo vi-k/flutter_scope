@@ -99,17 +99,61 @@ void main() {
     // never sent `onInit` -- and the teardown pair belongs to a scope that
     // announced one: `unmountScope()`/`dispose()` still run internally (the
     // "symmetry, not success" comment on `unmount()`), but nothing is
-    // reported for a teardown nobody was told had opened.
-    expect(observer.events, isEmpty);
+    // reported for a teardown nobody was told had opened. The failure itself
+    // is reported, and it is the whole of what this scope has to say.
+    expect(observer.events, [
+      'error _FailingInitScope initialization Bad state: init failed',
+    ]);
 
     await tester.pumpWidget(const SizedBox());
 
     expect(
       observer.events,
-      isEmpty,
+      ['error _FailingInitScope initialization Bad state: init failed'],
       reason: 'no onInit was ever sent, so the teardown reports no '
           'onDispose/onDisposed either',
     );
+  });
+
+  testWidgets(
+      'a scope with a phase of its own whose init() throws reports the '
+      'failure through the same point', (tester) async {
+    await tester.pumpWidget(
+      const Directionality(
+        textDirection: TextDirection.ltr,
+        child: _FailingInitAsyncScope(),
+      ),
+    );
+
+    expect(tester.takeException(), isA<StateError>());
+
+    // `reportsOwnLifecycle` is `true` here, and that is why this event has to
+    // come from `build()` rather than from the asynchronous half: the phase
+    // that reports its own failures is started from `performRebuild` only
+    // when `_didInit` holds, so an `init()` that threw leaves it never
+    // started and with nothing to say. The synchronous hook is the one place
+    // both kinds of family pass through.
+    expect(observer.events, [
+      'error _FailingInitAsyncScope initialization Bad state: init failed',
+    ]);
+
+    await tester.pumpWidget(const SizedBox());
+    await settle(
+      tester,
+      until: () => observer.events.contains('disposed _FailingInitAsyncScope'),
+    );
+
+    // The teardown pair follows all the same, and that is the difference
+    // between the two kinds of family: a phase-reporting one closes
+    // `onDispose`/`onDisposed` whichever way the scope went, while the
+    // structural one above reports neither half without an `onInit` of its
+    // own. What is absent here is `onCancelled`: there was no initialization
+    // to cancel.
+    expect(observer.events, [
+      'error _FailingInitAsyncScope initialization Bad state: init failed',
+      'dispose _FailingInitAsyncScope',
+      'disposed _FailingInitAsyncScope',
+    ]);
   });
 
   testWidgets('a throwing observer does not reach the scope', (tester) async {
@@ -835,6 +879,39 @@ final class _FailingInitScopeElement extends ScopeWidgetElementBase<
 
   @override
   Widget buildChild() => const SizedBox.shrink();
+}
+
+/// A scope on the asynchronous element whose synchronous `init()` throws.
+///
+/// That hook is where `AsyncScopeBase.init` runs `onMount`, and it is the
+/// only part of an asynchronous family that runs before the phase which
+/// reports itself.
+final class _FailingInitAsyncScope extends AsyncScopeCore<
+    _FailingInitAsyncScope, _FailingInitAsyncScopeElement> {
+  const _FailingInitAsyncScope();
+
+  @override
+  _FailingInitAsyncScopeElement createScopeElement() =>
+      _FailingInitAsyncScopeElement(this);
+}
+
+final class _FailingInitAsyncScopeElement extends AsyncScopeElementBase<
+    _FailingInitAsyncScope, _FailingInitAsyncScopeElement> {
+  _FailingInitAsyncScopeElement(super.widget);
+
+  @override
+  void init() {
+    super.init();
+    throw StateError('init failed');
+  }
+
+  @override
+  Stream<AsyncScopeInitState> initScope() async* {
+    yield AsyncScopeReady();
+  }
+
+  @override
+  Widget buildOnState(AsyncScopeState state) => const SizedBox.shrink();
 }
 
 /// Fails every hook it is asked for.

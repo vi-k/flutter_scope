@@ -95,6 +95,13 @@ base class ScopeObserver {
   void onDisposed(ScopeObservable target) {}
 
   /// Something failed; [phase] says what was running.
+  ///
+  /// Not always preceded by [onInit]. The synchronous `init()` hook runs
+  /// before either kind of family has announced anything, so a hook that
+  /// threw reports [ScopePhase.initialization] on its own — and for a
+  /// structural family (no phase of its own) that one event is the scope's
+  /// whole recording, since the teardown pair belongs to a scope that
+  /// announced [onInit].
   void onError(
     ScopeObservable target,
     ScopePhase phase,

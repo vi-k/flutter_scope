@@ -538,6 +538,23 @@ abstract base class ScopeWidgetElementBase<W extends ScopeWidgetCore<W, E>,
         _initPhase = _InitPhase.failed;
         _initFailure = (error, stackTrace);
 
+        // The only report this failure gets. The boundary above raises it
+        // again as an `ErrorWidget`, but that is what the subtree shows, not
+        // what the observer hears: without this an observer watching scopes
+        // saw one that neither began nor ended, whichever family it belonged
+        // to. A family with a phase of its own reports its own failures and
+        // would double this -- except that its phase is started only for an
+        // `init()` that returned (`_didInit` in `performRebuild`), so a hook
+        // that threw leaves it never started and with nothing to say.
+        notifyObserver(
+          (observer) => observer.onError(
+            this,
+            ScopePhase.initialization,
+            error,
+            stackTrace,
+          ),
+        );
+
         rethrow;
       } finally {
         assert(() {
