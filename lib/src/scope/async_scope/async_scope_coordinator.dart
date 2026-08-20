@@ -63,8 +63,9 @@ final class AsyncScopeCoordinator extends ScopeWidgetCore<AsyncScopeCoordinator,
   /// for this call only. An expiry is not fatal: the awaited scopes that never
   /// finished are dropped and the future completes normally, so a scope that
   /// never finishes disposing of itself degrades into a delay instead of a
-  /// deadlock. Removing the limit entirely is done through [ScopeConfig], not
-  /// here.
+  /// deadlock. Pass [ScopeTimeout.none] to remove the limit for this call
+  /// alone, or set [ScopeConfig.defaultWaitForChildrenTimeout] to `null` to
+  /// remove it everywhere.
   ///
   /// [onTimeout] defaults to reporting the [TimeoutException] through
   /// [FlutterError.reportError], so an expiry is never silent; pass a callback
@@ -83,7 +84,10 @@ final class AsyncScopeCoordinator extends ScopeWidgetCore<AsyncScopeCoordinator,
     final name = element.widget.toStringShort(showHashCode: true);
 
     return element.waitForChildren(
-      timeout: timeout ?? ScopeConfig.defaultWaitForChildrenTimeout,
+      // Resolved by `waitForChildren` below, and only there: resolving twice
+      // turns a `ScopeTimeout.none` into the `null` that means "take the
+      // default" on the way in.
+      timeout: timeout,
       onTimeout: onTimeout ??
           (error, stackTrace) => FlutterError.reportError(
                 FlutterErrorDetails(

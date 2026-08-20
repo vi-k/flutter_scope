@@ -12,8 +12,8 @@ abstract base class AsyncControllerScopeBase<
 
   /// How long to wait for [scopeKey]; `null` takes the default.
   ///
-  /// Defaults to [ScopeConfig.defaultScopeKeyTimeout]. Removing the limit
-  /// altogether is done there, not here.
+  /// Defaults to [ScopeConfig.defaultScopeKeyTimeout]; [ScopeTimeout.none]
+  /// removes the limit for this scope alone.
   final Duration? scopeKeyTimeout;
 
   /// Called when the wait for [scopeKey] expires.
@@ -25,8 +25,11 @@ abstract base class AsyncControllerScopeBase<
   /// How long the teardown waits for the initialization of the controller to
   /// be cancelled; `null` takes the default.
   ///
-  /// Defaults to [ScopeConfig.defaultInitCancellationTimeout]. Removing the
-  /// limit altogether is done there, not here.
+  /// Defaults to [ScopeConfig.defaultInitCancellationTimeout]. This is the one
+  /// timeout that refuses [ScopeTimeout.none], with an assert: a
+  /// cancellation waits for a generator to run out, and one suspended on a
+  /// future that never completes never does. Removing this limit is a
+  /// decision for the whole application, and it is made there.
   final Duration? initCancellationTimeout;
 
   /// Called when the wait for the cancellation expires.
@@ -38,8 +41,8 @@ abstract base class AsyncControllerScopeBase<
   /// How long to wait for the teardown of the controller; `null` takes the
   /// default.
   ///
-  /// Defaults to [ScopeConfig.defaultDisposeScopeTimeout]. Removing the limit
-  /// altogether is done there, not here.
+  /// Defaults to [ScopeConfig.defaultDisposeScopeTimeout]; [ScopeTimeout.none]
+  /// removes the limit for this scope alone.
   final Duration? disposeScopeTimeout;
 
   /// Called when the wait for the teardown expires.
@@ -50,8 +53,8 @@ abstract base class AsyncControllerScopeBase<
 
   /// How long to wait for the child scopes; `null` takes the default.
   ///
-  /// Defaults to [ScopeConfig.defaultWaitForChildrenTimeout]. Removing the
-  /// limit altogether is done there, not here.
+  /// Defaults to [ScopeConfig.defaultWaitForChildrenTimeout];
+  /// [ScopeTimeout.none] removes the limit for this scope alone.
   final Duration? waitForChildrenTimeout;
 
   /// Called when the wait for the child scopes expires.

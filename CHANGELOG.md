@@ -396,6 +396,24 @@
   expired wait for the children reach the observer from the mixin, under the
   same label the rest of the scope's events carry. Every element of the
   package already answered to it.
+* Add `ScopeTimeout.none`: the one value a single scope has for "wait as long
+  as it takes". Every timeout parameter is a `Duration?` and all three of its
+  values were taken — absent or `null` means "take the default from
+  `ScopeConfig`", `Duration.zero` means "expire at once", and any other
+  `Duration` is the limit — so removing a limit was possible only for every
+  scope at once. Accepted by `scopeKeyTimeout`, `disposeScopeTimeout` and
+  `waitForChildrenTimeout`, on the scopes and on both `waitForChildren`
+  helpers. It is a subtype of `Duration` rather than a magic value, so the
+  parameters keep their type and no existing call site changes; the package
+  recognises it with `is`, never with `==`, so a `Duration` that some
+  arithmetic happened to make negative is still a limit rather than the
+  absence of one.
+* `initCancellationTimeout` refuses `ScopeTimeout.none` with an assert. A
+  cancellation waits for the initialization generator to run out, and one
+  suspended on a future that never completes never does — an unbounded wait
+  there is the hang the limit exists to prevent. Removing that limit stays a
+  decision for the whole application, through
+  `ScopeConfig.defaultInitCancellationTimeout`.
 * Fix an anonymous dependency group — the common shape for the root of a tree,
   `sequential('', […])` or `concurrent('', […])` — reporting through
   `ScopeConfig.observer` under an empty label instead of `[group]`.

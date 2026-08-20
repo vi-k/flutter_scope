@@ -8,6 +8,7 @@
 import 'package:flutter/foundation.dart';
 
 part 'scope_observer.dart';
+part 'scope_timeout.dart';
 
 /// {@category debug}
 abstract final class ScopeConfig {
@@ -34,6 +35,9 @@ abstract final class ScopeConfig {
   /// If `null`, then there is no timeout and the wait is unbounded.
   ///
   /// If zero, then the timeout expires immediately.
+  ///
+  /// A single scope says the same with [ScopeTimeout.none], which its own
+  /// parameter accepts in place of a [Duration].
   static Duration? defaultScopeKeyTimeout = _timeout;
 
   /// Timeout for waiting for scopes to be disposed of.
@@ -41,6 +45,9 @@ abstract final class ScopeConfig {
   /// If `null`, then there is no timeout and the wait is unbounded.
   ///
   /// If zero, then the timeout expires immediately.
+  ///
+  /// A single scope says the same with [ScopeTimeout.none], which its own
+  /// parameter accepts in place of a [Duration].
   static Duration? defaultWaitForChildrenTimeout = _timeout;
 
   /// Timeout for waiting for the asynchronous teardown of one scope.
@@ -53,6 +60,9 @@ abstract final class ScopeConfig {
   /// If `null`, then there is no timeout and the wait is unbounded.
   ///
   /// If zero, then the timeout expires immediately.
+  ///
+  /// A single scope says the same with [ScopeTimeout.none], which its own
+  /// parameter accepts in place of a [Duration].
   static Duration? defaultDisposeScopeTimeout = _timeout;
 
   /// Timeout for waiting for an initialization to be cancelled.
@@ -65,6 +75,11 @@ abstract final class ScopeConfig {
   /// If `null`, then there is no timeout and the wait is unbounded.
   ///
   /// If zero, then the timeout expires immediately.
+  ///
+  /// This is the one timeout a single scope cannot remove for itself:
+  /// `initCancellationTimeout` refuses [ScopeTimeout.none] with an assert, so
+  /// an unbounded cancellation is a decision for the whole application and is
+  /// made here.
   static Duration? defaultInitCancellationTimeout = _timeout;
 
   /// The default every timeout above starts at.

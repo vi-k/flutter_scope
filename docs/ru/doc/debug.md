@@ -1,6 +1,6 @@
 # debug
 
-> Перевод `doc/debug.md` (blob `20cd953da5209860a0c2f98ea79334cd27d851b0`).
+> Перевод `doc/debug.md` (blob `ed049e0366fb90c9dd679b60854c8e5e927747aa`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 Наблюдатель и глобальные настройки пакета. Всё на этой странице статическое и
@@ -305,8 +305,9 @@ ScopeConfig.observer = ScopePrintObserver(
 - `ScopeConfig.defaultWaitForChildrenTimeout` — сколько скоуп ждёт утилизации
   дочерних скоупов, прежде чем утилизироваться самому.
 
-Все четыре по умолчанию три секунды. `null` снимает ограничение, и скоуп ждёт
-бесконечно. Истёкший таймаут не фатален: о нём сообщают через
+Все четыре по умолчанию три секунды. `null` снимает ограничение, и ждать
+бесконечно будет каждый скоуп; отдельный скоуп говорит то же самое через
+`ScopeTimeout.none` — ниже. Истёкший таймаут не фатален: о нём сообщают через
 `FlutterError.reportError`, после чего скоуп продолжает так, будто ожидание
 удалось, — поэтому зависимость, которая никогда не завершает свою утилизацию,
 вырождается в задержку плюс сообщение об ошибке, а не в дедлок.
@@ -328,10 +329,30 @@ ScopeConfig.observer = ScopePrintObserver(
 `scopeKeyTimeout`, `initCancellationTimeout`, `disposeScopeTimeout` и
 `waitForChildrenTimeout` и заметить истечение через колбэки
 `onScopeKeyTimeout`, `onInitCancellationTimeout`, `onDisposeScopeTimeout` и
-`onWaitForChildrenTimeout`. Чего скоуп не может для себя — снять ограничение:
-`null` там означает «взять значение по умолчанию», а не «ждать сколько
-понадобится». Снимают ограничение значениями `ScopeConfig` выше, и сразу для
-всех скоупов.
+`onWaitForChildrenTimeout`. `null` там означает «взять значение по умолчанию»,
+а не «ждать сколько понадобится», — второе говорят через `ScopeTimeout.none`:
+
+```dart
+AsyncScope(
+  waitForChildrenTimeout: ScopeTimeout.none,   // этот скоуп дождётся
+  disposeScopeTimeout: const Duration(seconds: 5),
+  …
+)
+```
+
+Это `Duration` особого вида, а не значение, которое надо помнить, поэтому все
+эти параметры остаются `Duration?` и больше в них ничего не меняется.
+`AsyncScopeCoordinator.waitForChildren` и собственный `waitForChildren`
+родителя тоже его принимают — на один вызов.
+
+**`initCancellationTimeout` — единственный, кто его отвергает**, ассертом.
+Отмена ждёт, пока генератор инициализации доработает, а запаркованный на
+никогда не завершающемся future не доработает никогда — безлимитное ожидание
+там и есть тот зависон, ради которого предел заводили. Снять этот предел —
+решение для всего приложения, и принимают его через
+`ScopeConfig.defaultInitCancellationTimeout = null`. Ассерт срабатывает внутри
+собственной охраны этой стадии разбора, поэтому приходит как `onError` с
+`ScopePhase.initializationCancellation`, а разбор продолжается.
 
 ## pauseAfterInitializationEnabled
 

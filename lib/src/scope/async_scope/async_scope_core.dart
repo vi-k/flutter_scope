@@ -600,7 +600,10 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
         await coordinator.enter(
           scopeKey,
           entry,
-          timeout: scopeKeyTimeout ?? ScopeConfig.defaultScopeKeyTimeout,
+          timeout: resolveTimeout(
+            scopeKeyTimeout,
+            ScopeConfig.defaultScopeKeyTimeout,
+          ),
           onTimeout: (error, stackTrace) {
             notifyObserver(
               (observer) => observer.onTimeout(this, 'access to its scopeKey'),
@@ -952,8 +955,10 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
             // this is user code, the block below gives back what the scope was
             // lent, and a release that never finishes must not be able to keep
             // the key of a scope that is already gone.
-            final limit =
-                disposeScopeTimeout ?? ScopeConfig.defaultDisposeScopeTimeout;
+            final limit = resolveTimeout(
+              disposeScopeTimeout,
+              ScopeConfig.defaultDisposeScopeTimeout,
+            );
 
             if (limit == null) {
               await result;
@@ -1157,8 +1162,10 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
       // complete that one for it.
       try {
         final cancelled = subscription.cancel();
-        final limit = initCancellationTimeout ??
-            ScopeConfig.defaultInitCancellationTimeout;
+        final limit = resolveCancellationTimeout(
+          initCancellationTimeout,
+          ScopeConfig.defaultInitCancellationTimeout,
+        );
 
         if (limit == null) {
           await cancelled;
@@ -1216,8 +1223,10 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
         ),
       );
       await waitForChildren(
-        timeout:
-            waitForChildrenTimeout ?? ScopeConfig.defaultWaitForChildrenTimeout,
+        // Passed on as it stands, never resolved here: `waitForChildren`
+        // resolves it, and resolving twice turns a `ScopeTimeout.none` into
+        // the `null` that means "take the default" on the way in.
+        timeout: waitForChildrenTimeout,
         onTimeout: (error, stackTrace) {
           FlutterError.reportError(
             FlutterErrorDetails(

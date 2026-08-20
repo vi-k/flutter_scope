@@ -160,8 +160,10 @@ abstract base class AsyncControllerScopeElementBase<
         return;
       }
 
-      final limit =
-          disposeScopeTimeout ?? ScopeConfig.defaultDisposeScopeTimeout;
+      final limit = resolveTimeout(
+        disposeScopeTimeout,
+        ScopeConfig.defaultDisposeScopeTimeout,
+      );
 
       if (limit == null) {
         await released;

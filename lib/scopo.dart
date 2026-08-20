@@ -2,7 +2,8 @@
 /// dependency injection, asynchronous initialization and disposal.
 library;
 
-export 'src/environment/scope_config.dart' hide notifyObserver;
+export 'src/environment/scope_config.dart'
+    hide notifyObserver, resolveCancellationTimeout, resolveTimeout;
 export 'src/scope/scope.dart';
 export 'src/utils/compare_utils.dart';
 // The rebuild counter beside it is the package's own bookkeeping: written by

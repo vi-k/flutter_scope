@@ -305,8 +305,9 @@ defaults live in `ScopeConfig`:
 - `ScopeConfig.defaultWaitForChildrenTimeout` — how long a scope waits for its
   child scopes to be disposed of before disposing of itself.
 
-All four are three seconds by default. `null` removes the limit and the scope
-waits indefinitely. An expired timeout is not fatal: it is reported through
+All four are three seconds by default. `null` removes the limit and every scope
+waits indefinitely; a single scope says the same with `ScopeTimeout.none`,
+below. An expired timeout is not fatal: it is reported through
 `FlutterError.reportError`, and the scope then proceeds as if the wait had
 succeeded — so a dependency that never completes its disposal degrades into a
 delay plus an error report instead of a deadlock.
@@ -327,10 +328,31 @@ Every scope can override all four defaults for itself with the
 `scopeKeyTimeout`, `initCancellationTimeout`, `disposeScopeTimeout` and
 `waitForChildrenTimeout` parameters, and observe an expiry through the
 `onScopeKeyTimeout`, `onInitCancellationTimeout`, `onDisposeScopeTimeout` and
-`onWaitForChildrenTimeout` callbacks. What a scope cannot do for itself is
-remove the limit: `null` there means "take the default", not "wait as long as it
-takes". Removing a limit is what the `ScopeConfig` values above are for, and it
-applies to every scope at once.
+`onWaitForChildrenTimeout` callbacks. `null` there means "take the default",
+not "wait as long as it takes" — the second thing is said with
+`ScopeTimeout.none`:
+
+```dart
+AsyncScope(
+  waitForChildrenTimeout: ScopeTimeout.none,   // this scope waits it out
+  disposeScopeTimeout: const Duration(seconds: 5),
+  …
+)
+```
+
+It is a `Duration` of its own kind rather than a value to remember, so every
+one of these parameters stays a `Duration?` and nothing else about them
+changes. `AsyncScopeCoordinator.waitForChildren` and a parent's own
+`waitForChildren` take it too, for one call.
+
+**`initCancellationTimeout` is the one that refuses it**, with an assert. A
+cancellation waits for the initialization generator to run out, and a generator
+suspended on a future that never completes never does — an unbounded wait there
+is the hang the limit exists to prevent. Removing that one is a decision for
+the whole application, and `ScopeConfig.defaultInitCancellationTimeout = null`
+is where it is made. The assert is raised inside the teardown's own guard for
+that stage, so it arrives as `onError` with `ScopePhase.initializationCancellation`
+and the teardown goes on.
 
 ## pauseAfterInitializationEnabled
 

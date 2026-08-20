@@ -59,9 +59,14 @@ mixin AsyncScopeParent on Diagnosticable implements ScopeObservable {
   /// [onTimeout] is called; the future completes normally either way.
   ///
   /// [timeout] defaults to [ScopeConfig.defaultWaitForChildrenTimeout], the
-  /// same default [AsyncScopeCoordinator.waitForChildren] applies. Waiting
-  /// with no limit at all is what setting that to `null` means, and it is a
-  /// decision for the application rather than for one call.
+  /// same default [AsyncScopeCoordinator.waitForChildren] applies. Pass
+  /// [ScopeTimeout.none] to wait with no limit at all for this call alone;
+  /// setting that default to `null` does the same for every wait at once.
+  ///
+  /// This is the one place the limit is resolved — a scope's own teardown and
+  /// [AsyncScopeCoordinator.waitForChildren] both pass their value through
+  /// untouched, because resolving twice would turn a [ScopeTimeout.none] into
+  /// the `null` that means "take the default" on the way in.
   ///
   /// [onTimeout] defaults to reporting the [TimeoutException] through
   /// [FlutterError.reportError], the same default
@@ -84,7 +89,8 @@ mixin AsyncScopeParent on Diagnosticable implements ScopeObservable {
       // the natural way -- this would otherwise be the one wait in the
       // package that can hang for ever, while the same method on
       // [AsyncScopeCoordinator] gives up on time.
-      timeout: timeout ?? ScopeConfig.defaultWaitForChildrenTimeout,
+      timeout:
+          resolveTimeout(timeout, ScopeConfig.defaultWaitForChildrenTimeout),
       onTimeout: (error, stackTrace) {
         // Before the caller's handler and independent of it: a custom
         // [onTimeout] replaces the default *report*, not the reporting of the
