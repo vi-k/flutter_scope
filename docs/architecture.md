@@ -1,6 +1,6 @@
 # Архитектура scopo
 
-> Обновлено: 2026-08-12, по коду версии 0.10.0 (`main`, `a97bb74`).
+> Обновлено: 2026-08-20, по коду версии 0.10.0 (`main`, `2e61121`).
 > Документ описывает устройство пакета изнутри: слои, жизненный цикл,
 > координацию и инварианты. Публичный API и примеры использования — в
 > `README.md` и dartdoc; текущее состояние работ — в `docs/handoff.md`.
@@ -28,48 +28,60 @@ scopo — Flutter-пакет для управления скоупами в д�
 ```
 lib/scopo.dart                 публичный барель: экспорты
 lib/src/scope/scope.dart       единая library, все слои — её part-файлы
-lib/src/scope/a_base/          базовые интерфейсы поиска в дереве
-lib/src/scope/b_scope_widget/  элемент со селективными подписками
-lib/src/scope/c_scope_model/   + произвольная модель
-lib/src/scope/d_scope_notifier/+ модель-Listenable
-lib/src/scope/e_async_scope/   + асинхронный жизненный цикл и координация
-lib/src/scope/f_async_data_scope/ + одно значение данных
-lib/src/scope/g_lite_scope/    + State, close(), экран закрытия
-lib/src/scope/h_scope/         + контейнер зависимостей
+lib/src/scope/base/            базовые интерфейсы поиска в дереве
+lib/src/scope/scope_widget/    элемент со селективными подписками
+lib/src/scope/scope_model/     + произвольная модель
+lib/src/scope/scope_notifier/  + модель-Listenable
+lib/src/scope/async_scope/     + асинхронный жизненный цикл и координация
+lib/src/scope/async_data_scope/ + одно значение данных
+lib/src/scope/async_controller_scope/ + значение — управляемый контроллер
+lib/src/scope/lite_scope/      + State, close(), экран закрытия
+lib/src/scope/full_scope/      + контейнер зависимостей
 lib/src/environment/           ScopeConfig и ScopeObserver
 lib/src/utils/                 самостоятельные утилиты, часть публична
 ```
 
-Слои названы буквами `a`…`h` по возрастанию возможностей: каждый следующий
-наследует предыдущий. Все они — `part` одной библиотеки
-(`lib/src/scope/scope.dart`), поэтому приватные члены видны между слоями.
-Это осознанный выбор (элементы разных слоёв тесно связаны), но у него есть
-цена: приватное поле одного слоя — часть контракта для другого, и правка
-`_shouldOnlyNotify` в `b_` ломает закрытие скоупа в `g_`. Единственное
-исключение — `e_async_scope/scope_coordination.dart`: обычная библиотека без
-Flutter, импортируемая, а не `part`.
+Каталоги перечислены по возрастанию возможностей, и порядок этот — не алфавит:
+раньше слои звались `a_base`…`h_scope`, префикс и задавал порядок, а с волны
+имён 2026-08-18 остались одни смысловые имена. Читать их надо в порядке
+наследования, а он не линейный: после `async_scope` ветка расходится на
+`async_data_scope` (и дальше `async_controller_scope`) и на `lite_scope`
+(и дальше `full_scope`) — см. §3.
+
+Все они — `part` одной библиотеки (`lib/src/scope/scope.dart`), поэтому
+приватные члены видны между слоями. Это осознанный выбор (элементы разных
+слоёв тесно связаны), но у него есть цена: приватное поле одного слоя — часть
+контракта для другого, и правка `_notifyPending` в `scope_widget` ломает
+закрытие скоупа в `lite_scope`. Единственное исключение —
+`async_scope/scope_coordination.dart`: обычная библиотека без Flutter,
+импортируемая, а не `part`.
 
 ## 3. Слои
 
 | Слой | Виджет | Элемент | Что добавляет |
 | --- | --- | --- | --- |
-| `a_base` | `ScopeInheritedWidget` | `ScopeInheritedElement` (интерфейс) | Поиск скоупа в дереве: `ScopeContext.of/maybeOf/select` |
-| `b_scope_widget` | `ScopeWidgetCore`, `ScopeWidgetBase` | `ScopeWidgetElementBase` | Селективные подписки, `notifyDependents()` |
-| `c_scope_model` | `ScopeModelCore`, `ScopeModelBase`, `ScopeModel` | `ScopeModelElementBase` | Модель `M extends Object` |
-| `d_scope_notifier` | `ScopeNotifierCore`, `ScopeNotifierBase`, `ScopeNotifier` | `ScopeNotifierElementBase` | Модель `M extends Listenable`, подписка элемента на неё |
-| `e_async_scope` | `AsyncScopeCore`, `AsyncScopeBase`, `AsyncScope`, `AsyncScopeCoordinator` | `AsyncScopeElementBase` | Асинхронные инициализация и утилизация, `scopeKey`, координация |
-| `f_async_data_scope` | `AsyncDataScopeCore`, `AsyncDataScopeBase`, `AsyncDataScope` | `AsyncDataScopeElementBase` | Одно значение данных, полученное при инициализации |
-| `g_lite_scope` | `LiteScopeCore`, `LiteScope` | `LiteScopeElementBase` + `LiteScopeCoreState` | `State` через `GlobalKey`, `close()`, экран закрытия |
-| `h_scope` | `ScopeCore`, `Scope` | `ScopeElementBase` + `ScopeCoreState` | Контейнер зависимостей `ScopeDependencies` |
+| `base` | `ScopeInheritedWidget` | `ScopeInheritedElement` (интерфейс) | Поиск скоупа в дереве: `ScopeContext.of/maybeOf/select` |
+| `scope_widget` | `ScopeWidgetCore`, `ScopeWidgetBase` | `ScopeWidgetElementBase` | Селективные подписки, `notifyDependents()` |
+| `scope_model` | `ScopeModelCore`, `ScopeModelBase`, `ScopeModel` | `ScopeModelElementBase` | Модель `M extends Object` |
+| `scope_notifier` | `ScopeNotifierCore`, `ScopeNotifierBase`, `ScopeNotifier` | `ScopeNotifierElementBase` | Модель `M extends Listenable`, подписка элемента на неё |
+| `async_scope` | `AsyncScopeCore`, `AsyncScopeBase`, `AsyncScope`, `AsyncScopeCoordinator` | `AsyncScopeElementBase` | Асинхронные инициализация и утилизация, `scopeKey`, координация |
+| `async_data_scope` | `AsyncDataScopeCore`, `AsyncDataScopeBase`, `AsyncDataScope` | `AsyncDataScopeElementBase` | Одно значение данных, полученное при инициализации |
+| `async_controller_scope` | `AsyncControllerScopeCore`, `AsyncControllerScopeBase`, `AsyncControllerScope` | `AsyncControllerScopeElementBase` | Значение — `ScopeController`, создаваемый, инициализируемый и освобождаемый самим слоем |
+| `lite_scope` | `LiteScopeCore`, `LiteScope` | `LiteScopeElementBase` + `LiteScopeCoreState` | `State` через `GlobalKey`, `close()`, экран закрытия |
+| `full_scope` | `ScopeCore`, `Scope` | `ScopeElementBase` + `ScopeCoreState` | Контейнер зависимостей `ScopeDependencies` |
 
 Цепочки наследования идут параллельно — по виджетам и по элементам — и в одном
 месте расходятся:
 
 ```
-виджеты:  ScopeInheritedWidget → ScopeWidgetCore → ScopeModelCore → AsyncScopeCore
-                                                 ↘ ScopeNotifierCore
-элементы: ScopeWidgetElementBase → ScopeModelElementBase → ScopeNotifierElementBase
-                                                         → AsyncScopeElementBase
+виджеты:
+  ScopeInheritedWidget → ScopeWidgetCore → ScopeModelCore ↘ ScopeNotifierCore
+                                                          ↘ AsyncScopeCore ↘ AsyncDataScopeCore → AsyncControllerScopeCore
+                                                                           ↘ LiteScopeCore → ScopeCore
+элементы:
+  ScopeWidgetElementBase → ScopeModelElementBase → ScopeNotifierElementBase
+    → AsyncScopeElementBase ↘ AsyncDataScopeElementBase → AsyncControllerScopeElementBase
+                            ↘ LiteScopeElementBase → ScopeElementBase
 ```
 
 `AsyncScopeCore` наследует `ScopeModelCore`, а не `ScopeNotifierCore`, тогда
@@ -85,7 +97,7 @@ Flutter, импортируемая, а не `part`.
 (`ScopeModel`, `ScopeNotifier`, `AsyncScope`, `AsyncDataScope`) с колбэками
 `create`/`init`/`dispose`/`builder`.
 
-## 4. Подписки и уведомления (`b_scope_widget`)
+## 4. Подписки и уведомления (`scope_widget`)
 
 Потомок находит скоуп через `context.getElementForInheritedWidgetOfExactType`,
 а подписывается через `dependOnInheritedElement` с `aspect` — парой
@@ -100,8 +112,11 @@ Flutter, импортируемая, а не `part`.
   зависеть от самого себя (там assert), а скоупу это нужно — например, чтобы
   перестроиться на смену фазы инициализации. Такие подписки лежат отдельно, в
   `_selfDependencies`, и обрабатываются перед вызовом `super.notifyClients`.
-- **`notifyDependents()`** ставит `_shouldOnlyNotify` и помечает элемент
-  грязным. На перестроении (`performRebuild`) он уведомляет подписчиков, но
+- **`notifyDependents()`** ставит `_notifyPending` и помечает элемент
+  грязным (а если элемент строится прямо сейчас — просит перестроения
+  post-frame-колбэком: `markNeedsBuild()` на строящемся элементе не делает
+  ничего). Флаг снимается в начале `performRebuild` и переносится в
+  `_rebuildIsNotifyOnly`, который и описывает одно текущее перестроение. На перестроении (`performRebuild`) он уведомляет подписчиков, но
   `updateChild` возвращает **старого** ребёнка — поддерево скоупа не
   перестраивается. Уведомление обязано пройти через `didChangeDependencies`, а
   тот работает только внутри кадра, отсюда этот обходной путь.
@@ -112,7 +127,7 @@ Flutter, импортируемая, а не `part`.
   (см. §7). Без этого отложенный `notifyDependents` съедал бы кадр, в котором
   монтируется `ScreenshotReplacer`.
 
-## 5. Асинхронный жизненный цикл (`e_async_scope`)
+## 5. Асинхронный жизненный цикл (`async_scope`)
 
 Состояние скоупа — `AsyncScopeState`: `AsyncScopeWaiting` → `AsyncScopeProgress`
 (сколько угодно раз) → `AsyncScopeReady` либо `AsyncScopeError`. Оно живёт в
@@ -128,12 +143,12 @@ Flutter, импортируемая, а не `part`.
 3. Если ключ есть: ищется ближайший координатор (**до** создания `AccessEntry`
    — это единственный шаг, который может упасть, когда освобождать ещё
    нечего), создаётся запись, и скоуп встаёт в очередь ключа с таймаутом
-   `scopeKeyTimeout ?? ScopeConfig.defaultScopeKeysTimeout`.
+   `scopeKeyTimeout ?? ScopeConfig.defaultScopeKeyTimeout`.
 4. После ожидания проверяются три условия отмены: `entry.isCancelled`,
    `!mounted`, `_isDisposing`. Третье нужно потому, что `close()` оставляет
    элемент смонтированным, а `_subscription` на этой стороне `await` ещё не
    существует — отменять было бы нечего.
-5. Подписка на `initAsync()`: `AsyncScopeProgress` сразу идёт в модель,
+5. Подписка на `initScope()`: `AsyncScopeProgress` сразу идёт в модель,
    `AsyncScopeReady` — через пост-фрейм-колбэк (или через задержку
    `pauseAfterInitialization`), чтобы последний прогресс успел показаться.
    Тогда же взводится `_initSucceeded` и завершается `_initCompleter`.
@@ -149,7 +164,7 @@ Flutter, импортируемая, а не `part`.
 3. Ожидается `_initCompleter` — инициализация должна закончиться, чем угодно.
 4. `waitForChildren(...)` — дочерние скоупы, с таймаутом
    `waitForChildrenTimeout ?? ScopeConfig.defaultWaitForChildrenTimeout`.
-5. `disposeAsync()` — **только если `_initSucceeded`**: нечего освобождать,
+5. `disposeScope()` — **только если `_initSucceeded`**: нечего освобождать,
    если ничего не захватывали.
 6. `finally`: скоуп снимается с учёта у родителя, выходит из очереди ключа
    (`exit()` — по `_acquiredScopeKey`, а не по текущему значению геттера),
@@ -218,7 +233,7 @@ debug-сборке об этом сообщают подробно. Правил
 `LiteScopeElementBase` добавляет к асинхронному скоупу `State`: элемент строит
 `_LiteScopeCoreWidget` с `GlobalKey`, а `LiteScopeCoreState` получает ссылку на
 элемент (`params`, `notifyDependents()`, `close()`). У состояния свой мини-цикл
-`initAsync`/`disposeAsync` со своим `_initCompleter`, который элемент
+`initStateAsync`/`disposeStateAsync` со своим `_initCompleter`, который элемент
 дожидается в собственной утилизации.
 
 `close()` — утилизация без удаления из дерева:
@@ -243,17 +258,17 @@ debug-сборке об этом сообщают подробно. Правил
   поверх живого поддерева.
 
 После `close()` элемент остаётся смонтированным и его можно двигать с
-`GlobalKey` — именно поэтому по всему `e_async_scope` проверяется
+`GlobalKey` — именно поэтому по всему `async_scope` проверяется
 `_isDisposing`, а не только `mounted`.
 
-## 8. Зависимости (`h_scope`)
+## 8. Зависимости (`full_scope`)
 
 `Scope` = скоуп + контейнер зависимостей + состояние.
 
 - **`ScopeDependencies`** — интерфейс контейнера: `unmount()` (синхронно, при
   размонтировании) и `dispose()` (можно асинхронно, после утилизации
   состояния).
-- **`ScopeElementBase.initAsync()`** переводит поток `initDependencies()`
+- **`ScopeElementBase.initScope()`** переводит поток `initDependencies()`
   (`ScopeInitState`: `ScopeProgress` | `ScopeReady`) в `AsyncScopeInitState`
   и по дороге запоминает готовый контейнер в `_dependencies`.
 - **`ScopeAutoDependencies`** — необязательная надстройка: дерево зависимостей
@@ -288,11 +303,15 @@ debug-сборке об этом сообщают подробно. Правил
 | --- | --- |
 | `observer` | `ScopeObserver?`, по умолчанию `null` — пакет молчит |
 | `pauseAfterInitializationEnabled` | Глобальный выключатель искусственных пауз `pauseAfterInitialization` (нужен в тестах) |
-| `defaultScopeKeysTimeout` | Ожидание освобождения `scopeKey`, по умолчанию 3 с |
+| `defaultScopeKeyTimeout` | Ожидание освобождения `scopeKey`, по умолчанию 3 с |
 | `defaultWaitForChildrenTimeout` | Ожидание утилизации дочерних скоупов, по умолчанию 3 с |
+| `defaultDisposeScopeTimeout` | Ожидание собственного разбора скоупа, по умолчанию 3 с |
+| `defaultInitCancellationTimeout` | Ожидание отмены идущей инициализации, по умолчанию 3 с |
 
-У обоих таймаутов `null` — ожидание без ограничения, `Duration.zero` —
-истечение немедленно.
+У всех четырёх таймаутов `null` — ожидание без ограничения, `Duration.zero` —
+истечение немедленно. Это про глобальные умолчания; у отдельного скоупа `null`
+в одноимённом параметре значит «взять умолчание», а не «ждать без
+ограничения».
 
 `ScopeObserver` (`lib/src/environment/scope_observer.dart`) — девять пустых
 хуков: `onInit`, `onProgress`, `onReady`, `onCancelled`, `onDispose`,
@@ -332,9 +351,13 @@ debug-сборке об этом сообщают подробно. Правил
 
 Внутренние: `run_stream_guarded` (поток, который глушится после первой ошибки,
 а всё пришедшее после — отдаёт отдельному обработчику) и `check_disposed`
-(`throwWhenDisposed`).
+(`throwIfDisposed`).
 
 ## 11. Тесты
+
+Тридцать файлов сьюты (плюс `flutter_test_config.dart`); здесь названы те, по
+которым видно её устройство. Полный
+список — `ls test/`, а актуальные пробелы покрытия — в `docs/handoff.md`.
 
 | Файл | О чём |
 | --- | --- |
@@ -343,12 +366,18 @@ debug-сборке об этом сообщают подробно. Правил
 | `test/async_scope_test.dart` | Пост-фрейм-колбэки, провал инициализации, ошибка после `Ready` |
 | `test/lite_scope_test.dart` | `close()` во всех вариантах, гонка инициализации с утилизацией, `ScreenshotReplacer` |
 | `test/scope_auto_dependencies_test.dart` | Дерево зависимостей: пути, группы, повторная инициализация, сохранение ошибок |
-| `test/async_scope_state_test.dart`, `test/scope_observer_test.dart`, `test/compare_utils_test.dart` | Точечные проверки |
-| `test/utils/` | Накопитель событий наблюдателя и обёртка `fake_async` |
+| `test/scope_observer_test.dart` | Контракт наблюдателя: кто что шлёт и в каком порядке |
+| `test/cleanup_after_user_error_test.dart` | Обязательный разбор переживает отказ пользовательского хука на каждом пути |
+| `test/scope_parameters_matrix_test.dart` | Все пары «семейство × параметр» |
+| `test/scope_lifecycle_order_test.dart` | Порядок разбора на обоих путях |
+| `test/public_facades_test.dart` | Поисковая поверхность публичных фасадов |
+| `test/utils/` | Накопитель событий наблюдателя, `settle()` и обёртка `fake_async` |
 
-Слои `a_base`…`g_lite_scope` собственных наборов тестов не имеют — покрыты
-только регрессионными сценариями 0.10.0. Актуальные пробелы перечислены в
-`docs/handoff.md`.
+**У каждого слоя есть свой набор** — `base_test.dart`, `scope_widget_test.dart`,
+`scope_model_test.dart`, `scope_notifier_test.dart`, `async_data_scope_test.dart`,
+`async_controller_scope_test.dart`, `lite_scope_test.dart`, — так что прежняя
+оговорка «слои покрыты только регрессионными сценариями» снята: она была верна
+до волн 10–15.
 
 ## 12. Инварианты, которые легко нарушить
 
@@ -357,7 +386,7 @@ debug-сборке об этом сообщают подробно. Правил
 2. Ожидания (`scopeKey`, `waitForChildren`) ограничены по времени и никогда не
    фатальны: истечение — это отчёт и продолжение работы, а не исключение
    вызывающему.
-3. `disposeAsync()` вызывается только после успешной инициализации; проверять
+3. `disposeScope()` вызывается только после успешной инициализации; проверять
    надо `_initSucceeded`, а не `model.state`.
 4. После `close()` элемент жив и смонтирован — проверка `mounted` о начавшейся
    утилизации не говорит ничего, нужен `_isDisposing`.
