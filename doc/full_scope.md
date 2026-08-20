@@ -531,5 +531,9 @@ normally re-exposes as its own named accessors:
 
 `notifyDependents` rebuilds the subscribed descendants without rebuilding the
 state's own subtree, which is what makes a scope usable for high-frequency
-updates. `isInitialized` reports whether the initialization has fully completed,
-and `onInitialized` is the hook called right after it has.
+updates. `setState` is the other half and is untouched — a scope state is an
+ordinary `State`: it rebuilds what the state's own `build` returns and reaches
+no subscriber. A field both sides read wants both calls.
+
+`isInitialized` reports whether the initialization has fully completed, and
+`onInitialized` is the hook called right after it has.

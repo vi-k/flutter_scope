@@ -39,7 +39,7 @@ final class ScreenScopeState
 
 ## The state
 
-`LiteScopeState` is a `State` with four additions:
+`LiteScopeState` is a `State` with five additions:
 
 | member | what it is |
 | --- | --- |
@@ -140,8 +140,15 @@ LiteScope.selectParam<ScreenScope, ScreenScopeState, Object?>(
 methods. `select` subscribes to one value derived from the state, and the
 caller is rebuilt only when that value changes **and** only when the state
 called `notifyDependents()`. Nothing else in the state is observed: a field
-mutated without that call reaches nobody, which is the same contract a
-`StatefulWidget` has with `setState`.
+mutated without that call reaches nobody.
+
+`setState` is the other half, and nothing here takes it away — a scope state is
+an ordinary `State` and keeps it. The two do not overlap, which is the part an
+analogy with `StatefulWidget` gets wrong: `notifyDependents()` rebuilds the
+subscribers and leaves this state's own `build` unrun, while `setState`
+rebuilds what this state's `build` returns and reaches no subscriber. A field
+both sides read wants both calls; a field only one side reads wants only its
+own.
 
 `paramsOf` and `selectParam` do the same for the scope widget's own
 parameters. Re-exposing all of this as named statics on the scope, as `of`
