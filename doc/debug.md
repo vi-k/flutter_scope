@@ -151,6 +151,11 @@ Wrapping those three in a common type would have meant inventing a fourth.
 The enum can grow, so a `switch` over it in your own code wants a `default`
 branch.
 
+A teardown that fails more than once reports every failure, not the first
+alone. A `Scope` tears its state down before its dependencies, and each half
+is guarded on its own, so both can fail: the first leaves through the throw as
+well, the second through the report alone — but `onError` carries them both.
+
 An error reaching `onError` is never the only way it is reported: a scope also
 hands its initialization failures to `buildOnError`, and the failures nobody
 else can be handed go to `FlutterError.reportError`. Leaving

@@ -215,6 +215,24 @@ abstract base class ScopeWidgetElementBase<W extends ScopeWidgetCore<W, E>,
       if (_initPhase != _InitPhase.pending) {
         try {
           unmountScope();
+          // ignore: avoid_catching_errors
+        } on Object catch (error, stackTrace) {
+          // The framework is the caller on this path, and it does report what
+          // this throw carries -- but as an error of the widget tree, never as
+          // an event of this scope. `_performAsyncDispose` guards the same
+          // hook and sends `onError` for it, except that it only ever reaches
+          // `unmountScope()` first on the path where the scope closes itself
+          // and stays on the tree; when the tree takes the element away,
+          // `unmount()` gets there first and `_didUnmount` makes the later
+          // attempt a no-op. So the two paths ran the same hook and only one
+          // of them said anything. Re-thrown after the report: the caller
+          // still hears it.
+          notifyObserver(
+            (observer) =>
+                observer.onError(this, ScopePhase.unmount, error, stackTrace),
+          );
+
+          rethrow;
         } finally {
           dispose();
         }

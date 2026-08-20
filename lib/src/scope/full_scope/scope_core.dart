@@ -217,6 +217,14 @@ abstract base class ScopeElementBase<
       if (failure == null) {
         failure = AsyncError(error, stackTrace);
       } else {
+        // Both channels, as everywhere else a failure has no caller left to
+        // be raised at: the stage above sends `onError` for the failure that
+        // leaves through the throw, and this one would otherwise reach the
+        // observer through neither.
+        notifyObserver(
+          (observer) =>
+              observer.onError(this, ScopePhase.unmount, error, stackTrace),
+        );
         _reportFailure(error, stackTrace, 'while unmounting the dependencies');
       }
     }
@@ -253,6 +261,11 @@ abstract base class ScopeElementBase<
       if (failure == null) {
         failure = AsyncError(error, stackTrace);
       } else {
+        // Both channels, for the reason given in the half above.
+        notifyObserver(
+          (observer) =>
+              observer.onError(this, ScopePhase.disposal, error, stackTrace),
+        );
         _reportFailure(
           error,
           stackTrace,

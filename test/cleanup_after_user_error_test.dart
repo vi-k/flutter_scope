@@ -734,6 +734,105 @@ void main() {
       );
     });
 
+    // The report the test above checks is only one of the two channels the
+    // package promises. `ScopeConfig.observer` is the other, and the second
+    // failure used to reach it through neither: the stage above sends
+    // `onError` for the failure that leaves through the throw, and the one
+    // behind it went to `FlutterError.reportError` alone.
+    testWidgets(
+        'reports both unmount failures to the observer, not just the one that '
+        'throws', (tester) async {
+      final log = <String>[];
+      final observer = RecordingObserver();
+      ScopeConfig.observer = observer;
+      addTearDown(() => ScopeConfig.observer = null);
+
+      final previousOnError = FlutterError.onError;
+      FlutterError.onError = (_) {};
+      addTearDown(() => FlutterError.onError = previousOnError);
+
+      await tester.pumpWidget(
+        _wrap(
+          _PlainDepScope(
+            log: log,
+            failOnStateUnmount: true,
+            failOnDepsUnmount: true,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.pumpWidget(_wrap(const SizedBox.shrink()));
+      await settle(tester, until: () => log.contains('dispose deps'));
+
+      FlutterError.onError = previousOnError;
+
+      const stateFailed =
+          'error _PlainDepScope unmount Bad state: the state failed to '
+          'unmount itself';
+      const depsFailed =
+          'error _PlainDepScope unmount Bad state: the dependencies failed '
+          'to unmount';
+
+      expect(
+        observer.events.where((event) => event.contains('unmount')),
+        containsAll([stateFailed, depsFailed]),
+        reason: 'both halves of the teardown failed, and an observer counting '
+            'what a scope could not give back needs both',
+      );
+    });
+
+    // The same in the asynchronous half. Here the first failure does reach the
+    // observer already -- `_performAsyncDispose` guards that stage itself --
+    // so what is missing is the second alone.
+    testWidgets(
+        'reports both disposal failures to the observer, not just the one '
+        'that throws', (tester) async {
+      final log = <String>[];
+      final observer = RecordingObserver();
+      ScopeConfig.observer = observer;
+      addTearDown(() => ScopeConfig.observer = null);
+
+      final previousOnError = FlutterError.onError;
+      FlutterError.onError = (_) {};
+      addTearDown(() => FlutterError.onError = previousOnError);
+
+      await runZonedGuarded(
+        () async {
+          await tester.pumpWidget(
+            _wrap(
+              _PlainDepScope(
+                log: log,
+                failOnStateDispose: true,
+                failOnDepsDispose: true,
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+
+          await tester.pumpWidget(_wrap(const SizedBox.shrink()));
+          await settle(tester, until: () => log.contains('dispose deps'));
+        },
+        (_, __) {},
+      );
+
+      FlutterError.onError = previousOnError;
+
+      const stateFailed =
+          'error _PlainDepScope disposal Bad state: the state failed to '
+          'dispose of itself';
+      const depsFailed =
+          'error _PlainDepScope disposal Bad state: the dependencies failed '
+          'to dispose';
+
+      expect(
+        observer.events.where((event) => event.contains('disposal')),
+        containsAll([stateFailed, depsFailed]),
+        reason: 'the second failure leaves through a report, and the observer '
+            'is one of the two channels that report goes to',
+      );
+    });
+
     // The same rule in the asynchronous half, where the two failures are told
     // apart by where they end up: the first on the discarded future the
     // disposal runs on, the second in a report.

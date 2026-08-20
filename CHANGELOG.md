@@ -350,6 +350,25 @@
   ran too long and nothing at all about one that failed. It now also sends
   `onError` with `ScopePhase.disposal`, the phase the ordinary teardown uses
   for the same kind of failure; the `FlutterError` report is unchanged.
+* Fix a failing `onUnmount` reaching `ScopeConfig.observer` on one of the two
+  paths out of a scope but not the other. The hook runs from `unmountScope()`,
+  and both `ScopeWidgetElementBase.unmount()` and the asynchronous teardown
+  call it — whichever gets there first does the work, and the other finds it
+  already done. The asynchronous one guards it and sends `onError` with
+  `ScopePhase.unmount`; the element's did neither, so a scope the tree took
+  away reported nothing while a scope that closed itself reported the failure.
+  The framework still showed it, as an error of the widget tree rather than an
+  event of the scope. Both paths now report it, and the failure is still
+  raised at the caller afterwards.
+* Fix the second of two simultaneous teardown failures of a `Scope` reaching
+  `ScopeConfig.observer` through neither channel. The state is torn down
+  before the dependencies and each half is guarded on its own, so both can
+  fail; only the first can leave through the throw, and the second went to
+  `FlutterError.reportError` alone. It now also sends `onError` — with
+  `ScopePhase.unmount` or `ScopePhase.disposal`, whichever half it came from.
+  This is reachable with a dependency container written by hand against
+  `ScopeDependencies`: the built-in `ScopeAutoDependencies` reports what its
+  own children throw and never hands a failure to the scope above it.
 * Fix an anonymous dependency group — the common shape for the root of a tree,
   `sequential('', […])` or `concurrent('', […])` — reporting through
   `ScopeConfig.observer` under an empty label instead of `[group]`.
