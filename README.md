@@ -21,7 +21,8 @@ order — after its child scopes are gone.
   key.
 - **Selective rebuilds**: `select` and `selectParam` subscribe a descendant to a
   single value; `notifyDependents` rebuilds only those descendants, never the
-  scope's own subtree.
+  scope's own subtree. `setState` is the other half and is untouched: it
+  rebuilds the state's own subtree and reaches no subscriber.
 - **Graceful closing**: `close()` freezes the subtree as a screenshot and shows
   `buildOnClosing` while the asynchronous disposal is running.
 - **Specialized scopes**: lightweight variants for widget parameters, plain
@@ -86,6 +87,20 @@ final class AppDependencies implements ScopeDependencies {
 Extend `ScopeState`. The dependencies are ready by the time `initState` runs.
 `notifyDependents` updates the subscribed descendants without rebuilding the
 state's own subtree.
+
+The two halves are separate on purpose, and nothing here disables `setState` —
+a scope state is an ordinary `State` and keeps it. Which one to call follows
+from who has to see the change:
+
+| what has to update | call |
+| --- | --- |
+| descendants subscribed with `select` / `selectParam` | `notifyDependents()` |
+| the widgets the state's own `build` returns | `setState()` |
+| both | both |
+
+Bumping a field and calling `notifyDependents()` alone is the mistake worth
+naming: the subscribers see the new value and the state's own `build` does not
+run, so anything it draws from that field stays as it was.
 
 ```dart
 final class AppState extends ScopeState<App, AppDependencies, AppState> {

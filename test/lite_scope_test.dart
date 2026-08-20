@@ -1050,6 +1050,63 @@ void main() {
     );
   });
 
+  // The two halves the `README.md` names: `notifyDependents()` reaches the
+  // subscribers and not the state's own `build`, `setState` the other way
+  // round. Nothing in the package touches `setState` -- a scope state is an
+  // ordinary `State` -- and the README now says so, which is why it is pinned
+  // here rather than left to be re-derived.
+  group('notifyDependents and setState are separate halves', () {
+    testWidgets('notifyDependents reaches the subscribers, not the own build',
+        (tester) async {
+      await tester.pumpWidget(
+        const Directionality(
+          textDirection: TextDirection.ltr,
+          child: _HalvesScope(child: _HalvesReader()),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(_shown(tester), 'own 0 | reader 0');
+
+      _HalvesScope.of(tester.element(find.byType(_HalvesReader)))
+          .bumpWithNotify();
+      await tester.pumpAndSettle();
+
+      expect(
+        _shown(tester),
+        'own 0 | reader 1',
+        reason: "the subscriber saw the new value and the state's own build "
+            'did not run, so what it draws from the same field is stale',
+      );
+
+      await _teardown(tester);
+    });
+
+    testWidgets('setState reaches the own build, not the subscribers',
+        (tester) async {
+      await tester.pumpWidget(
+        const Directionality(
+          textDirection: TextDirection.ltr,
+          child: _HalvesScope(child: _HalvesReader()),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      _HalvesScope.of(tester.element(find.byType(_HalvesReader)))
+          .bumpWithSetState();
+      await tester.pumpAndSettle();
+
+      expect(
+        _shown(tester),
+        'own 1 | reader 0',
+        reason: 'setState is untouched by the package and does what it does '
+            'on any State -- and a subscriber is not part of that',
+      );
+
+      await _teardown(tester);
+    });
+  });
+
   group('ScreenshotReplacer', () {
     testWidgets(
       'reports completion exactly once and releases the captured image',
@@ -1525,4 +1582,69 @@ final class _CloseScopeState extends LiteScopeCoreState<_CloseScope,
 
   @override
   Widget build(BuildContext context) => params.body ?? const Text('ready');
+}
+
+/// Takes the scope off the tree and lets its asynchronous teardown finish.
+///
+/// The suite runs with the leak tracker on, and a `LiteScope` releases what it
+/// holds on real futures rather than on the fake clock `pump` advances.
+Future<void> _teardown(WidgetTester tester) async {
+  await tester.pumpWidget(const SizedBox());
+  // `until` that never holds: the scope is out of the tree the moment the
+  // pump above returns, so there is nothing left to wait *for* -- what is
+  // needed is the rounds themselves, which is the fair chance `settle` is
+  // documented to give.
+  await settle(tester, until: () => false);
+}
+
+/// What the two halves have put on screen, in one string.
+String _shown(WidgetTester tester) =>
+    tester.widgetList<Text>(find.byType(Text)).map((t) => t.data).join(' | ');
+
+/// A scope whose state draws one counter and hands the same counter to a
+/// subscriber, so the two halves can be told apart on screen.
+final class _HalvesScope extends LiteScope<_HalvesScope, _HalvesScopeState> {
+  const _HalvesScope({super.child});
+
+  @override
+  _HalvesScopeState createState() => _HalvesScopeState();
+
+  @override
+  Widget? buildOnWaiting(BuildContext context) => const SizedBox.shrink();
+
+  static _HalvesScopeState of(BuildContext context) =>
+      LiteScope.of<_HalvesScope, _HalvesScopeState>(context);
+}
+
+final class _HalvesScopeState
+    extends LiteScopeState<_HalvesScope, _HalvesScopeState> {
+  int counter = 0;
+
+  void bumpWithSetState() => setState(() => counter++);
+
+  void bumpWithNotify() {
+    counter++;
+    notifyDependents();
+  }
+
+  @override
+  Widget build(BuildContext context) => Column(
+        children: [
+          Text('own $counter'),
+          params.child,
+        ],
+      );
+}
+
+final class _HalvesReader extends StatelessWidget {
+  const _HalvesReader();
+
+  @override
+  Widget build(BuildContext context) => Text(
+        'reader '
+        '${LiteScope.select<_HalvesScope, _HalvesScopeState, int>(
+          context,
+          (state) => state.counter,
+        )}',
+      );
 }
