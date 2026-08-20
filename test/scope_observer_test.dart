@@ -156,6 +156,42 @@ void main() {
     ]);
   });
 
+  testWidgets(
+      'a controller that cannot be released after a failed initialization '
+      'reports the disposal failure', (tester) async {
+    await tester.pumpWidget(
+      const Directionality(
+        textDirection: TextDirection.ltr,
+        child: _FailingControllerScope(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // The secondary failure still leaves through `FlutterError.reportError`,
+    // which the test harness turns into an exception of its own; taken here so
+    // it does not fail the test on its way out.
+    expect(tester.takeException(), isA<StateError>());
+
+    // `_releaseController` is the only path that gives a controller back when
+    // the initialization never handed it over, and its failure used to reach
+    // `FlutterError.reportError` alone. The expiry of the very same wait
+    // reaches the observer (`onTimeout` with `its controller to be released`),
+    // so an observer heard about a release that ran too long and nothing at
+    // all about one that failed.
+    expect(
+      observer.events,
+      contains(
+        'error _FailingControllerScope disposal Bad state: dispose failed',
+      ),
+    );
+
+    await tester.pumpWidget(const SizedBox());
+    await settle(
+      tester,
+      until: () => observer.events.contains('disposed _FailingControllerScope'),
+    );
+  });
+
   testWidgets('a throwing observer does not reach the scope', (tester) async {
     final errors = <FlutterErrorDetails>[];
     final previous = FlutterError.onError;
@@ -912,6 +948,40 @@ final class _FailingInitAsyncScopeElement extends AsyncScopeElementBase<
 
   @override
   Widget buildOnState(AsyncScopeState state) => const SizedBox.shrink();
+}
+
+/// A controller scope whose initialization fails and whose controller then
+/// fails to be released.
+final class _FailingControllerScope extends AsyncControllerScopeBase<
+    _FailingControllerScope, _FailingController> {
+  const _FailingControllerScope();
+
+  @override
+  _FailingController createController(BuildContext context) =>
+      _FailingController();
+
+  @override
+  Widget buildOnProgress(BuildContext context) => const SizedBox.shrink();
+
+  @override
+  Widget buildOnError(
+    BuildContext context,
+    Object error,
+    StackTrace stackTrace,
+  ) =>
+      const SizedBox.shrink();
+
+  @override
+  Widget buildOnReady(BuildContext context, _FailingController controller) =>
+      const SizedBox.shrink();
+}
+
+final class _FailingController extends ScopeController {
+  @override
+  Future<void> init() async => throw StateError('init failed');
+
+  @override
+  Future<void> dispose() async => throw StateError('dispose failed');
 }
 
 /// Fails every hook it is asked for.

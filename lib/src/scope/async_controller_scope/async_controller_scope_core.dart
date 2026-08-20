@@ -175,6 +175,17 @@ abstract base class AsyncControllerScopeElementBase<
       }
       // ignore: avoid_catching_errors
     } on Object catch (error, stackTrace) {
+      // Reported to the observer as well as through `FlutterError`, and for
+      // the same reason the ordinary teardown does it: this is a `dispose()`
+      // that failed, and the fact that nobody is left to be handed the
+      // failure is exactly why an observer is the one thing that can still
+      // hear it. The expiry of the very same wait already arrives as
+      // `onTimeout`, so without this an observer heard about a release that
+      // ran too long and nothing at all about one that failed.
+      notifyObserver(
+        (observer) =>
+            observer.onError(this, ScopePhase.disposal, error, stackTrace),
+      );
       FlutterError.reportError(
         FlutterErrorDetails(
           exception: error,

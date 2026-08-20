@@ -340,6 +340,16 @@
   `ScopePhase.initialization` before it raises the failure again — the one
   point both kinds of family pass through; for a structural scope that single
   event is its whole recording.
+* Fix an `AsyncControllerScope` failing to give back a controller its own
+  initialization never handed over, and telling `ScopeConfig.observer` nothing
+  about it. That release runs from the `finally` of the initialization, where
+  a raise would replace the failure that actually broke the scope, so its own
+  failure was reported through `FlutterError.reportError` alone — while the
+  expiry of the very same wait already arrived as `onTimeout` with `its
+  controller to be released`. An observer therefore heard about a release that
+  ran too long and nothing at all about one that failed. It now also sends
+  `onError` with `ScopePhase.disposal`, the phase the ordinary teardown uses
+  for the same kind of failure; the `FlutterError` report is unchanged.
 * Fix an anonymous dependency group — the common shape for the root of a tree,
   `sequential('', […])` or `concurrent('', […])` — reporting through
   `ScopeConfig.observer` under an empty label instead of `[group]`.
