@@ -234,7 +234,7 @@ abstract base class ScopeWidgetElementBase<W extends ScopeWidgetCore<W, E>,
 
           rethrow;
         } finally {
-          dispose();
+          _disposeReportingFailure();
         }
       }
     } finally {
@@ -242,6 +242,28 @@ abstract base class ScopeWidgetElementBase<W extends ScopeWidgetCore<W, E>,
         notifyObserver((observer) => observer.onDisposed(this));
       }
       super.unmount();
+    }
+  }
+
+  /// Runs [dispose], letting the observer hear a failure on its way out.
+  ///
+  /// It runs from the `finally` of [unmount], outside the guard around the
+  /// [unmountScope] beside it, so its failure used to reach the framework and
+  /// no further — while the `onDispose`/`onDisposed` pair closed around it as
+  /// if the teardown had gone through. For a `ScopeModel` that failure is the
+  /// `dispose` callback of a public parameter, which is user code by
+  /// definition. Re-thrown after the report, as it always was.
+  void _disposeReportingFailure() {
+    try {
+      dispose();
+      // ignore: avoid_catching_errors
+    } on Object catch (error, stackTrace) {
+      notifyObserver(
+        (observer) =>
+            observer.onError(this, ScopePhase.disposal, error, stackTrace),
+      );
+
+      rethrow;
     }
   }
 

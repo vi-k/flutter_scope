@@ -369,6 +369,17 @@
   This is reachable with a dependency container written by hand against
   `ScopeDependencies`: the built-in `ScopeAutoDependencies` reports what its
   own children throw and never hands a failure to the scope above it.
+* Fix a `ScopeModel` whose `dispose` callback throws telling
+  `ScopeConfig.observer` nothing about it. The callback runs from the element's
+  own disposer, which `unmount()` calls from a `finally` — outside the guard
+  around the `unmountScope()` beside it — so the failure went to the framework
+  and no further, and the `onDispose`/`onDisposed` pair closed around it as if
+  the teardown had gone through. It now sends `onError` with
+  `ScopePhase.disposal` before the failure is raised at the caller as before.
+  With this, every point where a scope hands control to your code on its way
+  in or out reports through the observer; a `buildOnReady` and its siblings
+  still do not, because a build belongs to Flutter's own error boundary, which
+  answers it with an `ErrorWidget`.
 * Fix an anonymous dependency group — the common shape for the root of a tree,
   `sequential('', […])` or `concurrent('', […])` — reporting through
   `ScopeConfig.observer` under an empty label instead of `[group]`.

@@ -145,7 +145,7 @@ Wrapping those three in a common type would have meant inventing a fourth.
 | `initializationCancellation` | cancelling an initialization still running |
 | `preparationForDisposal` | the synchronous half of the teardown |
 | `unmount` | the `onUnmount` hook |
-| `disposal` | `disposeScope`, a dependency's or a controller's `dispose` |
+| `disposal` | any `dispose`: `disposeScope`, a dependency's, a controller's, a `ScopeModel`'s |
 | `abandonedWait` | a wait that failed after its waiter was gone |
 
 The enum can grow, so a `switch` over it in your own code wants a `default`

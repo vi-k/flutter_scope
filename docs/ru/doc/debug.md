@@ -1,6 +1,6 @@
 # debug
 
-> Перевод `doc/debug.md` (blob `e39ccbcb60adcfd2840d73e26a16393f5fe704fb`).
+> Перевод `doc/debug.md` (blob `528a53bb080df25f1039a5fef1473d19bd0f32d3`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 Наблюдатель и глобальные настройки пакета. Всё на этой странице статическое и
@@ -147,7 +147,7 @@ final class CrashReporter extends ScopeObserver {
 | `initializationCancellation` | отмена ещё идущей инициализации |
 | `preparationForDisposal` | синхронная половина разбора |
 | `unmount` | хук `onUnmount` |
-| `disposal` | `disposeScope`, `dispose` зависимости или контроллера |
+| `disposal` | любой `dispose`: `disposeScope`, зависимости, контроллера, `ScopeModel` |
 | `abandonedWait` | ожидание, упавшее, когда ждать было уже некому |
 
 Перечисление может пополниться, поэтому `switch` по нему в вашем коде хочет

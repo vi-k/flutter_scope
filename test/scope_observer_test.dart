@@ -192,6 +192,48 @@ void main() {
     );
   });
 
+  testWidgets(
+      "a ScopeModel whose dispose callback throws reports the scope's "
+      'disposal failure', (tester) async {
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: ScopeModel<_Model>(
+          create: (context) => _Model(),
+          dispose: (model) => throw StateError('dispose failed'),
+          builder: (context) => const SizedBox.shrink(),
+        ),
+      ),
+    );
+
+    expect(observer.events, ['init ScopeModel<_Model>']);
+
+    // Only the scope is taken away, and the `Directionality` above it stays:
+    // the failure escapes `Element.unmount()`, and the framework's walk over
+    // the rest of the tree ends with it. Swapping the whole tree here left an
+    // element of the view scope undisposed, and the leak tracker counted it —
+    // a property of a throwing teardown, not of this scope.
+    await tester.pumpWidget(
+      const Directionality(
+        textDirection: TextDirection.ltr,
+        child: SizedBox(),
+      ),
+    );
+
+    // `dispose` here is the callback of a public parameter, and it runs from
+    // the `finally` of `unmount()` -- outside the guard that reports
+    // `unmountScope()` beside it. Its failure used to leave for the framework
+    // and no further, so the recording closed the pair as if the teardown had
+    // gone through.
+    expect(tester.takeException(), isA<StateError>());
+    expect(observer.events, [
+      'init ScopeModel<_Model>',
+      'dispose ScopeModel<_Model>',
+      'error ScopeModel<_Model> disposal Bad state: dispose failed',
+      'disposed ScopeModel<_Model>',
+    ]);
+  });
+
   testWidgets('a throwing observer does not reach the scope', (tester) async {
     final errors = <FlutterErrorDetails>[];
     final previous = FlutterError.onError;
@@ -983,6 +1025,9 @@ final class _FailingController extends ScopeController {
   @override
   Future<void> dispose() async => throw StateError('dispose failed');
 }
+
+/// A model with nothing in it: what matters is its disposer.
+final class _Model {}
 
 /// Fails every hook it is asked for.
 final class _ThrowingObserver extends ScopeObserver {
