@@ -217,22 +217,30 @@ abstract base class ScopeWidgetElementBase<W extends ScopeWidgetCore<W, E>,
           unmountScope();
           // ignore: avoid_catching_errors
         } on Object catch (error, stackTrace) {
-          // The framework is the caller on this path, and it does report what
-          // this throw carries -- but as an error of the widget tree, never as
-          // an event of this scope. `_performAsyncDispose` guards the same
-          // hook and sends `onError` for it, except that it only ever reaches
-          // `unmountScope()` first on the path where the scope closes itself
-          // and stays on the tree; when the tree takes the element away,
-          // `unmount()` gets there first and `_didUnmount` makes the later
-          // attempt a no-op. So the two paths ran the same hook and only one
-          // of them said anything. Re-thrown after the report: the caller
-          // still hears it.
+          // Reported both ways and re-thrown neither. `_performAsyncDispose`
+          // guards the same hook and sends `onError` for it, except that it
+          // only ever reaches `unmountScope()` first on the path where the
+          // scope closes itself and stays on the tree; when the tree takes the
+          // element away, `unmount()` gets there first and `_didUnmount` makes
+          // the later attempt a no-op. So the two paths ran the same hook and
+          // only one of them said anything.
+          //
+          // And there is nobody here to raise it at. The "caller" of this
+          // method is `BuildOwner._inactiveElements._unmountAll()`, a loop
+          // with no boundary around any one element, over a list it has
+          // already cleared: a throw ends the loop, and every scope behind
+          // this one is left mounted for good -- no `unmountScope`, no
+          // `dispose`, no asynchronous teardown, its `scopeKey` never given
+          // back and its registration with the parent never dropped. The
+          // neighbours of a scope whose hook threw are not the audience of
+          // that failure. This is the trade the rest of the teardown already
+          // makes, in the words of `_reportFailure`: reported, and the
+          // teardown goes on.
           notifyObserver(
             (observer) =>
                 observer.onError(this, ScopePhase.unmount, error, stackTrace),
           );
-
-          rethrow;
+          _reportFailure(error, stackTrace, 'while unmounting the scope');
         } finally {
           _disposeReportingFailure();
         }
@@ -252,7 +260,9 @@ abstract base class ScopeWidgetElementBase<W extends ScopeWidgetCore<W, E>,
   /// no further — while the `onDispose`/`onDisposed` pair closed around it as
   /// if the teardown had gone through. For a `ScopeModel` that failure is the
   /// `dispose` callback of a public parameter, which is user code by
-  /// definition. Re-thrown after the report, as it always was.
+  /// definition. Reported rather than re-thrown, for the reason given beside
+  /// the guard above: the only caller left is the loop that is unmounting
+  /// every other scope of the same batch.
   void _disposeReportingFailure() {
     try {
       dispose();
@@ -262,8 +272,7 @@ abstract base class ScopeWidgetElementBase<W extends ScopeWidgetCore<W, E>,
         (observer) =>
             observer.onError(this, ScopePhase.disposal, error, stackTrace),
       );
-
-      rethrow;
+      _reportFailure(error, stackTrace, 'while disposing of the scope');
     }
   }
 

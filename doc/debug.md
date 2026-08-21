@@ -152,9 +152,17 @@ The enum can grow, so a `switch` over it in your own code wants a `default`
 branch.
 
 A teardown that fails more than once reports every failure, not the first
-alone. A `Scope` tears its state down before its dependencies, and each half
-is guarded on its own, so both can fail: the first leaves through the throw as
-well, the second through the report alone — but `onError` carries them both.
+alone. A `Scope` tears its state down before its dependencies, and each half is
+guarded on its own, so both can fail, and `onError` carries them both.
+
+Where such a failure goes besides the observer depends on whether anybody is
+left to be handed it. The asynchronous teardown raises the first one at
+whoever asked for it — `close()`, say — and reports the rest. Nothing at all
+is raised while the framework is taking a scope off the tree: that caller is a
+loop unmounting a whole batch of elements with no boundary around any one of
+them, over a list it has already cleared, so a throw there would cost every
+scope behind this one the teardown it is owed. Both channels still carry the
+failure; neither of them is the throw.
 
 An error reaching `onError` is never the only way it is reported: a scope also
 hands its initialization failures to `buildOnError`, and the failures nobody

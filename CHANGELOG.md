@@ -358,8 +358,8 @@
   `ScopePhase.unmount`; the element's did neither, so a scope the tree took
   away reported nothing while a scope that closed itself reported the failure.
   The framework still showed it, as an error of the widget tree rather than an
-  event of the scope. Both paths now report it, and the failure is still
-  raised at the caller afterwards.
+  event of the scope. Both paths now report it — and the element's path no
+  longer raises it afterwards; see the entry about a batch of scopes below.
 * Fix the second of two simultaneous teardown failures of a `Scope` reaching
   `ScopeConfig.observer` through neither channel. The state is torn down
   before the dependencies and each half is guarded on its own, so both can
@@ -1019,6 +1019,27 @@
   knowing: an `unmount` that fails on one dependency no longer leaves its
   siblings mounted, and a scope whose disposal failed before the mandatory
   block now reports that failure after the block rather than instead of it.
+* Fix a failing `onUnmount` costing every *other* scope of the same batch the
+  teardown it is owed. The failure was raised at the caller of
+  `ScopeWidgetElementBase.unmount()` once it had been reported — and that
+  caller is `BuildOwner._inactiveElements._unmountAll()`, a loop with no
+  boundary around any one element, over a list it has already cleared. Three
+  sibling scopes with a throwing `onUnmount` in the middle left the third one
+  mounted for good: no `unmountScope`, no `dispose`, no asynchronous teardown,
+  its `scopeKey` never given back and its registration with the parent never
+  dropped. Such a failure now goes to `ScopeConfig.observer` and
+  `FlutterError.reportError` and no further, which is the trade the rest of the
+  teardown already makes. The `close()` path is unchanged: there a caller
+  exists, and it still hears it.
+* `ScopeController.performDispose()` runs `dispose` even when `onUnmount`
+  threw. The two stages were chained, so a synchronous half that failed left
+  everything the controller had taken held — and `_disposeCompleter` was
+  installed by then, so a second `performDispose()` handed back the failed run
+  instead of picking the teardown up. They are now guarded apart, the way the
+  four-stage teardown of a scope guards its own, and the first failure is
+  passed on once both are over. The path this is reached on is the one where
+  `init` failed: everywhere else the scope has run `onUnmount` itself already,
+  and `performDispose` found it done.
 * Fix `NavigationNode` system back handling: a pushed route or dialog in its
   nested navigator now closes before the enclosing route can pop. Once the node
   has nothing of its own left to close, `onPop` is asked exactly once and its

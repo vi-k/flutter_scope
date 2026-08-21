@@ -83,8 +83,46 @@ abstract base class ScopeController {
   }
 
   Future<void> _runDispose() async {
-    performUnmount();
-    await dispose();
+    // Two stages, each guarded on its own rather than chained, the way the
+    // four-stage teardown of a scope guards its own: both reach user code, and
+    // a synchronous half that threw is no reason to skip the release behind
+    // it. [dispose] is documented to run on every path, including the one
+    // where [init] failed halfway -- which is the very path that gets here
+    // with [onUnmount] still to run, because the scope has not run it. Chained
+    // as they were, a throwing [onUnmount] left everything the controller had
+    // taken held, and `_disposeCompleter` was already installed, so a second
+    // [performDispose] could not pick the teardown up either.
+    //
+    // The first failure is passed on once both stages are over, so every
+    // caller still hears about it; a second one has nobody left to be raised
+    // at and is reported instead.
+    AsyncError? failure;
+
+    void take(Object error, StackTrace stackTrace) {
+      if (failure == null) {
+        failure = AsyncError(error, stackTrace);
+      } else {
+        _reportFailure(error, stackTrace, 'while disposing of a controller');
+      }
+    }
+
+    try {
+      performUnmount();
+      // ignore: avoid_catching_errors
+    } on Object catch (error, stackTrace) {
+      take(error, stackTrace);
+    }
+
+    try {
+      await dispose();
+      // ignore: avoid_catching_errors
+    } on Object catch (error, stackTrace) {
+      take(error, stackTrace);
+    }
+
+    if (failure case final failure?) {
+      Error.throwWithStackTrace(failure.error, failure.stackTrace);
+    }
   }
 
   /// Acquires whatever the controller needs; awaited.

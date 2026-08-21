@@ -478,6 +478,46 @@ void main() {
       childGate.complete();
       await settle(tester, until: () => disposed.contains('child'));
     });
+
+    // Every test above holds one scope in the batch, so the hole this one is
+    // about could not show: the framework unmounts a batch of elements in a
+    // loop with no boundary around any one of them, and the list it iterates
+    // has already been cleared. A throw out of `unmount()` therefore does not
+    // reach a caller who can do something about it -- it ends the loop, and
+    // every scope behind the one that threw is left mounted for good.
+    testWidgets('disposes of the siblings of a scope that failed to unmount',
+        (tester) async {
+      final disposed = <String>[];
+
+      await tester.pumpWidget(
+        _wrap(
+          Column(
+            children: [
+              _Async(label: 'a', disposed: disposed),
+              _Async(label: 'b', failOnUnmount: true, disposed: disposed),
+              _Async(label: 'c', disposed: disposed),
+            ],
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.pumpWidget(_wrap(const SizedBox.shrink()));
+      await settle(tester, until: () => disposed.length == 3);
+
+      expect(
+        tester.takeException(),
+        isA<StateError>(),
+        reason: 'the failure is still reported',
+      );
+      expect(
+        disposed,
+        unorderedEquals(['a', 'b', 'c']),
+        reason: 'the neighbours of a scope whose hook threw are not the '
+            'audience of that failure, and the teardown they are owed is not '
+            "the failing scope's to cancel",
+      );
+    });
   });
 
   group('AsyncDataScope', () {
@@ -584,6 +624,34 @@ void main() {
         reason: 'the key came back even though the controller refused to go',
       );
     });
+
+    // The two halves of a controller's teardown are run by the scope, one
+    // after the other, so `performDispose()` normally finds `onUnmount` behind
+    // it and skips its own call to it. The failed-initialization path is where
+    // the two meet for the first time: the element's synchronous half never
+    // ran, so `performDispose()` runs `onUnmount` itself -- and used to stop
+    // there when it threw, with `_disposeCompleter` already installed, so no
+    // second attempt was possible either.
+    testWidgets('releases a controller whose init and onUnmount both failed',
+        (tester) async {
+      final controller = _Controller(failOnInit: true, failOnUnmount: true);
+
+      await tester.pumpWidget(_wrap(_Controlled(controller: controller)));
+      await settle(tester, until: () => controller.calls.contains('dispose'));
+
+      expect(
+        tester.takeException(),
+        isA<StateError>(),
+        reason: 'the failure is still reported',
+      );
+      expect(
+        controller.calls,
+        ['init', 'onUnmount', 'dispose'],
+        reason: '`dispose` is documented to run on every path, including the '
+            'one where `init` failed halfway -- which is the path it is most '
+            'likely to be asked for on',
+      );
+    });
   });
 
   group('Scope', () {
@@ -675,10 +743,17 @@ void main() {
     });
 
     // Both halves of the teardown can fail, and each half is the other's
-    // equal: the second is run whatever the first did. Only one of the two
-    // failures has a caller to be raised at, though, and it must be the first
-    // -- the state let go before the dependencies did, so its failure is the
-    // one that explains the other.
+    // equal: the second is run whatever the first did. Neither of them leaves
+    // through a throw. The caller of `unmount()` is
+    // `BuildOwner._inactiveElements._unmountAll()`, a loop with no boundary
+    // around any one element and over a list it has already cleared, so a
+    // failure raised there is a teardown every scope behind this one never
+    // gets. Both are reported by the package instead, which is what the
+    // library of the report says.
+    //
+    // This test read the other way round until the batch was measured: it
+    // asked that the first failure arrive from the framework and only the
+    // second from scopo. That split was the defect, not the contract.
     //
     // The container is written by hand here rather than built by
     // `ScopeAutoDependencies`, and that is the point: the automatic one
@@ -686,8 +761,8 @@ void main() {
     // container that can hand a failure to the state above it is a
     // hand-written one.
     testWidgets(
-        'keeps the failure of the state when the dependencies fail to unmount '
-        'behind it', (tester) async {
+        'reports the failure of the state and of the dependencies behind it',
+        (tester) async {
       final log = <String>[];
       final reported = <FlutterErrorDetails>[];
       final previousOnError = FlutterError.onError;
@@ -714,23 +789,19 @@ void main() {
 
       expect(
         reported
-            .where((details) => details.library != 'scopo')
-            .map((details) => details.exception)
-            .whereType<StateError>()
-            .map((error) => error.message),
-        contains('the state failed to unmount itself'),
-        reason: 'the first failure leaves the way it always has -- through '
-            'the caller, which here is the framework unmounting the element',
-      );
-      expect(
-        reported
             .where((details) => details.library == 'scopo')
             .map((details) => details.exception)
             .whereType<StateError>()
             .map((error) => error.message),
-        contains('the dependencies failed to unmount'),
-        reason: 'and the second leaves through a report, since the throw is '
-            'taken by the first',
+        containsAll([
+          'the state failed to unmount itself',
+          'the dependencies failed to unmount',
+        ]),
+        reason: 'a teardown that could not give something back has to say so '
+            'about each half, and say it itself: raised at the loop that is '
+            'unmounting the batch, the first failure would be reported by the '
+            'framework and would cost every scope behind this one its own '
+            'teardown',
       );
     });
 
@@ -1051,13 +1122,23 @@ final class _Controlled
 /// A controller that records what it was asked for, and can refuse one step.
 final class _Controller extends ScopeController {
   final calls = <String>[];
+  final bool failOnInit;
   final bool failOnUnmount;
   final bool failOnDispose;
 
-  _Controller({this.failOnUnmount = false, this.failOnDispose = false});
+  _Controller({
+    this.failOnInit = false,
+    this.failOnUnmount = false,
+    this.failOnDispose = false,
+  });
 
   @override
-  Future<void> init() async => calls.add('init');
+  Future<void> init() async {
+    calls.add('init');
+    if (failOnInit) {
+      throw StateError('init failed');
+    }
+  }
 
   @override
   void onUnmount() {
