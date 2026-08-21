@@ -399,7 +399,11 @@ it is awaited:
 5. `ScopeDependencies.dispose` — for a `ScopeAutoDependencies`, this walks the
    tree in reverse: the children of a `sequential` group in reverse declaration
    order, the children of a `concurrent` group in parallel, and only those that
-   actually registered a `dep.dispose`.
+   actually registered a `dep.dispose`. **Bounded by `disposeScopeTimeout` of
+   its own**, not by what step 4 left of it: one limit around both meant that a
+   state which never finished cost the container its whole disposal. A teardown
+   where both steps hang therefore reports two expiries — two steps were given
+   up on.
 6. The `scopeKey`, if any, is released, and the next scope waiting for it is let
    through.
 

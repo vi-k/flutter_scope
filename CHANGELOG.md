@@ -1031,6 +1031,27 @@
   `FlutterError.reportError` and no further, which is the trade the rest of the
   teardown already makes. The `close()` path is unchanged: there a caller
   exists, and it still hears it.
+* Fix `disposeScopeTimeout` expiring on a `Scope` skipping the disposal of its
+  dependency container entirely. The teardown put one limit around
+  `disposeScope()`, and for a `Scope` that method is two steps — the state's own
+  asynchronous teardown and then the container's. A state that never finished
+  therefore spent the whole limit, the wait was given up on, and what it gave up
+  on was both steps: the `scopeKey` came back on time and every dependency
+  stayed held with nothing left to release it. The `Scope` topic described the
+  two as separate steps and promised that "a failure in one is never a reason to
+  skip what comes behind it" — which was true of a failure and not of a hang.
+  The two are now bounded one each. A teardown where both hang reports two
+  expiries, and the topic says so.
+* Fix `close()` over a subtree that can never be painted — inside an `Offstage`,
+  or the unselected branch of an `IndexedStack` — leaving that subtree standing.
+  `ScreenshotReplacer` gives up after `maxRetries` frames and reports that the
+  screenshot is no longer pending, which releases the barrier `close()` waits
+  on; it used to keep the child in place all the same. The scope then tore
+  itself down under a ready subtree that was still mounted: the scopes below it
+  stayed registered, this one waited out its whole `waitForChildrenTimeout` for
+  a child nobody had taken away, and released what that child was still reading.
+  Giving up now takes the child away too, which is what the report is for —
+  with no image to put there, what takes its place is nothing.
 * The `LiteScope` topic no longer promises that the ready branch waits for
   `initStateAsync()`. It cannot: the state is created by the ready branch, so
   by the time its asynchronous initialization can begin, that branch has

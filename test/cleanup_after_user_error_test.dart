@@ -707,6 +707,50 @@ void main() {
       );
     });
 
+    // The topic describes the state's own teardown and the disposal of the
+    // dependency container as two steps, and promises that "a failure in one is
+    // never a reason to skip what comes behind it". A hang is not a failure,
+    // and the limit was around both: `disposeScopeTimeout` expired on a state
+    // that never finished, the teardown gave up on the whole of `disposeScope`
+    // -- container included -- and went on to give the `scopeKey` back. The
+    // dependencies stayed held with nothing left to release them.
+    testWidgets('disposes of its dependencies after a state that never returns',
+        (tester) async {
+      final log = <String>[];
+      final hang = Completer<void>();
+      addTearDown(() {
+        if (!hang.isCompleted) {
+          hang.complete();
+        }
+      });
+
+      await tester.pumpWidget(
+        _wrap(
+          _PlainDepScope(
+            log: log,
+            stateDisposeGate: hang,
+            disposeScopeTimeout: const Duration(milliseconds: 50),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.pumpWidget(_wrap(const SizedBox.shrink()));
+      await settle(tester, until: () => log.contains('dispose deps'));
+
+      expect(
+        tester.takeException(),
+        isA<TimeoutException>(),
+        reason: 'the expiry of the state half is still reported',
+      );
+      expect(
+        log,
+        ['unmount deps', 'dispose deps'],
+        reason: 'giving up on the state is not giving up on the container: '
+            'the second step is bounded on its own and still runs',
+      );
+    });
+
     // `unmount` on a dependency is the one hook that runs synchronously, in
     // the middle of the element leaving the tree. A failure there used to stop
     // the walk over the siblings and skip the base teardown behind it, so
@@ -1311,6 +1355,10 @@ final class _PlainDepScope
   /// initialization of its own — one that reports ready more than once, say.
   final Stream<ScopeInitState<Object, _PlainDeps>> Function(BuildContext)? init;
 
+  /// Parks `disposeStateAsync` on this, so the first of the two teardown steps
+  /// never finishes.
+  final Completer<void>? stateDisposeGate;
+
   const _PlainDepScope({
     required this.log,
     this.failOnDepsUnmount = false,
@@ -1318,6 +1366,8 @@ final class _PlainDepScope
     this.failOnStateUnmount = false,
     this.failOnStateDispose = false,
     this.init,
+    this.stateDisposeGate,
+    super.disposeScopeTimeout,
   }) : super(child: const SizedBox.shrink());
 
   @override
@@ -1396,6 +1446,9 @@ final class _PlainDepScopeState
 
   @override
   FutureOr<void> disposeStateAsync() {
+    if (params.stateDisposeGate case final gate?) {
+      return gate.future;
+    }
     if (params.failOnStateDispose) {
       throw StateError('the state failed to dispose of itself');
     }

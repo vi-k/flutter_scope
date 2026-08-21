@@ -15,8 +15,14 @@ class ScreenshotReplacer extends StatefulWidget {
   /// A child that is built but never painted -- an `Offstage` subtree, or the
   /// unselected branch of an `IndexedStack`, for example -- can never be
   /// captured, so the retries have to be bounded: on the last attempt
-  /// [onCompleted] is called anyway, leaving [child] in place instead of
-  /// keeping the caller waiting for a screenshot forever.
+  /// [onCompleted] is called anyway, rather than keeping the caller waiting
+  /// for a screenshot forever.
+  ///
+  /// **The child is taken away either way.** Giving up on the picture is not
+  /// giving up on replacing the child: what waits on [onCompleted] waits in
+  /// order to let go of whatever the child holds, and leaving it standing gave
+  /// that caller the report without the thing it was reported for. With no
+  /// image to put there, what takes its place is nothing.
   static const maxRetries = 5;
 
   /// Called once the screenshot is no longer pending.
@@ -45,6 +51,7 @@ class _ScreenshotReplacerState extends State<ScreenshotReplacer> {
   ui.Image? _image;
   bool _isCaptured = false;
   bool _isCompletionReported = false;
+  bool _gaveUp = false;
   int _retries = 0;
 
   @override
@@ -112,6 +119,9 @@ class _ScreenshotReplacerState extends State<ScreenshotReplacer> {
   /// caller is never left waiting forever; an [error] that survived every
   /// retry is reported once, non-fatally — the screenshot is an embellishment,
   /// and failing to take it must not bring the application down.
+  ///
+  /// Giving up also takes the child away, which is the half that is not an
+  /// embellishment: see [ScreenshotReplacer.maxRetries].
   void _retryOrGiveUp({Object? error, StackTrace? stackTrace}) {
     if (_retries >= ScreenshotReplacer.maxRetries) {
       if (error != null) {
@@ -123,6 +133,14 @@ class _ScreenshotReplacerState extends State<ScreenshotReplacer> {
             context: ErrorDescription('while capturing a screenshot'),
           ),
         );
+      }
+      // Before the report, so a caller told that the screenshot is no longer
+      // pending finds the subtree already on its way out rather than still
+      // standing.
+      if (mounted) {
+        setState(() {
+          _gaveUp = true;
+        });
       }
       _reportCompleted();
 
@@ -199,6 +217,10 @@ class _ScreenshotReplacerState extends State<ScreenshotReplacer> {
         // though specific sizing behavior might depend on use case.
         // RawImage defaults to the image size.
       );
+    }
+
+    if (_gaveUp) {
+      return const SizedBox.shrink();
     }
 
     return RepaintBoundary(key: _globalKey, child: widget.child);

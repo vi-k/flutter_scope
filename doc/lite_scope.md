@@ -197,7 +197,12 @@ scope is actually ready and still mounted, because in any other state nothing
 would ever release the barrier and the future would hang. A subtree that is
 never painted — inside an `Offstage`, or in the unselected branch of an
 `IndexedStack` — cannot be captured either; after `ScreenshotReplacer.maxRetries`
-frames `close()` proceeds and `buildOnClosing` is drawn over the live subtree.
+frames `close()` proceeds, and the ready subtree is taken away all the same,
+with nothing in the picture's place. It has to be: the whole point of waiting
+for the screenshot is to let go of what the subtree holds, and a scope left
+standing there keeps its own child scopes mounted and registered — this one
+would then wait out its `waitForChildrenTimeout` for a child nobody had taken
+away, and release what that child is still reading.
 
 A closing build that fails does not hold the teardown up either. The barrier is
 released by the `ScreenshotReplacer` that build mounts, so a `wrapState` or a

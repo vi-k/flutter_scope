@@ -415,6 +415,56 @@ void main() {
       },
     );
 
+    // Giving up on the picture is not giving up on the subtree. The barrier is
+    // released either way, so the teardown goes on -- and it used to go on with
+    // the ready subtree still standing: every scope under it stayed mounted and
+    // stayed registered, this one waited out its whole `waitForChildrenTimeout`
+    // for a child nobody had taken away, and then released what that child was
+    // still reading.
+    testWidgets(
+      'takes the subtree away even when the screenshot can never be taken',
+      (tester) async {
+        await tester.pumpWidget(
+          _app(
+            const Offstage(
+              child: _CloseScope(
+                init: _becomesReady,
+                body: _CloseScope(init: _becomesReady),
+              ),
+            ),
+          ),
+        );
+        await settle(
+          tester,
+          until: () =>
+              find.byType(_CloseScope, skipOffstage: false).evaluate().length ==
+              2,
+        );
+
+        final outer = tester.element<_CloseScopeElement>(
+          find.byType(_CloseScope, skipOffstage: false).first,
+        );
+        expect(outer.childrenCount, 1, reason: 'the child scope registered');
+
+        var isClosed = false;
+        unawaited(outer.close().whenComplete(() => isClosed = true));
+
+        await settle(tester, until: () => isClosed);
+
+        expect(
+          isClosed,
+          isTrue,
+          reason: 'and the close finishes without waiting the children out',
+        );
+        expect(
+          outer.childrenCount,
+          0,
+          reason: 'the subtree went away, so the scope under it finished its '
+              'own teardown and unregistered',
+        );
+      },
+    );
+
     testWidgets(
       'does not touch the disposed model when close() wins the race with the '
       'post-frame callback that applies the ready state',
@@ -1392,7 +1442,11 @@ void main() {
             Offstage(
               child: ScreenshotReplacer(
                 onCompleted: () => completedCount++,
-                child: const SizedBox(width: 20, height: 20),
+                child: const SizedBox(
+                  key: ValueKey('captured'),
+                  width: 20,
+                  height: 20,
+                ),
               ),
             ),
           ),
@@ -1434,6 +1488,13 @@ void main() {
           await tester.pump();
         }
         expect(completedCount, 1);
+        expect(
+          find.byKey(const ValueKey('captured'), skipOffstage: false),
+          findsNothing,
+          reason: 'and the child is gone with the picture that could not be '
+              'taken of it: what waits on the report waits in order to let go '
+              'of what the child holds',
+        );
       },
     );
   });

@@ -246,16 +246,40 @@ abstract base class ScopeElementBase<
     }
   }
 
+  /// `true`: the two stages below are bounded here, one limit each.
+  ///
+  /// See [boundsDisposeScopeItself]. A single limit around both gave a state
+  /// that never finished the power to skip the container entirely — the wait
+  /// expired, the teardown went on to give back the `scopeKey`, and every
+  /// dependency stayed held with nothing left to release it.
+  @override
+  bool get boundsDisposeScopeItself => true;
+
   @override
   Future<void> disposeScope() async {
     AsyncError? failure;
 
+    // Read once and used for both stages: the parameter says how long *a*
+    // release of this scope may take, and there are two of them behind this
+    // method. A teardown where both hang therefore reports two expiries, which
+    // is what happened — two stages were given up on.
+    final limit = resolveTimeout(
+      disposeScopeTimeout,
+      ScopeConfig.defaultDisposeScopeTimeout,
+    );
+
+    Future<void> bounded(Future<void> work, String what) => limit == null
+        ? work
+        : _awaitBounded(work, limit, what, onDisposeScopeTimeout);
+
     // The state releases what it owns first, the dependencies after it -- and
     // the second half is not the first half's to cancel. A state that failed
     // to let go of its own is still a state whose dependencies are holding
-    // theirs, and this is the only place left to give those back.
+    // theirs, and this is the only place left to give those back. A state that
+    // never finishes is the same case, which is why the limit sits on each
+    // half rather than around the pair.
     try {
-      await super.disposeScope();
+      await bounded(super.disposeScope(), 'its state to be disposed of');
       // ignore: avoid_catching_errors
     } on Object catch (error, stackTrace) {
       failure = AsyncError(error, stackTrace);
@@ -266,7 +290,7 @@ abstract base class ScopeElementBase<
     try {
       final result = _dependencies?.dispose();
       if (result is Future<void>) {
-        await result;
+        await bounded(result, 'its dependencies to be disposed of');
       }
       // ignore: avoid_catching_errors
     } on Object catch (error, stackTrace) {

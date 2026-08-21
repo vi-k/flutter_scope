@@ -133,6 +133,21 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
   /// Releases what [initScope] acquired; awaited.
   FutureOr<void> disposeScope() {}
 
+  /// Whether [disposeScope] bounds the stages behind it itself.
+  ///
+  /// `false` here, and for every family with one stage behind that method: the
+  /// teardown puts a single [disposeScopeTimeout] around it, and that is the
+  /// whole of it.
+  ///
+  /// `Scope` answers `true`. It has two stages there — the state's own
+  /// teardown and the disposal of the dependency container — and one limit
+  /// around both meant that a state which never finished cost the container
+  /// its whole disposal: the wait was given up on, and what it gave up on was
+  /// both halves at once. Bounding them again out here would bound them twice,
+  /// and one hang would be reported by two timers.
+  @protected
+  bool get boundsDisposeScopeItself => false;
+
   /// Builds the branch belonging to [state].
   Widget buildOnState(AsyncScopeState state);
 
@@ -971,10 +986,12 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
             // this is user code, the block below gives back what the scope was
             // lent, and a release that never finishes must not be able to keep
             // the key of a scope that is already gone.
-            final limit = resolveTimeout(
-              disposeScopeTimeout,
-              ScopeConfig.defaultDisposeScopeTimeout,
-            );
+            final limit = boundsDisposeScopeItself
+                ? null
+                : resolveTimeout(
+                    disposeScopeTimeout,
+                    ScopeConfig.defaultDisposeScopeTimeout,
+                  );
 
             if (limit == null) {
               await result;
