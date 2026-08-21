@@ -14,6 +14,16 @@ final class ListenableSelector<L extends Listenable, T extends Object?>
   final L listenable;
 
   /// Extracts the value this widget rebuilds for.
+  ///
+  /// Compared by identity when the parent rebuilds, and it has to be: a new
+  /// selector may select something else, and there is no way to ask one
+  /// closure whether it does what another did. The shape the examples show —
+  /// an inline `(model) => model.value` — is therefore a different object on
+  /// every build of the parent, so each of those rebuilds cancels the
+  /// subscription and takes a new one: one `removeListener`, one
+  /// `addListener` and one call of the selector. That is small, and it is not
+  /// nothing. Hold the selector in a field or a `static` where the parent
+  /// rebuilds often and the listenable does not change.
   final T Function(L listenable) selector;
 
   /// Decides whether the selected value changed; `!=` when omitted.

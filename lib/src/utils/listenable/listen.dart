@@ -136,11 +136,23 @@ final class CompositeListenableSubscription {
   /// Creates an empty group of subscriptions.
   CompositeListenableSubscription();
 
-  /// Adds new subscription to this composite.
+  /// Adds a subscription to this composite.
   ///
-  /// Throws an exception if this composite was disposed
+  /// Adding to a composite that has already been cancelled is a mistake in the
+  /// caller and says so — with an assertion, the way [cancel] does and for the
+  /// same reason. Raising outright, as this used to, left behind exactly what
+  /// the composite exists to prevent: the subscription was made on the line
+  /// before, the throw was what kept it from ever being handed over, and
+  /// nothing else held it. So it is cancelled first and complained about
+  /// after: whichever build this is, the listenable is let go of.
   void add(ListenableSubscription subscription) {
-    throwIfDisposed(this, _isDisposed, 'cancel');
+    if (_isDisposed) {
+      subscription.cancel();
+      assert(debugAssertNotDisposed(this, _isDisposed, 'add'));
+
+      return;
+    }
+
     _subscriptions.add(subscription);
   }
 

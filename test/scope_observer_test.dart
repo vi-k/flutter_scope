@@ -20,6 +20,61 @@ void main() {
     ScopeConfig.observer = null;
   });
 
+  group('ScopeCompositeObserver', () {
+    // `ScopeConfig.observer` holds one, and wanting two is ordinary. A
+    // delegate written by hand is the one subclass that gets nothing from
+    // `ScopeObserver` being a `base class` with empty hooks: a hook added
+    // later arrives with the base implementation and every observer behind the
+    // delegate goes quiet without a word. This one is the package's, so it
+    // grows with the class it forwards.
+    test('hands every event to each observer, in order', () {
+      final first = RecordingObserver(trace: true);
+      final second = RecordingObserver(trace: true);
+      final order = <String>[];
+
+      ScopeConfig.observer = ScopeCompositeObserver([
+        _MarkingObserver(order, 'first', first),
+        _MarkingObserver(order, 'second', second),
+      ]);
+
+      final target = _Target();
+      notifyObserver((observer) => observer.onInit(target));
+      notifyObserver((observer) => observer.onTrace(target, 'a step'));
+
+      expect(first.events, ['init target', 'trace target a step']);
+      expect(second.events, first.events, reason: 'both heard the same');
+      expect(
+        order,
+        ['first', 'second', 'first', 'second'],
+        reason: 'and in the order they were given, one event at a time',
+      );
+    });
+
+    // The trade `ScopeConfig.observer` makes for itself, applied one level
+    // down: one bad listener is not the whole recording.
+    test('an observer that throws does not stop the ones behind it', () {
+      final reported = <Object>[];
+      final previousOnError = FlutterError.onError;
+      FlutterError.onError = (details) => reported.add(details.exception);
+      addTearDown(() => FlutterError.onError = previousOnError);
+
+      final behind = RecordingObserver();
+
+      ScopeConfig.observer = ScopeCompositeObserver([
+        const _ThrowingOnReadyObserver(),
+        behind,
+      ]);
+
+      final target = _Target();
+      notifyObserver((observer) => observer.onReady(target));
+
+      FlutterError.onError = previousOnError;
+
+      expect(behind.events, ['ready target']);
+      expect(reported.single, isA<StateError>());
+    });
+  });
+
   testWidgets(
       'a scope built on the asynchronous element reports its own phase, not '
       'the bare pair', (tester) async {
@@ -1301,4 +1356,39 @@ final class _ClosingScopeState extends LiteScopeCoreState<_ClosingScope,
 
   @override
   Widget build(BuildContext context) => const Text('ready');
+}
+
+/// Something to report about, with a label a test can read.
+final class _Target implements ScopeObservable {
+  @override
+  String get debugLabel => 'target';
+}
+
+/// Records the order the composite reaches its observers in, then forwards.
+final class _MarkingObserver extends ScopeObserver {
+  final List<String> order;
+  final String name;
+  final ScopeObserver inner;
+
+  const _MarkingObserver(this.order, this.name, this.inner);
+
+  @override
+  void onInit(ScopeObservable target) {
+    order.add(name);
+    inner.onInit(target);
+  }
+
+  @override
+  void onTrace(ScopeObservable target, String message) {
+    order.add(name);
+    inner.onTrace(target, message);
+  }
+}
+
+/// An observer of the kind the composite has to survive.
+final class _ThrowingOnReadyObserver extends ScopeObserver {
+  const _ThrowingOnReadyObserver();
+
+  @override
+  void onReady(ScopeObservable target) => throw StateError('observer failed');
 }

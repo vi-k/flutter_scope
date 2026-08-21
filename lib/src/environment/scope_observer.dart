@@ -120,6 +120,101 @@ base class ScopeObserver {
   void onTrace(ScopeObservable target, String message) {}
 }
 
+/// A [ScopeObserver] that hands every event to each of [observers], in order.
+///
+/// [ScopeConfig.observer] holds one observer, and wanting two is ordinary —
+/// [ScopePrintObserver] while developing and a crash reporter of your own
+/// beside it:
+///
+/// ```dart
+/// ScopeConfig.observer = const ScopeCompositeObserver([
+///   ScopePrintObserver(),
+///   CrashReporter(),
+/// ]);
+/// ```
+///
+/// **Written here rather than left to be written by hand**, and that is the
+/// point of it. [ScopeObserver] is a `base class` whose hooks are empty, so a
+/// subclass keeps compiling when a tenth hook is added — which is what
+/// protects an ordinary observer from a new version. A delegate is the one
+/// subclass that gets nothing from it: the new hook arrives with the empty
+/// implementation of the base, and every observer behind the delegate stops
+/// hearing that event without a word from anywhere. This one is written with
+/// the class it forwards, and grows with it.
+///
+/// An observer that throws does not stop the ones after it. The package calls
+/// an observer from a build, an initialization or a teardown, and a failure
+/// there is reported through [FlutterError.reportError] and gone past — the
+/// same trade [ScopeConfig.observer] itself makes, applied one level down so
+/// that one bad listener is not the whole recording.
+///
+/// {@category debug}
+final class ScopeCompositeObserver extends ScopeObserver {
+  /// The observers this one stands in front of, asked in order.
+  final List<ScopeObserver> observers;
+
+  /// Creates an observer that forwards to each of [observers].
+  const ScopeCompositeObserver(this.observers);
+
+  /// Runs [call] on every observer, guarded one at a time.
+  void _each(void Function(ScopeObserver observer) call) {
+    for (final observer in observers) {
+      try {
+        call(observer);
+        // ignore: avoid_catching_errors
+      } on Object catch (error, stackTrace) {
+        FlutterError.reportError(
+          FlutterErrorDetails(
+            exception: error,
+            stack: stackTrace,
+            library: 'scopo',
+            context: ErrorDescription(
+              'while notifying one of several scope observers',
+            ),
+          ),
+        );
+      }
+    }
+  }
+
+  @override
+  void onInit(ScopeObservable target) => _each((o) => o.onInit(target));
+
+  @override
+  void onProgress(ScopeObservable target, Object? progress) =>
+      _each((o) => o.onProgress(target, progress));
+
+  @override
+  void onReady(ScopeObservable target) => _each((o) => o.onReady(target));
+
+  @override
+  void onCancelled(ScopeObservable target) =>
+      _each((o) => o.onCancelled(target));
+
+  @override
+  void onDispose(ScopeObservable target) => _each((o) => o.onDispose(target));
+
+  @override
+  void onDisposed(ScopeObservable target) => _each((o) => o.onDisposed(target));
+
+  @override
+  void onError(
+    ScopeObservable target,
+    ScopePhase phase,
+    Object error,
+    StackTrace? stackTrace,
+  ) =>
+      _each((o) => o.onError(target, phase, error, stackTrace));
+
+  @override
+  void onTimeout(ScopeObservable target, String what) =>
+      _each((o) => o.onTimeout(target, what));
+
+  @override
+  void onTrace(ScopeObservable target, String message) =>
+      _each((o) => o.onTrace(target, message));
+}
+
 /// A [ScopeObserver] that writes a line per event.
 ///
 /// The line is `scopo | <label> | <what happened>`, and a failure adds

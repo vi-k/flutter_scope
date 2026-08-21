@@ -1031,6 +1031,32 @@
   `FlutterError.reportError` and no further, which is the trade the rest of the
   teardown already makes. The `close()` path is unchanged: there a caller
   exists, and it still hears it.
+* Add `ScopeCompositeObserver`, which hands every event to each of the
+  observers it is given. `ScopeConfig.observer` holds one, and wanting two is
+  ordinary — `ScopePrintObserver` while developing and a reporter of your own
+  beside it. It belongs to the package rather than to the application, and that
+  is the point: `ScopeObserver` is a `base class` with empty hooks so that an
+  ordinary observer keeps compiling when a tenth hook is added, and a delegate
+  is the one subclass that gains nothing from that — the new hook would arrive
+  with the base implementation and every observer behind the delegate would go
+  quiet without a word. An observer that throws does not stop the ones after
+  it; the failure is reported and the rest are asked.
+* **Breaking:** `CompositeListenableSubscription.add` no longer throws a
+  `StateError` outright after the composite has been cancelled. It still says
+  the call is a mistake, with an assertion, the way `cancel` beside it does —
+  but the subscription it was handed is cancelled first. Raising left exactly
+  what the composite exists to prevent: the subscription was made on the line
+  before, and the throw was what kept it attached to its listenable with nobody
+  holding it.
+* The suite is no longer part of the published archive. 756 KB against the
+  540 KB of `lib/`, downloaded by everyone who depends on the package and of no
+  use to any of them — the topics in `doc/` are the documentation and they
+  ship. 364 KB compressed becomes 234 KB.
+* The dartdoc of `ListenableSelector.selector` says what comparing it by
+  identity costs: the inline closure the examples show is a new object on every
+  build of the parent, so each of those rebuilds cancels the subscription and
+  takes a new one. Hold the selector in a field where the parent rebuilds often
+  and the listenable does not.
 * `ScreenshotReplacer` no longer reports a failed capture through
   `FlutterError.reportError` when it gives up. The case it reported is the one
   the widget documents as ordinary — a subtree that is never painted cannot be

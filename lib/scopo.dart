@@ -8,6 +8,7 @@ library;
 // moment it ships. The line below already says it the right way round.
 export 'src/environment/scope_config.dart'
     show
+        ScopeCompositeObserver,
         ScopeConfig,
         ScopeObservable,
         ScopeObserver,

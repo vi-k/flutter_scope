@@ -24,6 +24,12 @@
 /example/*/macos/
 /example/scopo_demo/web/
 
+# The suite, by the same rule: 756 KB against the 540 KB of `lib/`, downloaded
+# by everyone who depends on the package and of no use to any of them. It is
+# not documentation -- the topics in `doc/` are, and they ship -- and it is
+# where it belongs, in the repository, for anybody who wants to read or run it.
+/test/
+
 # Miscellaneous
 *.class
 *.log

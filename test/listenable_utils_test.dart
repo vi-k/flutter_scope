@@ -111,14 +111,39 @@ void main() {
       expect((firstCalls, secondCalls), (1, 1));
     });
 
-    test('refuses a subscription once it has been cancelled', () {
+    // The composite exists so that nothing is left listening. Adding to one
+    // that has already been cancelled used to raise a `StateError` -- and the
+    // subscription had been made on the line before the `add`, so the raise
+    // was what kept it: attached to its listenable, held by nobody, and
+    // reported as a mistake in the caller rather than as the leak it was. It
+    // is still a mistake and still says so, with an assertion, the way `cancel`
+    // beside it does; what it no longer does is keep the thing it complains
+    // about.
+    test('adding to a cancelled composite cancels rather than leaks', () {
       final notifier = ChangeNotifier();
       addTearDown(notifier.dispose);
+      var calls = 0;
+
       final composite = CompositeListenableSubscription()..cancel();
 
       expect(
-        () => composite.add(notifier.listen(() {})),
+        () => notifier.listen(() => calls++).addTo(composite),
+        // A `StateError`, not an `AssertionError`: `debugAssertNotDisposed`
+        // raises through `throwIfDisposed`, so what an assert of this package
+        // carries is the message, not the type.
         throwsA(isA<StateError>()),
+        reason: 'adding to a composite that is over is a mistake in the '
+            'caller, and it says so',
+      );
+
+      // ignore: invalid_use_of_protected_member, invalid_use_of_visible_for_testing_member
+      notifier.notifyListeners();
+
+      expect(
+        calls,
+        0,
+        reason: 'and the subscription it was handed was cancelled before it '
+            'complained, so nothing is left on the listenable',
       );
     });
   });
@@ -460,6 +485,51 @@ void main() {
       await tester.pump();
       expect(find.text('value: 2'), findsOneWidget);
     });
+
+    // The order of the two lines in `didUpdateWidget` -- cancel the old
+    // subscription, then take the new one -- was checked by a probe when it
+    // was written and left to a comment. `select` reads the value at once, so
+    // a selector that raises there does it while the state is being updated:
+    // with the order reversed the old listener stays on a listenable this
+    // widget no longer watches, pointing into an element the framework
+    // abandons as it puts an error widget in the subtree's place.
+    testWidgets(
+      'a selector that raises on a new configuration leaves nothing '
+      'on the listenable',
+      (tester) async {
+        final model = _Model();
+        addTearDown(model.dispose);
+
+        Widget build(int Function(_Model) selector) => Directionality(
+              textDirection: TextDirection.ltr,
+              child: ListenableSelector<_Model, int>(
+                listenable: model,
+                selector: selector,
+                builder: (context, listenable, value, child) =>
+                    const SizedBox.shrink(),
+              ),
+            );
+
+        await tester.pumpWidget(build((model) => model.value));
+        expect(model.isListened, isTrue, reason: 'control: it is watching');
+
+        await tester.pumpWidget(
+          build((model) => throw StateError('the selector failed')),
+        );
+
+        expect(tester.takeException(), isA<StateError>());
+        expect(
+          model.isListened,
+          isFalse,
+          reason: 'the old subscription went first, so a selector that cannot '
+              'answer leaves nobody behind on the source',
+        );
+      },
+      // The raise this test is written for happens while the state is being
+      // updated, and the subtree it breaks stays unmounted -- see
+      // [unmountableTree].
+      experimentalLeakTesting: unmountableTree,
+    );
   });
 
   group('StateAsNotifier', () {
