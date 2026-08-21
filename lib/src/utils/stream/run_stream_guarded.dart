@@ -125,7 +125,19 @@ Stream<T> runStreamGuarded<T>(
             );
           }
           controller.addError(error, stacktrace);
-          cancel(); // ignore: discarded_futures
+
+          if (subscription == null) {
+            // Reported from inside `listen()` itself, before the subscription
+            // this cancels has been handed back -- so cancelling right here
+            // finds nothing to cancel and leaves the source running. One
+            // microtask later it is assigned. Only this branch waits: on every
+            // ordinary path the cancel stays where it was, synchronous and
+            // immediately after the error.
+            // ignore: discarded_futures
+            scheduleMicrotask(cancel);
+          } else {
+            cancel(); // ignore: discarded_futures
+          }
         },
         onDone: () {
           if (observable case final observable?) {

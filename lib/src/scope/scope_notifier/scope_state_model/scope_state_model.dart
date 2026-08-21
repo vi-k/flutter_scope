@@ -20,10 +20,21 @@ base class ScopeStateNotifier<S extends Object> extends ChangeNotifier
 
   /// Replaces the state and notifies the listeners.
   ///
-  /// Notifies only when [shouldNotify] says the change is worth hearing about.
+  /// [shouldNotify] decides the second half alone. The state is replaced
+  /// either way — the question that hook answers is whether the change is
+  /// worth waking anybody for, not whether it happened — and skipping the
+  /// assignment with it meant that a model whose `shouldNotify` said "these
+  /// two are the same" went on holding the *older* of the two objects. For a
+  /// value type that is invisible; for anything with identity behind it, the
+  /// state was not the one last handed over, and the first line above said it
+  /// was.
   void update(S value) {
-    if (shouldNotify(_state, value)) {
-      _state = value;
+    // Asked before the assignment: it weighs the two values against each
+    // other, and after it there is only one left.
+    final notify = shouldNotify(_state, value);
+
+    _state = value;
+    if (notify) {
       notifyListeners();
     }
   }

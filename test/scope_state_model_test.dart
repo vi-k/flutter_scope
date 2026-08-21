@@ -32,23 +32,35 @@ void main() {
       );
     });
 
-    test('an equals that recognises the value keeps both quiet', () {
+    // `shouldNotify` answers whether anybody has to hear about the change, not
+    // whether it happened. Skipping the assignment along with the notification
+    // -- which is what this used to do, and what this test used to hold down
+    // -- left the model holding the *older* of two objects its own comparison
+    // called the same. Invisible for a value type, and not for anything with
+    // identity behind it.
+    test('an update the listeners are not told about is still applied', () {
       final notifier = _Deduplicating('a');
       addTearDown(notifier.dispose);
-      final first = notifier.state;
       var notifications = 0;
+
+      // Equal to 'a' and not the same object: a literal would be canonicalised
+      // into the one already there, and then there is nothing to tell apart.
+      final second = String.fromCharCodes('a'.codeUnits);
+      expect(identical(second, 'a'), isFalse, reason: 'control');
 
       notifier
         ..addListener(() => notifications++)
-        ..update('a');
+        ..update(second);
 
-      expect(notifications, 0);
       expect(
-        identical(notifier.state, first),
+        notifications,
+        0,
+        reason: 'the comparison of the model says the two are the same',
+      );
+      expect(
+        identical(notifier.state, second),
         isTrue,
-        reason: 'an update that is not passed on is not applied either: the '
-            'listeners and the state would otherwise disagree about which '
-            'object is current',
+        reason: 'and the state is the one last handed over all the same',
       );
 
       notifier.update('b');
@@ -173,6 +185,23 @@ void main() {
             'says no change — but every listener was told the state throws, '
             'and has to be told that it no longer does',
       );
+    });
+
+    // The other half of that: the recovery notified without storing what it
+    // was handed, so the one call that put the failure down was the one call
+    // whose value was thrown away.
+    test('an update recovering keeps the object it was handed', () {
+      final notifier = _DeduplicatingWithError('a');
+      addTearDown(notifier.dispose);
+
+      final second = String.fromCharCodes('a'.codeUnits);
+      expect(identical(second, 'a'), isFalse, reason: 'control');
+
+      notifier
+        ..setError(Exception('boom'), StackTrace.current)
+        ..update(second);
+
+      expect(identical(notifier.state, second), isTrue);
     });
 
     test('the view of it answers for the error too', () {

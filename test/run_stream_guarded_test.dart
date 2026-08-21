@@ -14,6 +14,30 @@ void main() {
     // through `onError` like any other. Without the guard it is thrown at
     // whoever called `runStreamGuarded` — one line up from where a scope
     // would have caught it.
+    // A source that reports its error from inside `listen()` does it before
+    // the subscription has been handed back, so the cancel that follows the
+    // error had nothing to cancel and the source went on running. Nothing
+    // inside the package produces such a stream -- this is the helper standing
+    // up to one that does.
+    test('cancels a source that failed from inside listen()', () async {
+      final source = _SyncFailingStream();
+
+      await expectLater(
+        runStreamGuarded<int>(
+          () => source,
+          (error, stackTrace) {},
+        ).drain<void>(),
+        throwsA(isA<StateError>()),
+      );
+
+      expect(
+        source.cancelled,
+        isTrue,
+        reason: 'the source is let go of even when it failed before there was '
+            'a subscription to let go of',
+      );
+    });
+
     test('hands back a failing factory as a stream, not a throw', () async {
       final failure = StateError('the factory fell over');
       final Stream<int> stream;
@@ -92,4 +116,54 @@ final class _FakeObservable implements ScopeObservable {
 
   @override
   String get debugLabel => '_FakeObservable';
+}
+
+/// A stream that reports an error from inside [listen] itself, before the
+/// subscription it returns has reached the caller.
+final class _SyncFailingStream extends Stream<int> {
+  bool cancelled = false;
+
+  @override
+  StreamSubscription<int> listen(
+    void Function(int event)? onData, {
+    Function? onError,
+    void Function()? onDone,
+    bool? cancelOnError,
+  }) {
+    if (onError is void Function(Object, StackTrace)) {
+      onError(StateError('failed inside listen'), StackTrace.current);
+    }
+
+    return _RecordingSubscription(() => cancelled = true);
+  }
+}
+
+final class _RecordingSubscription implements StreamSubscription<int> {
+  final void Function() _onCancel;
+
+  _RecordingSubscription(this._onCancel);
+
+  @override
+  Future<void> cancel() async => _onCancel();
+
+  @override
+  void onData(void Function(int data)? handleData) {}
+
+  @override
+  void onError(Function? handleError) {}
+
+  @override
+  void onDone(void Function()? handleDone) {}
+
+  @override
+  void pause([Future<void>? resumeSignal]) {}
+
+  @override
+  void resume() {}
+
+  @override
+  bool get isPaused => false;
+
+  @override
+  Future<E> asFuture<E>([E? futureValue]) => Completer<E>().future;
 }

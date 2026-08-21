@@ -506,39 +506,33 @@ void main() {
     'a teardown that throws reports onError for the disposal phase',
     (tester) async {
       // `_performAsyncDispose()` runs from a future `dispose()` discards, so
-      // a failure it re-throws at the end reaches only the zone, not
-      // `tester.takeException()` -- the same reason
-      // `async_scope_test.dart`'s equivalent scenario for `initScope` is
-      // guarded. `docs/handoff.md`'s "Грабли" section names this one for
-      // `_performAsyncDispose()` specifically.
-      final errors = <Object>[];
-      await runZonedGuarded(
-        () async {
-          Widget build({required bool present}) => Directionality(
-                textDirection: TextDirection.ltr,
-                child: present
-                    ? AsyncScope(
-                        initScope: (context) => Stream.value(AsyncScopeReady()),
-                        disposeScope: () => throw StateError('dispose failed'),
-                        progressBuilder: (context, progress) =>
-                            const Text('init'),
-                        errorBuilder: (context, error, stackTrace, progress) =>
-                            Text('$error'),
-                        builder: (context) => const Text('ready'),
-                      )
-                    : const SizedBox.shrink(),
-              );
-
-          await tester.pumpWidget(build(present: true));
-          await tester.pumpAndSettle();
-
-          await tester.pumpWidget(build(present: false));
-          await settle(
-            tester,
-            until: () => observer.events.contains('disposed AsyncScope'),
+      // the failure it re-throws at the end has nobody to be handed to. It
+      // used to leave as an unhandled error of the zone, which is why this
+      // test was written around `runZonedGuarded`; it is reported through
+      // `FlutterError.reportError` now, like every other failure of a teardown
+      // with no caller, and the harness turns that into an exception of the
+      // test.
+      Widget build({required bool present}) => Directionality(
+            textDirection: TextDirection.ltr,
+            child: present
+                ? AsyncScope(
+                    initScope: (context) => Stream.value(AsyncScopeReady()),
+                    disposeScope: () => throw StateError('dispose failed'),
+                    progressBuilder: (context, progress) => const Text('init'),
+                    errorBuilder: (context, error, stackTrace, progress) =>
+                        Text('$error'),
+                    builder: (context) => const Text('ready'),
+                  )
+                : const SizedBox.shrink(),
           );
-        },
-        (error, stackTrace) => errors.add(error),
+
+      await tester.pumpWidget(build(present: true));
+      await tester.pumpAndSettle();
+
+      await tester.pumpWidget(build(present: false));
+      await settle(
+        tester,
+        until: () => observer.events.contains('disposed AsyncScope'),
       );
 
       expect(observer.events, [
@@ -552,9 +546,10 @@ void main() {
         'disposed AsyncScope',
       ]);
       expect(
-        errors.single,
+        tester.takeException(),
         isA<StateError>(),
-        reason: 'the failure still reaches the zone, not just the observer',
+        reason: 'the failure still leaves the package, and by the channel an '
+            'application actually watches',
       );
     },
   );
@@ -596,8 +591,8 @@ void main() {
       expect(eventsAfterClose, [
         'init _ClosingScope',
         'ready _ClosingScope',
-        'error _ClosingScope unmount Bad state: onUnmount failed',
         'dispose _ClosingScope',
+        'error _ClosingScope unmount Bad state: onUnmount failed',
         'disposed _ClosingScope',
       ]);
       expect(
@@ -639,7 +634,6 @@ void main() {
           childGate.complete();
         }
       });
-      final errors = <Object>[];
 
       Widget build({required bool present}) => Directionality(
             textDirection: TextDirection.ltr,
@@ -668,22 +662,29 @@ void main() {
                 : const SizedBox.shrink(),
           );
 
-      // The teardown runs on a future `dispose()` discards, so what it
-      // re-throws at the end is an uncaught error of the zone it ran in.
-      await runZonedGuarded(
-        () async {
-          await tester.pumpWidget(build(present: true));
-          await tester.pumpAndSettle();
+      // Two failures arrive here, one after the other -- the expiry of the
+      // wait, and then the hook that made a failure of it -- and
+      // `takeException` collapses several of them into one summary string.
+      // Captured directly, so both can be seen. The second used to leave as
+      // an uncaught error of the zone instead, which is what this test was
+      // written around.
+      final reported = <FlutterErrorDetails>[];
+      final previousOnError = FlutterError.onError;
+      FlutterError.onError = reported.add;
+      addTearDown(() => FlutterError.onError = previousOnError);
 
-          await tester.pumpWidget(build(present: false));
-          await settle(
-            tester,
-            until: () =>
-                observer.events.contains('disposed AsyncScope(parent)'),
-          );
-        },
-        (error, stackTrace) => errors.add(error),
+      await tester.pumpWidget(build(present: true));
+      await tester.pumpAndSettle();
+
+      await tester.pumpWidget(build(present: false));
+      await settle(
+        tester,
+        until: () => observer.events.contains('disposed AsyncScope(parent)'),
       );
+
+      // Put back before the assertions: a failing `expect` reported through it
+      // would be collected instead of ending the test.
+      FlutterError.onError = previousOnError;
 
       const preparationFailed =
           'error AsyncScope(parent) preparationForDisposal Bad state: '
@@ -698,17 +699,20 @@ void main() {
         // The expiry itself, then the failure of the hook it called. Both
         // belong to the parent: the wait for the children now reports through
         // the observer like the other five bounded waits.
+        'dispose AsyncScope(parent)',
         'timeout AsyncScope(parent) its child scopes',
         preparationFailed,
-        'dispose AsyncScope(parent)',
         'disposed AsyncScope(parent)',
       ]);
       expect(
-        tester.takeException(),
-        isA<TimeoutException>(),
-        reason: 'the expiry of the wait is reported as it always was',
+        reported.map((details) => details.exception),
+        [
+          isA<TimeoutException>(),
+          isA<StateError>(),
+        ],
+        reason: 'the expiry of the wait, and then the hook that failed on it '
+            '-- both through the channel an application watches',
       );
-      expect(errors.single, isA<StateError>());
 
       childGate.complete();
       await settle(
@@ -778,12 +782,15 @@ void main() {
 
       expect(observer.events, [
         'init AsyncScope',
+        // The pair opens before the four stages, so everything the teardown
+        // finds is inside it -- the expiry of the cancellation and the hook
+        // that failed on it among the rest.
+        'dispose AsyncScope',
         'timeout AsyncScope its initialization to be cancelled',
         cancellationFailed,
         'cancelled AsyncScope',
         // The scope never became ready, so there is nothing for
         // `disposeScope` to release -- and the pair is reported all the same.
-        'dispose AsyncScope',
         'disposed AsyncScope',
       ]);
       expect(
@@ -864,8 +871,8 @@ void main() {
       );
 
       expect(observer.events, [
-        'cancelled AsyncScope(successor)',
         'dispose AsyncScope(successor)',
+        'cancelled AsyncScope(successor)',
         'disposed AsyncScope(successor)',
       ]);
 

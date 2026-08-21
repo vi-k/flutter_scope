@@ -70,18 +70,18 @@ base class ScopeStateWithErrorNotifier<S extends Object>
       return;
     }
 
-    _error = null;
-
     // [shouldNotify] weighs one value against another, and this change is not
     // one between values: it is between a state that throws and one that does
     // not. Recovering to the value from before the failure is still something
-    // every listener has to hear about, so the answer does not get to silence
-    // it.
-    if (!shouldNotify(state, value)) {
-      notifyListeners();
-    } else {
-      super.update(value);
-    }
+    // every listener has to hear about, so the answer is not asked for here at
+    // all -- asking it and then going on to `super.update`, which asks it
+    // again, ran the comparison of the application twice for one update. And
+    // the branch that ignored the answer notified without storing `value`, so
+    // the object handed over by the very call that recovered was the one thing
+    // it did not keep.
+    _error = null;
+    _state = value;
+    notifyListeners();
   }
 
   /// A view of this notifier that can be read and listened to, not set.

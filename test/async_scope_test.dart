@@ -982,6 +982,64 @@ void main() {
     );
   });
 
+  // Every error path in the suite is an `async*` that throws, and such a
+  // stream is done the moment it does: nothing can arrive after the failure,
+  // so the two guards that keep a failed initialization from coming alive were
+  // never asked. A `StreamController` is the shape that can ask them.
+  group('AsyncScope initialization driven from a StreamController', () {
+    testWidgets('a failed initialization does not come alive on a later ready',
+        (tester) async {
+      final controller = StreamController<AsyncScopeInitState>();
+      addTearDown(() async {
+        if (!controller.isClosed) {
+          await controller.close();
+        }
+      });
+
+      await tester.pumpWidget(
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: _ControllerScope(controller),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final scope = tester.element(find.byType(_ControllerScope))
+          as _ControllerScopeElement;
+
+      // Events of a single-subscription controller made in the body of a
+      // widget test are not delivered by `pumpAndSettle` alone.
+      await tester.runAsync(() async {
+        controller.addError(StateError('init failed'));
+        await Future<void>.delayed(Duration.zero);
+      });
+      await tester.pumpAndSettle();
+
+      expect(scope.state, isA<AsyncScopeError>());
+
+      await tester.runAsync(() async {
+        controller.add(AsyncScopeReady());
+        await Future<void>.delayed(Duration.zero);
+      });
+      await tester.pumpAndSettle();
+
+      expect(
+        scope.state,
+        isA<AsyncScopeError>(),
+        reason: 'a scope whose initialization failed does not become ready '
+            'because the source went on talking',
+      );
+      expect(
+        (scope.error as StateError).message,
+        'init failed',
+        reason: 'and the failure it shows is still the one that happened: the '
+            'subscription was cancelled on the error, so the event after it '
+            'was never even looked at',
+      );
+      expect(scope.disposeCount, 0, reason: 'nothing was ever acquired');
+    });
+  });
+
   group('AsyncScope initialization that fails after the ready state', () {
     testWidgets(
       'reports the failure raised after the ready state instead of a '
@@ -1428,6 +1486,36 @@ final class _TwiceReadyScopeElement
     yield AsyncScopeReady();
     yield AsyncScopeReady();
   }
+
+  @override
+  FutureOr<void> disposeScope() {
+    disposeCount++;
+  }
+
+  @override
+  Widget buildOnState(AsyncScopeState state) => const SizedBox.shrink();
+}
+
+/// A scope whose `initScope()` comes from a [StreamController], so a failure
+/// does not close the source and an event can arrive after it.
+final class _ControllerScope
+    extends AsyncScopeCore<_ControllerScope, _ControllerScopeElement> {
+  final StreamController<AsyncScopeInitState> controller;
+
+  const _ControllerScope(this.controller);
+
+  @override
+  _ControllerScopeElement createScopeElement() => _ControllerScopeElement(this);
+}
+
+final class _ControllerScopeElement
+    extends AsyncScopeElementBase<_ControllerScope, _ControllerScopeElement> {
+  int disposeCount = 0;
+
+  _ControllerScopeElement(super.widget);
+
+  @override
+  Stream<AsyncScopeInitState> initScope() => widget.controller.stream;
 
   @override
   FutureOr<void> disposeScope() {

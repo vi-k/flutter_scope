@@ -1031,6 +1031,38 @@
   `FlutterError.reportError` and no further, which is the trade the rest of the
   teardown already makes. The `close()` path is unchanged: there a caller
   exists, and it still hears it.
+* Fix the first failure of an asynchronous teardown leaving as an unhandled
+  error of the zone while every failure behind it was reported through
+  `FlutterError.reportError`. The teardown runs on a future `dispose()`
+  discards, so on the ordinary way off the tree there is nobody to raise at —
+  an application with ordinary crash reporting therefore saw the failures that
+  had no caller and missed the one that did. It is reported now, by the same
+  channel as the rest. `close()` is untouched: there a caller exists and still
+  hears it.
+* `onDispose` opens before the four stages of the teardown rather than between
+  the second and the third. `onError` for the unmount and for the preparation,
+  `onCancelled` and two `onTimeout` all used to arrive before the teardown they
+  belong to had been announced at all, so an observer pairing `onDispose` with
+  `onDisposed` counted them against whatever came before.
+* A scope lets go of the `scopeKey` object and of the coordinator element once
+  the key has been released. A scope closed with `close()` stays mounted for as
+  long as its owner likes — a closing screen can be on show for minutes — and
+  both were held for all of it, long after the only thing that reads them had
+  stopped.
+* `ScopeStateNotifier.update` replaces the state whether or not `shouldNotify`
+  says anybody has to hear about it. That hook answers whether the change is
+  worth waking a listener for, not whether it happened; skipping the assignment
+  with the notification left the model holding the *older* of two objects its
+  own comparison called the same. `ScopeStateWithErrorNotifier.update` keeps
+  the value it was handed when it recovers from a failure — the one call that
+  puts a failure down was the one call whose value was thrown away — and asks
+  `shouldNotify` once instead of twice.
+* Every `unmount` failure of a dependency group is reported. The first is
+  passed on as it always was; the ones behind it used to be dropped where they
+  happened, reaching neither the caller, nor the observer, nor `FlutterError`.
+* `runStreamGuarded` cancels a source that reported an error from inside
+  `listen()` itself, before the subscription had been handed back. Nothing in
+  the package produces such a stream; the helper stands up to one that does.
 * Add `ScopeCompositeObserver`, which hands every event to each of the
   observers it is given. `ScopeConfig.observer` holds one, and wanting two is
   ordinary — `ScopePrintObserver` while developing and a reporter of your own

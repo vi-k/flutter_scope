@@ -331,7 +331,32 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
     // Taken here, beside the widget it is taken from: this is the last moment
     // at which there is certainly one. See [debugLabel].
     _debugLabel = super.debugLabel;
-    _performAsyncDispose(); // ignore: discarded_futures
+
+    // Whether this call is the one that starts the teardown. A `close()` in
+    // flight -- or one that is already over -- has a caller of its own, and
+    // the failure below is that caller's; anything else and there is nobody,
+    // which is what the report is for.
+    final startsTheTeardown = !_isDisposing;
+
+    // ignore: discarded_futures
+    final disposal = _performAsyncDispose();
+
+    if (startsTheTeardown) {
+      // Discarded, so nothing catches what it raises. The first failure of a
+      // teardown leaves through the throw at the end of that method, and on
+      // this path the throw lands in a future nobody holds: it surfaced as an
+      // unhandled error of the zone the tree came down in, while the second
+      // failure and every one after it went to `FlutterError.reportError`. An
+      // application with ordinary crash reporting therefore saw the failures
+      // that had nobody to be handed to, and missed the one that had -- a
+      // `disposeScope()` that threw on the ordinary way off the tree.
+      unawaited(
+        disposal.catchError((Object error, StackTrace stackTrace) {
+          _reportFailure(error, stackTrace, 'while disposing of the scope');
+        }),
+      );
+    }
+
     super.dispose();
   }
 
@@ -691,6 +716,13 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
         if (_initSucceeded) {
           throw StateError('$W already initialized');
         }
+        // A second guard on the same invariant as `cancelOnError: true`
+        // above, and the two are mutually redundant on purpose: each one makes
+        // the other unreachable, so no test can kill both -- removing either
+        // alone leaves the suite green. Kept because they answer for different
+        // things. `cancelOnError` stops the source, which is what closes the
+        // door on a stream the package owns; this one closes it on a model
+        // that already holds a failure, whichever way the event got here.
         if (_model.state case AsyncScopeError()) {
           throw StateError('$W initialization failed');
         }
@@ -921,6 +953,16 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
     _pauseTimer?.cancel();
     _pauseTimer = null;
 
+    // Before the stages rather than between the second and the third, which
+    // is where it used to be. A pair an observer counts with has to close
+    // around everything the teardown does, and two of the four stages happen
+    // in front of it: `onError` for the unmount and for the preparation,
+    // `onCancelled`, and two `onTimeout` all used to arrive before the
+    // teardown they belong to had been announced at all. An observer pairing
+    // `onDispose` with `onDisposed` saw them as belonging to whatever came
+    // before.
+    notifyObserver((observer) => observer.onDispose(this));
+
     // Four stages, each guarded on its own rather than chained: every one of
     // them reaches user code, and a failure in one is never a reason to skip
     // the ones after it. [unmountScope] drops what must stop reaching the
@@ -982,8 +1024,6 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
       // observer of the failure and never that the scope was gone. Either way
       // round the pair came apart, and a consumer that pairs them got it
       // wrong in both directions.
-      notifyObserver((observer) => observer.onDispose(this));
-
       try {
         if (_initSucceeded) {
           final result = disposeScope();
@@ -1055,6 +1095,16 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
       // changes while the disposal is still in flight -- with the entry still
       // in its queue -- is reported as loudly as ever.
       _scopeKeySettled = true;
+
+      // And with nothing left to contradict, nothing left to remember either.
+      // The key is an object of the application's and the coordinator is an
+      // element of the tree, and an element that closed itself stays mounted
+      // for as long as its owner likes -- a closing screen can be on show for
+      // minutes -- so holding both of them past the moment they mean anything
+      // is holding them for no reason at all. Only the check above reads them,
+      // and it has just stopped.
+      _acquiredScopeKey = null;
+      _acquiredCoordinator = null;
 
       _model.dispose();
 

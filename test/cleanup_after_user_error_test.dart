@@ -181,7 +181,14 @@ void main() {
     testWidgets('releases its scopeKey after a failing onDisposeScopeTimeout',
         (tester) async {
       final disposed = <String>[];
+      // A teardown failure with nobody to be handed to leaves through
+      // `FlutterError.reportError`, and `takeException` collapses several of
+      // them into one summary string. Captured directly, so each can be seen.
+      // The zone guard below stays for the paths that still raise into it.
       final errors = <Object>[];
+      final previousOnError = FlutterError.onError;
+      FlutterError.onError = (details) => errors.add(details.exception);
+      addTearDown(() => FlutterError.onError = previousOnError);
 
       // Never completed: the holder's own teardown never finishes.
       final hang = Completer<void>();
@@ -210,29 +217,22 @@ void main() {
             ),
           );
 
-      // What the hook throws is re-thrown at the end of the disposal, which
-      // runs on a discarded future: a guarded child zone catches it before
-      // `flutter_test` ends the test on it.
-      await runZonedGuarded(
-        () async {
-          await tester.pumpWidget(build(holder: true, successor: false));
-          await tester.pumpAndSettle();
+      await tester.pumpWidget(build(holder: true, successor: false));
+      await tester.pumpAndSettle();
 
-          await tester.pumpWidget(build(holder: false, successor: false));
-          await settle(tester, until: () => false);
-        },
-        (error, stackTrace) => errors.add(error),
-      );
+      await tester.pumpWidget(build(holder: false, successor: false));
+      await settle(tester, until: () => false);
+
+      // Put back before the assertions, and not only by the tear-down: while
+      // it is in place a failing `expect` is collected instead of ending the
+      // test, and the run hangs rather than going red.
+      FlutterError.onError = previousOnError;
 
       expect(
-        tester.takeException(),
-        isA<TimeoutException>(),
-        reason: 'the expiry itself is reported',
-      );
-      expect(
-        errors.single,
-        isA<StateError>(),
-        reason: 'and so is what the callback made of it',
+        errors,
+        [isA<TimeoutException>(), isA<StateError>()],
+        reason: 'the expiry itself, and then what the callback made of it -- '
+            'the second used to leave as an uncaught error of the zone',
       );
       expect(
         disposed,
@@ -350,50 +350,47 @@ void main() {
         (tester) async {
       final disposed = <String>[];
       final childGate = Completer<void>();
+      // A teardown failure with nobody to be handed to leaves through
+      // `FlutterError.reportError`, and `takeException` collapses several of
+      // them into one summary string. Captured directly, so each can be seen.
+      // The zone guard below stays for the paths that still raise into it.
       final errors = <Object>[];
+      final previousOnError = FlutterError.onError;
+      FlutterError.onError = (details) => errors.add(details.exception);
+      addTearDown(() => FlutterError.onError = previousOnError);
 
-      // The disposal runs on a discarded future, so what it re-throws is an
-      // uncaught error of the zone the teardown ran in: a guarded child zone
-      // catches it before `flutter_test` ends the test on it. Nothing inside
-      // that zone may throw, so every `expect` is made once it is gone.
-      await runZonedGuarded(
-        () async {
-          await tester.pumpWidget(
-            _wrap(
-              _Async(
-                label: 'parent',
-                disposed: disposed,
-                waitForChildrenTimeout: const Duration(milliseconds: 50),
-                onWaitForChildrenTimeout: () =>
-                    throw StateError('onWaitForChildrenTimeout failed'),
-                child: _Async(
-                  label: 'child',
-                  disposed: disposed,
-                  disposeGate: childGate,
-                ),
-              ),
+      await tester.pumpWidget(
+        _wrap(
+          _Async(
+            label: 'parent',
+            disposed: disposed,
+            waitForChildrenTimeout: const Duration(milliseconds: 50),
+            onWaitForChildrenTimeout: () =>
+                throw StateError('onWaitForChildrenTimeout failed'),
+            child: _Async(
+              label: 'child',
+              disposed: disposed,
+              disposeGate: childGate,
             ),
-          );
-          await tester.pumpAndSettle();
-
-          // The child's disposal is held open, so the parent's wait for it
-          // runs out and the expiry callback fails.
-          await tester.pumpWidget(_wrap(const SizedBox.shrink()));
-          await tester.pump(const Duration(milliseconds: 100));
-          await settle(tester, until: () => disposed.contains('parent'));
-        },
-        (error, stackTrace) => errors.add(error),
+          ),
+        ),
       );
+      await tester.pumpAndSettle();
+
+      // The child's disposal is held open, so the parent's wait for it runs
+      // out and the expiry callback fails.
+      await tester.pumpWidget(_wrap(const SizedBox.shrink()));
+      await tester.pump(const Duration(milliseconds: 100));
+      await settle(tester, until: () => disposed.contains('parent'));
+
+      // Put back before the assertions: while it is in place a failing
+      // `expect` is collected instead of ending the test, and the run hangs.
+      FlutterError.onError = previousOnError;
 
       expect(
-        tester.takeException(),
-        isA<TimeoutException>(),
-        reason: 'the expiry itself is still reported',
-      );
-      expect(
-        errors.single,
-        isA<StateError>(),
-        reason: 'and so is what the callback made of it',
+        errors,
+        [isA<TimeoutException>(), isA<StateError>()],
+        reason: 'the expiry itself, and then what the callback made of it',
       );
       expect(
         disposed,
@@ -415,11 +412,15 @@ void main() {
         (tester) async {
       final disposed = <String>[];
       final childGate = Completer<void>();
-      final errors = <Object>[];
+      // Everything the teardown reports, in order: the failures with nobody to
+      // be handed to have always come this way, and since the one that *does*
+      // have a caller no longer raises into the zone on this path, it arrives
+      // here too.
       final reported = <FlutterErrorDetails>[];
       final previousOnError = FlutterError.onError;
       FlutterError.onError = reported.add;
       addTearDown(() => FlutterError.onError = previousOnError);
+      Iterable<Object> errors() => reported.map((details) => details.exception);
 
       await runZonedGuarded(
         () async {
@@ -446,9 +447,13 @@ void main() {
           await tester.pump(const Duration(milliseconds: 100));
           // The re-throw is the last thing the disposal does, after the block
           // that gives back what the scope was lent.
-          await settle(tester, until: () => errors.isNotEmpty);
+          await settle(tester, until: () => errors().isNotEmpty);
         },
-        (error, stackTrace) => errors.add(error),
+        // Nothing raises into the zone on this path any more; the guard stays
+        // so that a change bringing that back is caught here rather than
+        // ending the run somewhere else.
+        (error, stackTrace) =>
+            reported.add(FlutterErrorDetails(exception: error)),
       );
 
       // Put back before the assertions, and not only by the tear-down: a
@@ -457,22 +462,14 @@ void main() {
       FlutterError.onError = previousOnError;
 
       expect(
-        errors.single,
-        isA<StateError>().having(
-          (error) => error.message,
-          'message',
-          'onWaitForChildrenTimeout failed',
-        ),
-        reason: 'the first failure is the one the caller hears',
-      );
-      expect(
-        reported
-            .map((details) => details.exception)
-            .whereType<StateError>()
-            .map((error) => error.message),
-        contains('disposeScope of parent failed'),
-        reason: 'the second has no caller left to raise at, so a report is '
-            'the only way out it has',
+        errors().whereType<StateError>().map((error) => error.message),
+        // In that order, and it is the order of the *reports* rather than of
+        // the failures: the second failure is reported the moment it happens,
+        // while the first waits for the end of the teardown -- it is the one
+        // the teardown carries out, past the block that gives back what the
+        // scope was lent. Both leave the package, which is the whole claim.
+        ['disposeScope of parent failed', 'onWaitForChildrenTimeout failed'],
+        reason: 'a teardown that fails twice says so twice',
       );
 
       childGate.complete();
@@ -575,7 +572,14 @@ void main() {
         (tester) async {
       final controller = _Controller(failOnDispose: true);
       final disposed = <String>[];
+      // A teardown failure with nobody to be handed to leaves through
+      // `FlutterError.reportError`, and `takeException` collapses several of
+      // them into one summary string. Captured directly, so each can be seen.
+      // The zone guard below stays for the paths that still raise into it.
       final errors = <Object>[];
+      final previousOnError = FlutterError.onError;
+      FlutterError.onError = (details) => errors.add(details.exception);
+      addTearDown(() => FlutterError.onError = previousOnError);
 
       Widget build({required bool holder, required bool successor}) => _wrap(
             Column(
@@ -808,7 +812,14 @@ void main() {
     testWidgets('disposes of its dependencies after a failing state disposal',
         (tester) async {
       final log = <String>[];
+      // A teardown failure with nobody to be handed to leaves through
+      // `FlutterError.reportError`, and `takeException` collapses several of
+      // them into one summary string. Captured directly, so each can be seen.
+      // The zone guard below stays for the paths that still raise into it.
       final errors = <Object>[];
+      final previousOnError = FlutterError.onError;
+      FlutterError.onError = (details) => errors.add(details.exception);
+      addTearDown(() => FlutterError.onError = previousOnError);
 
       // See the `onWaitForChildrenTimeout` test: a disposal that re-throws
       // does so on a discarded future.
@@ -1007,52 +1018,46 @@ void main() {
         'keeps the failure of the state when the dependencies fail to dispose '
         'behind it', (tester) async {
       final log = <String>[];
-      final errors = <Object>[];
+      // Everything the teardown reports, in order: the failures with nobody to
+      // be handed to have always come this way, and since the one that *does*
+      // have a caller no longer raises into the zone on this path, it arrives
+      // here too.
       final reported = <FlutterErrorDetails>[];
       final previousOnError = FlutterError.onError;
       FlutterError.onError = reported.add;
       addTearDown(() => FlutterError.onError = previousOnError);
+      Iterable<Object> errors() => reported.map((details) => details.exception);
 
-      await runZonedGuarded(
-        () async {
-          await tester.pumpWidget(
-            _wrap(
-              _PlainDepScope(
-                log: log,
-                failOnStateDispose: true,
-                failOnDepsDispose: true,
-              ),
-            ),
-          );
-          await tester.pumpAndSettle();
-
-          // The re-throw is the last thing the disposal does, after the block
-          // that gives back what the scope was lent: waiting for it is waiting
-          // for the whole teardown, model included.
-          await tester.pumpWidget(_wrap(const SizedBox.shrink()));
-          await settle(tester, until: () => errors.isNotEmpty);
-        },
-        (error, stackTrace) => errors.add(error),
+      await tester.pumpWidget(
+        _wrap(
+          _PlainDepScope(
+            log: log,
+            failOnStateDispose: true,
+            failOnDepsDispose: true,
+          ),
+        ),
       );
+      await tester.pumpAndSettle();
+
+      // The report of the first failure is the last thing the disposal does,
+      // after the block that gives back what the scope was lent: waiting for
+      // it is waiting for the whole teardown, model included.
+      await tester.pumpWidget(_wrap(const SizedBox.shrink()));
+      await settle(tester, until: () => errors().length == 2);
 
       FlutterError.onError = previousOnError;
 
       expect(
-        errors.single,
-        isA<StateError>().having(
-          (error) => error.message,
-          'message',
+        errors().whereType<StateError>().map((error) => error.message),
+        // The order of the *reports*, not of the failures: the second is
+        // reported the moment it happens, the first waits for the end of the
+        // teardown, since it is the one the teardown carries out.
+        [
+          'the dependencies failed to dispose',
           'the state failed to dispose of itself',
-        ),
-        reason: 'the first failure is the one the caller hears',
-      );
-      expect(
-        reported
-            .map((details) => details.exception)
-            .whereType<StateError>()
-            .map((error) => error.message),
-        contains('the dependencies failed to dispose'),
-        reason: 'and the second is reported rather than lost',
+        ],
+        reason: 'both halves failed, and a teardown that could not give '
+            'something back has to say so about each',
       );
       expect(
         log,

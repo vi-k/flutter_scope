@@ -60,7 +60,24 @@ abstract base class ScopeDependencyGroup with ScopeDependencyMixin {
         dependency.onUnmount();
         // ignore: avoid_catching_errors
       } on Object catch (error, stackTrace) {
-        failure ??= AsyncError(error, stackTrace);
+        if (failure == null) {
+          failure = AsyncError(error, stackTrace);
+        } else {
+          // Both channels, as everywhere else a failure has no caller left to
+          // be raised at: a throw carries one failure, the first hook to fail
+          // has already claimed it, and everything behind it used to be
+          // dropped here without a word -- not to the caller, not to the
+          // observer, not to `FlutterError`.
+          notifyObserver(
+            (observer) =>
+                observer.onError(this, ScopePhase.unmount, error, stackTrace),
+          );
+          _reportFailure(
+            error,
+            stackTrace,
+            'while unmounting a dependency',
+          );
+        }
       }
     }
 

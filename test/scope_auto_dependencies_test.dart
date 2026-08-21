@@ -6,6 +6,7 @@ import 'package:scopo/scopo.dart';
 import 'package:test/test.dart';
 
 import 'utils/my_fake_async.dart';
+import 'utils/observer.dart';
 
 final class TestDependencies
     extends ScopeAutoDependencies<TestDependencies, void> {
@@ -1851,6 +1852,50 @@ void main() {
     );
   });
 
+  group('ScopeAutoDependencies unmount that fails more than once', () {
+    // A throw carries one failure, and the first hook to fail claims it. Every
+    // one behind it used to be dropped where it happened -- not passed to the
+    // caller, not sent to the observer, not reported. The walk itself was
+    // right: every sibling is unmounted whatever any one of them makes of it.
+    test('reports the failures behind the first instead of dropping them',
+        () async {
+      final observer = RecordingObserver();
+      ScopeConfig.observer = observer;
+      addTearDown(() => ScopeConfig.observer = null);
+
+      final log = <String>[];
+      final dependencies = TwoFailingUnmountsDependencies(log);
+      await dependencies.init(null).drain<void>();
+
+      expect(
+        dependencies.onUnmount,
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            // Reverse declaration order: the later dependency is built on top
+            // of the earlier one, so it stops reaching the world first.
+            'unmount b failed',
+          ),
+        ),
+        reason: 'the first hook to fail is the one the caller hears',
+      );
+
+      expect(
+        log,
+        ['unmount b', 'unmount a'],
+        reason: 'and both hooks ran: one that threw is no reason to leave the '
+            'sibling below it holding what it holds',
+      );
+      expect(
+        observer.events.where((event) => event.contains('unmount')),
+        contains(contains('unmount a failed')),
+        reason: 'and the one behind it is reported rather than dropped where '
+            'it happened',
+      );
+    });
+  });
+
   group('ScopeAutoDependencies concurrent init', () {
     // `_prepareDependencies` refuses a second `init()` on a live tree, and the
     // test above proves it. What it asked was whether the tree had left
@@ -2134,6 +2179,26 @@ final class HangingDisposeDependencies
   ScopeDependency buildDependencies(void context) => sequential('', [
         dep('holds', (dep) => dep.dispose = () => hang.future),
         dep('fails', (dep) => throw Exception('the second one failed')),
+      ]);
+}
+
+/// A container whose two dependencies both fail to unmount.
+final class TwoFailingUnmountsDependencies
+    extends ScopeAutoDependencies<TwoFailingUnmountsDependencies, void> {
+  final List<String> log;
+
+  TwoFailingUnmountsDependencies(this.log);
+
+  @override
+  ScopeDependency buildDependencies(void context) => sequential('', [
+        for (final name in ['a', 'b'])
+          dep(name, (dep) {
+            dep.unmount = () {
+              log.add('unmount $name');
+
+              throw StateError('unmount $name failed');
+            };
+          }),
       ]);
 }
 
