@@ -68,6 +68,18 @@ void main() {
       expect('$progress', '2/5');
     });
 
+    // A value type that arrives in `buildOnProgress` and inside
+    // `AsyncScopeProgress`, both of which are compared: a selector holding one
+    // and a `==` on the progress a scope reports both ask this question, and
+    // identity would answer "changed" for two readings of the same step.
+    test('two readings of the same step are the same value', () {
+      expect(const Progress(2, 5), const Progress(2, 5));
+      expect(const Progress(2, 5).hashCode, const Progress(2, 5).hashCode);
+      expect(const Progress(2, 5), ProgressIterator(5).addSteps(2));
+      expect(const Progress(2, 5), isNot(const Progress(3, 5)));
+      expect(const Progress(2, 5), isNot(const Progress(2, 6)));
+    });
+
     test('the fraction holds its promise where asserts are off', () {
       // The assert in `ProgressIterator.add` is the debug half of the
       // promise. A release build steps past the total without a word, and the

@@ -8,7 +8,7 @@ import 'listen.dart';
 /// See [ListenableSelectExtension.select].
 ///
 /// {@category utils}
-class ListenableSelector<L extends Listenable, T extends Object?>
+final class ListenableSelector<L extends Listenable, T extends Object?>
     extends StatefulWidget {
   /// The listenable being watched.
   final L listenable;
@@ -54,7 +54,7 @@ class ListenableSelector<L extends Listenable, T extends Object?>
   }
 }
 
-class _ListenableSelectorState<L extends Listenable, T extends Object?>
+final class _ListenableSelectorState<L extends Listenable, T extends Object?>
     extends State<ListenableSelector<L, T>> {
   late ListenableSelectSubscription<T> _subscription;
 

@@ -8,7 +8,7 @@ import 'package:flutter/rendering.dart';
 /// and then replaces the child with the captured image.
 ///
 /// {@category utils}
-class ScreenshotReplacer extends StatefulWidget {
+final class ScreenshotReplacer extends StatefulWidget {
   /// The number of extra frames the capture waits for the [child] to be
   /// painted before giving up.
   ///
@@ -46,7 +46,7 @@ class ScreenshotReplacer extends StatefulWidget {
   State<ScreenshotReplacer> createState() => _ScreenshotReplacerState();
 }
 
-class _ScreenshotReplacerState extends State<ScreenshotReplacer> {
+final class _ScreenshotReplacerState extends State<ScreenshotReplacer> {
   final GlobalKey _globalKey = GlobalKey();
   ui.Image? _image;
   bool _isCaptured = false;

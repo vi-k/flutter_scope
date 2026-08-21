@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 /// A helper class to track initialization progress as an [Progress] value.
 ///
 /// ```dart
@@ -51,6 +53,7 @@ final class ProgressIterator {
 }
 
 /// {@category utils}
+@immutable
 final class Progress {
   /// The steps taken so far.
   final int number;
@@ -75,6 +78,21 @@ final class Progress {
   /// rather than as `4/3`. The assertions above and in [ProgressIterator.addSteps]
   /// are what say so out loud, and they are off in a release build.
   double get value => total == 0 ? 1 : (number / total).clamp(0.0, 1.0);
+
+  /// Two readings of the same step are the same value.
+  ///
+  /// This arrives in `buildOnProgress` and inside `AsyncScopeProgress`, and
+  /// both of those are compared: a selector holding one asks whether it
+  /// changed, and so does the model of a scope. By identity the answer for two
+  /// readings of one step is "changed", and a subtree rebuilds for a step that
+  /// did not move.
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is Progress && other.number == number && other.total == total;
+
+  @override
+  int get hashCode => Object.hash(number, total);
 
   @override
   String toString() => '$number/$total';

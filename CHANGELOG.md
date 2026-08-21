@@ -1031,6 +1031,19 @@
   `FlutterError.reportError` and no further, which is the trade the rest of the
   teardown already makes. The `close()` path is unchanged: there a caller
   exists, and it still hears it.
+* **Breaking:** `ScreenshotReplacer` and `ListenableSelector` are `final`, the
+  way the other sixty-odd public classes of the package already were. They were
+  the two left as a bare `class` by oversight rather than by decision, and
+  sealing them after 1.0 would be a breaking change; now it is one word.
+* **Breaking:** the barrel lists what `ScopeConfig` and its parts export with
+  `show` instead of naming the internals with `hide`. `hide` says what stays
+  in, so the next internal helper written beside `notifyObserver` would have
+  joined the public API without anybody deciding it — and a name is public from
+  the moment it ships. Nothing a consumer could reach changes.
+* `Progress` compares by value. It arrives in `buildOnProgress` and inside
+  `AsyncScopeProgress`, both of which are compared — a selector holding one, and
+  the model of a scope — and by identity two readings of the same step answered
+  "changed", so a subtree rebuilt for a step that had not moved.
 * `NavigationNode` gains `enabled`, for the one shape where a node cannot work
   out whether the press is its own: **several nodes on one route**, of which
   one is on screen — a node per tab of an `IndexedStack`, which builds every

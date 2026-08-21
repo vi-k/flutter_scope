@@ -1461,25 +1461,27 @@ void main() {
         );
 
         // A retry must never release the barrier: there is no screenshot yet.
-        for (var i = 1; i <= 3; i++) {
+        // Counted to the cap rather than pumped "enough" times: `>=` and `>`
+        // differ by exactly one frame, and a loop that pumps until something
+        // happens cannot tell them apart. The frame after the last retry is
+        // the one that gives up, so every frame before it has to be silent.
+        for (var i = 1; i < ScreenshotReplacer.maxRetries; i++) {
           await tester.pump();
           expect(
             completedCount,
             0,
-            reason: 'retry $i must not report completion',
+            reason: 'retry $i of ${ScreenshotReplacer.maxRetries} must not '
+                'report completion',
           );
         }
 
-        // The retries are capped, though, and giving up must release the
-        // barrier -- otherwise `close()` would wait forever.
-        for (var i = 0; i < 20 && completedCount == 0; i++) {
-          await tester.pump();
-        }
+        await tester.pump();
 
         expect(
           completedCount,
           1,
-          reason: 'giving up must report completion exactly once',
+          reason: 'and the attempt after the last retry gives up, exactly '
+              'once',
         );
         expect(find.byType(RawImage, skipOffstage: false), findsNothing);
 
