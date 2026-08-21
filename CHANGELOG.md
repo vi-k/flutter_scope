@@ -1031,6 +1031,15 @@
   `FlutterError.reportError` and no further, which is the trade the rest of the
   teardown already makes. The `close()` path is unchanged: there a caller
   exists, and it still hears it.
+* `select` and `listen: true` are allowed from the builder of a `LayoutBuilder`,
+  an `OrientationBuilder` or a `SliverLayoutBuilder`. Those run from
+  `performLayout`, inside a build of their own element, and what they return is
+  that element's subtree — but a `RenderObjectElement` raises `debugDoingBuild`
+  for `performRebuild` alone, so the assertion behind the "only from a build"
+  rule refused a working and common pattern, and refused it in debug only. The
+  assertion now also accepts a layout callback. It still refuses
+  `didChangeDependencies`, except for a dependent that is itself under a layout
+  callback, which is the one case the two cannot be told apart in.
 * Fix a second `ScopeReady` from a `Scope`'s own `initDependencies` replacing
   the container before anything could refuse it. The field was assigned inside
   the `map` the family wraps the initialization in, one step ahead of the

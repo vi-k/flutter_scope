@@ -122,8 +122,27 @@ abstract interface class ScopeContext<W extends ScopeInheritedWidget> {
       'subscribe from `buildChild()` or from the widgets below instead.',
     );
 
+    // A layout callback counts as a build, and has to: `LayoutBuilder`,
+    // `OrientationBuilder` and `SliverLayoutBuilder` run their builder from
+    // `performLayout`, inside a `BuildOwner.buildScope` of their own, and what
+    // it returns is that element's subtree. `debugDoingBuild` is not raised
+    // for it -- a `RenderObjectElement` raises that flag in `performRebuild`
+    // alone -- so this used to refuse a working and common pattern, and refuse
+    // it in debug only.
+    //
+    // `RenderObject.debugActiveLayout` rather than
+    // `SchedulerBinding.instance.isBuilding`, which is what this looks like it
+    // wants. Measured: `isBuilding` is true throughout
+    // `SchedulerPhase.persistentCallbacks`, which covers `didChangeDependencies`
+    // as well, so it would not widen this assert but switch it off. The three
+    // states it has to tell apart are a build (`debugDoingBuild`), a layout
+    // callback (`debugActiveLayout`), and `didChangeDependencies`, which has
+    // neither -- unless the dependent is itself under a layout callback, the
+    // one corner where this can no longer tell the mistake from the pattern.
     assert(
-      !listen || context.debugDoingBuild,
+      !listen ||
+          context.debugDoingBuild ||
+          RenderObject.debugActiveLayout != null,
       'A scope can only be subscribed to from a build. What a dependent asked '
       'for is remembered per build, and the boundary between one build and '
       'the next is taken from the frame -- Flutter offers no hook for "this '
@@ -133,9 +152,10 @@ abstract interface class ScopeContext<W extends ScopeInheritedWidget> {
       'get here: it runs in the same frame as the build after it, so the '
       'subscription looks like it works, and then disappears on the first '
       'rebuild that comes from the parent instead of from a change.\n'
-      'Subscribe from `build` and read the value there. To react to a change '
-      'rather than to show it, keep the subscription in `build` and look the '
-      'scope up with `listen: false` from `didChangeDependencies`.',
+      'Subscribe from `build` and read the value there -- the builder of a '
+      '`LayoutBuilder` counts as one. To react to a change rather than to '
+      'show it, keep the subscription in `build` and look the scope up with '
+      '`listen: false` from `didChangeDependencies`.',
     );
 
     final element = context.getElementForInheritedWidgetOfExactType<W>();

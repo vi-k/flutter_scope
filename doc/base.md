@@ -179,6 +179,13 @@ change. To react to a change rather than to show it, keep the subscription in
 `build` and look the scope up with `listen: false` from
 `didChangeDependencies`.
 
+**The builder of a `LayoutBuilder` counts as a build**, and so do those of
+`OrientationBuilder` and `SliverLayoutBuilder`: they run from `performLayout`,
+inside a build of their own element, and what they return is that element's
+subtree. `select` there is honoured like any other, and the assertion lets it
+through. The one place it can no longer tell the mistake from the pattern is a
+`didChangeDependencies` of a widget that is itself under a layout callback.
+
 ## Depending on itself
 
 A scope element may subscribe to its own scope — that is how the richer

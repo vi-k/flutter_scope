@@ -220,6 +220,47 @@ void main() {
       // the subtree it breaks stays unmounted -- see [unmountableTree].
       experimentalLeakTesting: unmountableTree,
     );
+
+    // A `LayoutBuilder` runs its builder from `performLayout`, inside a
+    // `BuildOwner.buildScope` of its own. That is a build in every sense this
+    // rule is about -- what the builder returns is that element's subtree, and
+    // the registration belongs to it -- but `debugDoingBuild` of a
+    // `RenderObjectElement` is not raised for a layout callback, so the assert
+    // refused a working and very common pattern. It worked in release all
+    // along, which made this a difference between debug and release rather
+    // than a rule.
+    testWidgets('subscribing from a layout callback is allowed',
+        (tester) async {
+      var value = -1;
+
+      await tester.pumpWidget(
+        _Host(
+          builder: (context) => LayoutBuilder(
+            builder: (context, constraints) {
+              value = ScopeWidgetCore.select<_Scope, _ScopeElement, int>(
+                context,
+                (element) => element.value,
+              );
+
+              return const SizedBox.shrink();
+            },
+          ),
+        ),
+      );
+
+      expect(tester.takeException(), isNull);
+      expect(value, 0);
+
+      (tester.element(find.byType(_Scope)) as _ScopeElement).bump();
+      await tester.pump();
+
+      expect(
+        value,
+        1,
+        reason: 'and the subscription taken there is a real one, honoured by '
+            'the next change like any other',
+      );
+    });
   });
 
   group('what a dependent subscribes to', () {

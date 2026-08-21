@@ -1,10 +1,10 @@
 # Четвёртое ревью проекта
 
-> **Состояние на 2026-08-21:** проведено 2026-08-20; закрыто десять находок из
+> **Состояние на 2026-08-21:** проведено 2026-08-20; закрыто одиннадцать находок из
 > пятидесяти двух. C1, H8, M7 и M8 — волна 16, блок таймаутов: все четыре были
 > одним следствием формы `ScopeTimeout.none`. H1, H13, H3, H2, H9 и H10 —
-> волна 17, блок продолжения уборки; это весь P1 плана. Публикация 0.10.0 на
-> паузе до разбора остатка блока High.
+> волна 17, блок продолжения уборки; это весь P1 плана. H11 — волна 18, блок
+> P2. Публикация 0.10.0 на паузе до разбора остатка блока High.
 > **Что это:** полное независимое ревью всей кодовой базы силами семи
 > ревьюеров — шесть сабагентов по областям плюс Codex как второе мнение другой
 > модели. Заказано владельцем после того, как списки трёх предыдущих ревью и
@@ -662,6 +662,37 @@ after bump2:     runs=3 v=2 found=1        // подписка жива чере
 
 **Направление.** Расширить условие до «идёт сборка ИЛИ идёт layout-колбэк» —
 у пакета для этого уже есть `IsBuildingExtension.isBuilding`.
+
+**Вердикт: исправлено, но не тем условием.** Волна 18, блок P2.
+`IsBuildingExtension.isBuilding` не годится, и это замерено, а не выведено:
+он включает `schedulerPhase == SchedulerPhase.persistentCallbacks`, который
+поднят на весь кадр, включая `didChangeDependencies`. То есть предложенное
+условие не расширило бы ассерт, а выключило его — ровно то, ради чего он
+написан, перестало бы ловиться.
+
+Проба, четыре точки одного кадра:
+
+```
+build:                        doingBuild=true  ownerBuilding=true activeLayout=false
+didChangeDependencies:        doingBuild=false ownerBuilding=true activeLayout=false
+LayoutBuilder builder:        doingBuild=false ownerBuilding=true activeLayout=true
+didChangeDependencies в нём:  doingBuild=false ownerBuilding=true activeLayout=true
+```
+
+`ownerBuilding` (`BuildOwner.debugBuilding`) тоже не годится по той же причине:
+`didChangeDependencies` зовут изнутри `buildScope`. Единственное, что различает
+три состояния, — `RenderObject.debugActiveLayout`, и условие стало
+`context.debugDoingBuild || RenderObject.debugActiveLayout != null`.
+
+Цена названа честно и в коде, и в теме `base`: четвёртая строка таблицы
+неотличима от третьей, то есть у зависимого, который сам стоит под
+layout-колбэком, ассерт больше не поймает подписку из
+`didChangeDependencies`. Это единственная потеря, и она уже́ и, чем выигрыш.
+
+Тест — `'subscribing from a layout callback is allowed'` в `base_test.dart`:
+он проверяет не только отсутствие ассерта, но и что подписка настоящая —
+после `bump()` значение обновляется. Существующий тест на отказ
+`didChangeDependencies` остался зелёным.
 
 ## H12. `_completeInit` зовёт пользовательский `onInitialized()` на размонтированном состоянии — охрана не проверена ничем
 
