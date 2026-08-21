@@ -117,6 +117,44 @@ void main() {
       );
     });
 
+    // The same press, one layer up: the drawer belongs to the route the node
+    // stands on rather than to a route inside it. A node with `onPop` said
+    // `doNotPop` unconditionally, so the route never got as far as the local
+    // history the drawer had put on it -- and the node was asked "leave this
+    // screen?" about a press whose whole job was to close a drawer. Refuse,
+    // and the drawer could not be closed with back at all.
+    testWidgets(
+      'system back closes a drawer above a node with onPop',
+      (tester) async {
+        final log = <String>[];
+
+        await tester.pumpWidget(_DrawerAboveNodeHost(log: log));
+
+        await tester.tap(find.text('go'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byTooltip('Open navigation menu'));
+        await tester.pumpAndSettle();
+        expect(find.text('drawer'), findsOneWidget);
+
+        await tester.binding.handlePopRoute();
+        await tester.pumpAndSettle();
+
+        expect(
+          find.text('drawer'),
+          findsNothing,
+          reason: 'the route would have closed the drawer on its own, and a '
+              'node standing on it must not take that away',
+        );
+        expect(
+          log,
+          isEmpty,
+          reason: 'and the node is not asked about a press that never left '
+              'the route it stands on',
+        );
+        expect(find.text('node content'), findsOneWidget);
+      },
+    );
+
     testWidgets(
       'control: the same drawer without a node closes on system back',
       (tester) async {
@@ -1221,6 +1259,47 @@ final class _DrawerScreen extends StatelessWidget {
         appBar: AppBar(title: const Text('node content')),
         drawer: const Drawer(child: Center(child: Text('drawer'))),
         body: const SizedBox.shrink(),
+      );
+}
+
+/// Puts the `Scaffold` that owns the drawer *above* the node, on the same
+/// pushed route, so the drawer's local history entry belongs to the route the
+/// node stands on rather than to one inside it.
+final class _DrawerAboveNodeHost extends StatelessWidget {
+  final List<String> log;
+
+  const _DrawerAboveNodeHost({required this.log});
+
+  @override
+  Widget build(BuildContext context) => MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: Builder(
+              builder: (context) => TextButton(
+                onPressed: () => unawaited(
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (context) => Scaffold(
+                        appBar: AppBar(title: const Text('node content')),
+                        drawer:
+                            const Drawer(child: Center(child: Text('drawer'))),
+                        body: NavigationNode(
+                          onPop: (context, result) {
+                            log.add('onPop');
+
+                            return false;
+                          },
+                          child: const SizedBox.shrink(),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                child: const Text('go'),
+              ),
+            ),
+          ),
+        ),
       );
 }
 

@@ -1031,6 +1031,15 @@
   `FlutterError.reportError` and no further, which is the trade the rest of the
   teardown already makes. The `close()` path is unchanged: there a caller
   exists, and it still hears it.
+* Fix a `NavigationNode` with an `onPop` taking a system back that belonged to
+  the route it stands on. A route asks its `PopEntry`s before it looks at its
+  own local history, so an entry that says "do not pop" ends the matter — and
+  `onPop != null` said that unconditionally. A `Scaffold` with a `drawer:`
+  above the node therefore could not be closed with back at all when `onPop`
+  refused, and when it agreed the user was asked "leave this screen?" about a
+  press whose whole job was to close a drawer. The node now stands aside
+  whenever the route will handle the press internally, which is what a drawer,
+  a bottom sheet and an application's own `LocalHistoryEntry` all look like.
 * Fix `disposeScopeTimeout` expiring on a `Scope` skipping the disposal of its
   dependency container entirely. The teardown put one limit around
   `disposeScope()`, and for a `Scope` that method is two steps — the state's own

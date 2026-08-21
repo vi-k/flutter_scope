@@ -325,8 +325,21 @@ final class _NodeBackDispatcherState extends State<_NodeBackDispatcher>
 
   /// Whether a system back arriving at the route this node stands on is none of
   /// the node's business.
+  ///
+  /// [ModalRoute.willHandlePopInternally] comes first, and it has to: a route
+  /// asks its [PopEntry]s before it looks at its own local history, so an
+  /// entry that says "do not pop" is the end of the matter — the drawer, the
+  /// bottom sheet or the [LocalHistoryEntry] the application put there never
+  /// gets the press. A node with an `onPop` said exactly that unconditionally,
+  /// so a `Scaffold` with a `drawer:` above the node could not be closed with
+  /// back at all, and the user was asked "leave this screen?" about a press
+  /// whose whole job was to close a drawer.
+  ///
+  /// Read live rather than cached: the value is read at press time, and
+  /// nothing announces a local history entry coming or going.
   bool get _canPopOutside =>
       widget.node._forwarding ||
+      (_route?.willHandlePopInternally ?? false) ||
       (widget.node.widget.onPop == null &&
           !_innerCanPop &&
           !widget.node._handlesBackInside);
