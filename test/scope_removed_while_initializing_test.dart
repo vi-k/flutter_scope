@@ -24,6 +24,10 @@ import 'utils/settle.dart';
 ///
 /// The second group is the same promise one layer up, where a hand-written
 /// `initScope` guards its own steps instead of handing them to a container.
+///
+/// The third is the phase after both of them: the asynchronous initialization
+/// of the *state*, which starts only once the ready branch has built the state
+/// and can therefore still be running when the scope is taken away.
 void main() {
   tearDown(ScopeConfig.reset);
 
@@ -243,6 +247,102 @@ void main() {
       );
     });
   });
+
+  // The last of the three initializations a `Scope` runs, and the only one
+  // that starts after the scope is on screen: `initStateAsync()` is called
+  // from `initState()` of the state, and the state is what the ready branch
+  // builds. A scope taken off the tree while it is still running leaves a
+  // state Flutter has already disposed of -- and the hook that follows the
+  // initialization reaches user code. `onInitialized()` on a dead state has no
+  // `context` to work with, and the `notifyDependents()` beside it would raise
+  // an assertion of the framework's own.
+  //
+  // The guard that covers this was there, and nothing covered the guard:
+  // removing it left the whole suite green.
+  group('a scope removed while its state is initializing', () {
+    testWidgets('does not call onInitialized on a state that is gone',
+        (tester) async {
+      final gate = Completer<void>();
+      final initialized = <String>[];
+      addTearDown(() {
+        if (!gate.isCompleted) {
+          gate.complete();
+        }
+      });
+
+      await tester.pumpWidget(
+        _wrap(_StateScope(gate: gate, initialized: initialized)),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        initialized,
+        isEmpty,
+        reason: 'the ready branch is on screen while initStateAsync runs, '
+            'which is the whole reason this window exists',
+      );
+
+      await tester.pumpWidget(_wrap(const SizedBox.shrink()));
+      await settle(tester, until: () => false);
+
+      gate.complete();
+      await settle(tester, until: () => initialized.isNotEmpty);
+
+      expect(
+        initialized,
+        isEmpty,
+        reason: 'the state is gone, so the hook that would hand it to user '
+            'code is not called at all',
+      );
+      expect(tester.takeException(), isNull);
+    });
+
+    // The other half of the same guard: while the scope is still there, the
+    // hook does run, and on a state that is still on the tree.
+    testWidgets('does call it on a state that is still there', (tester) async {
+      final gate = Completer<void>();
+      final initialized = <String>[];
+
+      await tester.pumpWidget(
+        _wrap(_StateScope(gate: gate, initialized: initialized)),
+      );
+      await tester.pumpAndSettle();
+
+      gate.complete();
+      await settle(tester, until: () => initialized.isNotEmpty);
+
+      expect(initialized, ['mounted']);
+    });
+  });
+}
+
+/// A scope whose *state* parks its asynchronous initialization on [gate].
+final class _StateScope extends LiteScope<_StateScope, _StateScopeState> {
+  final Completer<void> gate;
+  final List<String> initialized;
+
+  const _StateScope({required this.gate, required this.initialized});
+
+  @override
+  Widget? buildOnWaiting(BuildContext context) => const SizedBox.shrink();
+
+  @override
+  _StateScopeState createState() => _StateScopeState();
+}
+
+final class _StateScopeState
+    extends LiteScopeState<_StateScope, _StateScopeState> {
+  @override
+  Future<void> initStateAsync() => params.gate.future;
+
+  @override
+  void onInitialized() {
+    super.onInitialized();
+    params.initialized.add(mounted ? 'mounted' : 'unmounted');
+  }
+
+  @override
+  Widget build(BuildContext context) => const SizedBox.shrink();
 }
 
 Widget _wrap(Widget child) => Directionality(

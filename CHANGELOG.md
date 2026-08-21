@@ -1031,6 +1031,14 @@
   `FlutterError.reportError` and no further, which is the trade the rest of the
   teardown already makes. The `close()` path is unchanged: there a caller
   exists, and it still hears it.
+* The `LiteScope` topic no longer promises that the ready branch waits for
+  `initStateAsync()`. It cannot: the state is created by the ready branch, so
+  by the time its asynchronous initialization can begin, that branch has
+  already built. The topic said the opposite in two places, and the package's
+  own demo was already working around it with an `isInitialized` check. Both
+  are corrected, the dartdoc of `initStateAsync` now says what does and does
+  not wait for it, and both places name `isInitialized` and `onInitialized` as
+  the two halves of the answer. No behaviour changed — the promise did.
 * `select` and `listen: true` are allowed from the builder of a `LayoutBuilder`,
   an `OrientationBuilder` or a `SliverLayoutBuilder`. Those run from
   `performLayout`, inside a build of their own element, and what they return is

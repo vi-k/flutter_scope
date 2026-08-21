@@ -395,6 +395,22 @@ abstract base class LiteScopeCoreState<
   //
 
   /// Initializes the scope asynchronously.
+  ///
+  /// **Nothing waits for this.** It is started from [initState], and the state
+  /// exists only because the ready branch built it — so by the time this can
+  /// begin, that branch is already on screen. [build] runs before this
+  /// finishes, and so does every rebuild in between.
+  ///
+  /// That makes [isInitialized] part of writing a state rather than a detail:
+  /// a `late` field assigned after an `await` and read straight from [build]
+  /// raises a `LateInitializationError` on that first build. Hold the branch
+  /// back with [isInitialized], or give the field a value it can be read with
+  /// until this replaces it. [onInitialized] is where the first
+  /// [notifyDependents] belongs.
+  ///
+  /// What has to be ready *before* anything is shown goes in `initScope()` on
+  /// the scope widget, which is the phase that does hold the ready branch
+  /// back.
   FutureOr<void> initStateAsync() {}
 
   /// Lets go of whatever cannot wait for [disposeStateAsync].

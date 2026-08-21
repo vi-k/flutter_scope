@@ -2,8 +2,9 @@
 
 A state class with the whole scope lifecycle behind it, and no dependency
 container in front of it. `initState` and `dispose` as usual, plus an
-asynchronous `initStateAsync` and `disposeStateAsync` that the scope awaits, plus
-`notifyDependents`, `close()`, `scopeKey` and the waiting for child scopes.
+asynchronous `initStateAsync` and a `disposeStateAsync` the scope waits for,
+plus `notifyDependents`, `close()`, `scopeKey` and the waiting for child
+scopes.
 
 This is the family for per-screen state that owns things worth releasing
 properly — controllers, subscriptions, a socket. `Scope` adds a dependency
@@ -43,7 +44,7 @@ final class ScreenScopeState
 
 | member | what it is |
 | --- | --- |
-| `initStateAsync()` | asynchronous initialization, awaited before the state is shown as ready |
+| `initStateAsync()` | asynchronous initialization, started once the state exists |
 | `onUnmount()` | synchronous teardown, always before `disposeStateAsync()` |
 | `disposeStateAsync()` | asynchronous teardown, awaited before the scope is gone |
 | `notifyDependents()` | rebuild the subscribed descendants, not the subtree |
@@ -99,8 +100,33 @@ be overridden too — their default implementations throw
 `UnimplementedError`, on the reasoning that a progress branch nobody wrote is a
 mistake rather than a blank screen.
 
-`LiteScopeState.initStateAsync()` on the **state** is the usual one: it runs after
-the state exists, and the ready branch waits for it.
+`LiteScopeState.initStateAsync()` on the **state** is the usual one, and it runs
+after the state exists — which is why **nothing waits for it**. The state is
+created by the ready branch, so by the time this can start, the ready branch has
+already built: the first `build` of the state runs before `initStateAsync` has
+finished, and so do the ones any change asks for in the meantime.
+
+That makes `isInitialized` part of writing the state rather than a detail:
+a `late` field assigned after an `await` and read straight from `build` throws a
+`LateInitializationError` on that first build. Either hold the branch back
+yourself —
+
+```dart
+@override
+Widget build(BuildContext context) {
+  if (!isInitialized) {
+    return const Center(child: CircularProgressIndicator.adaptive());
+  }
+  …
+}
+```
+
+— or give the field a value it can be read with before the initialization
+replaces it. `onInitialized()` is the other half: it runs once
+`initStateAsync()` has finished, and only while the state is still on the tree,
+so it is where a first `notifyDependents()` or an animation belongs. Put
+whatever has to be ready *before* anything is shown into `initScope()` on the
+widget instead, which is the phase that does hold the ready branch back.
 
 `buildOnWaiting` covers the gap before either of them has produced anything —
 the frames spent waiting for a `scopeKey` and for the first event. Returning
