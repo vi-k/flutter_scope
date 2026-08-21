@@ -355,7 +355,14 @@ abstract base class ScopeWidgetElementBase<W extends ScopeWidgetCore<W, E>,
       return newDependencies;
     }
 
+    // Loud in debug, and not silent in release either. An `aspect` this
+    // element does not recognise can only come from a
+    // `dependOnInheritedElement` written by hand, and the two ways of being
+    // wrong are not equal: subscribed to everything, the dependent is rebuilt
+    // more often than it needs to be; subscribed to nothing, as it was, it is
+    // never rebuilt at all and nothing anywhere says why.
     assert(false, '`aspect` must be ${_ScopeDependency<E, Object?>}');
+    newDependencies.all = true;
 
     return newDependencies;
   }
@@ -481,20 +488,31 @@ abstract base class ScopeWidgetElementBase<W extends ScopeWidgetCore<W, E>,
   void notifyDependents() {
     _notifyPending = true;
 
-    if (_isRebuilding) {
-      // `markNeedsBuild()` on an element that is building right now does
-      // nothing: the framework's assertion lets the self case through, and
-      // `if (dirty) return;` swallows the call. Asking for the rebuild after
-      // the frame is what turns a lost notification into a late one.
-      //
-      // A model touched from inside `builder` is ordinary user code -- a lazy
-      // load, a default filled in on first read -- and this is the path it
-      // takes.
+    // Any build, not this element's own. `markNeedsBuild()` on an element that
+    // is building right now does nothing: the framework's assertion lets the
+    // self case through, and `if (dirty) return;` swallows the call. On an
+    // element that is *not* the one building, the same call is refused
+    // outright -- "setState() or markNeedsBuild() called during build" -- and
+    // that is what a model touched from the build of a descendant used to
+    // get. It is the same ordinary user code either way: a lazy load, a
+    // default filled in on first read. Asking for the rebuild after the frame
+    // is what turns a lost or refused notification into a late one.
+    if (_isRebuilding || SchedulerBinding.instance.isBuilding) {
+      // One callback while one is pending, not one per notification. The flag
+      // above is what the callback acts on, so a second notification arriving
+      // before the frame is over is already carried by the first, and a
+      // callback of its own would find nothing left to do.
+      if (_notifyDeferred) {
+        return;
+      }
+      _notifyDeferred = true;
+
       SchedulerBinding.instance
         // The build may be one `runApp` drives outside a frame, and then
         // nothing has asked for the frame this callback needs.
         ..scheduleFrame()
         ..addPostFrameCallback((_) {
+          _notifyDeferred = false;
           if (mounted && _notifyPending) {
             markNeedsBuild();
           }
@@ -503,6 +521,9 @@ abstract base class ScopeWidgetElementBase<W extends ScopeWidgetCore<W, E>,
       markNeedsBuild();
     }
   }
+
+  /// Whether a deferred notification is already waiting for the frame to end.
+  bool _notifyDeferred = false;
 
   /// Rebuilds the subtree anyway when the parent updates the element while a
   /// notify-only rebuild ([notifyDependents]) is pending.

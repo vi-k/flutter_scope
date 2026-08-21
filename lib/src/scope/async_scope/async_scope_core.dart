@@ -571,10 +571,16 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
     // registered after the `finally` had unregistered the previous one and
     // that nobody will ever complete. The parent would then burn its whole
     // `waitForChildrenTimeout` on a scope that is already gone.
-    SchedulerBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || _isDisposing) return;
-      _registerWithParent();
-    });
+    SchedulerBinding.instance
+      // The build this runs from may be one `runApp` drives outside a frame,
+      // and then nothing has asked for the frame this callback needs. The
+      // three other deferred callbacks of the package ask for it and say so;
+      // this was the one that did not, for no reason anybody wrote down.
+      ..scheduleFrame()
+      ..addPostFrameCallback((_) {
+        if (!mounted || _isDisposing) return;
+        _registerWithParent();
+      });
 
     // Everything below either hands `_initCompleter` over to the subscription
     // that completes it, or completes it itself. A failure in between -- the

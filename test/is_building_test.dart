@@ -40,6 +40,64 @@ void main() {
       expect(seen, isTrue);
     });
 
+    // Two tests below for the two terms a release build actually has. In debug
+    // everything answers `buildOwner.debugBuilding`, which lives inside an
+    // `assert` -- so a suite that only ever asks during an ordinary build
+    // checks the one term that does not exist in production, and the other two
+    // can be deleted without a word.
+
+    // The phase on its own. A persistent frame callback added after the one
+    // that draws the frame runs inside `SchedulerPhase.persistentCallbacks`
+    // and outside any `buildScope`.
+    testWidgets('sees the frame phase with no build behind it', (tester) async {
+      bool? seen;
+      bool? owner;
+      bool? scope;
+
+      tester.binding.addPersistentFrameCallback((_) {
+        seen ??= SchedulerBinding.instance.isBuilding;
+        owner ??= WidgetsBinding.instance.buildOwner?.debugBuilding ?? false;
+        scope ??= scopeIsRebuilding;
+      });
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+
+      expect(owner, isFalse, reason: 'no build is running at that point');
+      expect(scope, isFalse, reason: 'and no scope of this package either');
+      expect(
+        seen,
+        isTrue,
+        reason: 'so the phase is the only term left to answer, and it has to',
+      );
+    });
+
+    // The package's own counter on its own, with the phase idle and no build
+    // owner behind it -- which is what a release build is left with when a
+    // scope rebuilds outside a frame.
+    testWidgets('sees a rebuild of this package with nothing else running',
+        (tester) async {
+      await tester.pumpWidget(const SizedBox.shrink());
+
+      expect(SchedulerBinding.instance.schedulerPhase, SchedulerPhase.idle);
+      expect(WidgetsBinding.instance.buildOwner?.debugBuilding, isFalse);
+      expect(SchedulerBinding.instance.isBuilding, isFalse);
+
+      beginScopeRebuild();
+      try {
+        expect(
+          SchedulerBinding.instance.isBuilding,
+          isTrue,
+          reason: 'the counter is the half of the answer a release build '
+              'keeps, so it has to be asked',
+        );
+      } finally {
+        endScopeRebuild();
+      }
+
+      expect(SchedulerBinding.instance.isBuilding, isFalse);
+    });
+
     // `runApp` builds the first tree exactly like this: `attachRootWidget`
     // runs from a timer, so `buildScope` walks the dirty list with no frame in
     // progress and the phase still `idle`. It is a build all the same, and

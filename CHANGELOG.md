@@ -1031,6 +1031,24 @@
   `FlutterError.reportError` and no further, which is the trade the rest of the
   teardown already makes. The `close()` path is unchanged: there a caller
   exists, and it still hears it.
+* Fix a notification made from the build of a *descendant* being refused. The
+  guard that defers such a notification asked whether *this* element was
+  rebuilding, and a model touched from a descendant's build — a lazy load, a
+  default filled in on first read, the ordinary user code the guard exists for
+  — arrives while it is not. The bare `markNeedsBuild()` was then called on an
+  element that is not the one building, which the framework refuses outright;
+  in release the check lives in an assert and the same code worked, so this was
+  a difference between debug and release rather than a rule. Any build defers
+  it now, and a second notification arriving before the frame is over joins the
+  callback already waiting instead of adding one of its own.
+* An `aspect` the scope does not recognise subscribes the dependent to every
+  change instead of to nothing. It can only come from a
+  `dependOnInheritedElement` written by hand, and the assert that says so is
+  debug-only: subscribed to everything a dependent is rebuilt more often than
+  it needs, subscribed to nothing it is never rebuilt and nothing says why.
+* The post-frame callback that registers a scope with its parent asks for the
+  frame it needs, as the package's three other deferred callbacks already did.
+  A build `runApp` drives outside a frame leaves nothing to ask for it.
 * Fix a disposer running twice when two disposals of one dependency overlap.
   The hook was read at the top of the walk and cleared in the `finally` — that
   is, after the `await` — so a second `dispose()` arriving while the first was

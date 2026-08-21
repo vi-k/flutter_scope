@@ -392,6 +392,70 @@ void main() {
       );
     });
 
+    // The guard that defers a notification asked about *this* element's own
+    // rebuild, and a notification does not have to come from there. A model
+    // touched from the build of a descendant -- a lazy load, a default filled
+    // in on first read, the same ordinary user code the guard exists for --
+    // arrives while the scope itself is not rebuilding, so the bare
+    // `markNeedsBuild()` was called and the framework refused it: "setState()
+    // or markNeedsBuild() called during build". In release the check lives in
+    // an assert and the same code works, which made this a difference between
+    // debug and release rather than a rule.
+    testWidgets('a notification made from a descendant build is not refused',
+        (tester) async {
+      final key = GlobalKey<_BumperState>();
+
+      await tester.pumpWidget(_Host(param: 'a', extra: _Bumper(key: key)));
+      await tester.pumpAndSettle();
+
+      // Its own rebuild, so the scope above it is not the one building.
+      key.currentState!.armAndRebuild();
+      await tester.pump();
+      // The notification is deferred to the end of that frame, so the rebuild
+      // it asks for lands on the next one.
+      await tester.pump();
+
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: 'the notification is deferred to after the frame, not refused',
+      );
+      expect(
+        find.text('1'),
+        findsOneWidget,
+        reason: 'and it lands, a frame late rather than never',
+      );
+    });
+
+    // `_notifyPending` says a notification is waiting, and `performRebuild`
+    // takes it down as it acts on it. Left standing, *every* later rebuild
+    // that does not come from the parent -- a `MediaQuery`, a `Theme`, a
+    // locale -- is treated as notify-only, and the subtree freezes for good.
+    testWidgets('a notification is spent by the rebuild that acts on it',
+        (tester) async {
+      await tester.pumpWidget(const _Host(param: 'a'));
+      await tester.pumpAndSettle();
+
+      final scope = tester.element(find.byType(_CounterScope))
+          as _CounterScopeElement
+        ..bump();
+      await tester.pump();
+
+      final builds = _CounterScopeElement.buildChildCount;
+
+      // Not from the parent: `update()` is what raises `_forceRebuild`, and
+      // this is the other way an element is rebuilt.
+      scope.markNeedsBuild();
+      await tester.pump();
+
+      expect(
+        _CounterScopeElement.buildChildCount,
+        builds + 1,
+        reason: 'the notification was spent by the rebuild before it, so this '
+            'one is an ordinary rebuild and builds the subtree',
+      );
+    });
+
     // The other side of the same rule. A notify-only rebuild hands back what
     // the last real build made and leaves the child element alone -- which
     // needs there to have been a real build. When the first one threw, the
@@ -496,13 +560,18 @@ final class _InitReaderScopeElement
 final class _Host extends StatelessWidget {
   final String param;
   final bool failFirstBuild;
+  final Widget? extra;
 
-  const _Host({required this.param, this.failFirstBuild = false});
+  const _Host({required this.param, this.failFirstBuild = false, this.extra});
 
   @override
   Widget build(BuildContext context) => Directionality(
         textDirection: TextDirection.ltr,
-        child: _CounterScope(param: param, failFirstBuild: failFirstBuild),
+        child: _CounterScope(
+          param: param,
+          failFirstBuild: failFirstBuild,
+          extra: extra,
+        ),
       );
 }
 
@@ -514,7 +583,15 @@ final class _CounterScope
   /// field the scope has not filled in yet does.
   final bool failFirstBuild;
 
-  const _CounterScope({required this.param, this.failFirstBuild = false});
+  /// Put into the subtree beside the ordinary dependents, so a test can hand
+  /// the scope a descendant of its own.
+  final Widget? extra;
+
+  const _CounterScope({
+    required this.param,
+    this.failFirstBuild = false,
+    this.extra,
+  });
 
   @override
   _CounterScopeElement createScopeElement() => _CounterScopeElement(this);
@@ -605,6 +682,7 @@ final class _CounterScopeElement
         _SwitchingText(useValue: widget.param == 'a'),
         const _BothText(),
         _PlainText(param: widget.param),
+        if (widget.extra case final extra?) extra,
       ],
     );
   }
@@ -796,4 +874,32 @@ final class _ListeningInitScopeElement extends ScopeWidgetElementBase<
 
   @override
   Widget buildChild() => const SizedBox.shrink();
+}
+
+/// A descendant that pokes the scope from its own build.
+final class _Bumper extends StatefulWidget {
+  const _Bumper({super.key});
+
+  @override
+  State<_Bumper> createState() => _BumperState();
+}
+
+final class _BumperState extends State<_Bumper> {
+  bool _armed = false;
+
+  /// Rebuilds this widget alone, with the poke armed for that build.
+  void armAndRebuild() => setState(() => _armed = true);
+
+  @override
+  Widget build(BuildContext context) {
+    if (_armed) {
+      _armed = false;
+      ScopeWidgetCore.of<_CounterScope, _CounterScopeElement>(
+        context,
+        listen: false,
+      ).bump();
+    }
+
+    return const SizedBox.shrink();
+  }
 }
