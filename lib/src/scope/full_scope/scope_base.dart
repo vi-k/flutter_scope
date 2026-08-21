@@ -78,6 +78,10 @@ abstract base class Scope<W extends Scope<W, D, S>, D extends ScopeDependencies,
   final void Function()? onWaitForChildrenTimeout;
 
   /// An optional duration to pause after initialization is successful.
+  ///
+  /// [ScopeTimeout.none] is refused here, with an assert: a pause is a
+  /// stretch of time to hold the ready branch back for rather than a limit
+  /// on a wait, and "wait as long as it takes" has nothing to say about one.
   final Duration? pauseAfterInitialization;
 
   /// Creates a scope.

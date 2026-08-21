@@ -403,17 +403,27 @@
   `Duration` is the limit — so removing a limit was possible only for every
   scope at once. Accepted by `scopeKeyTimeout`, `disposeScopeTimeout` and
   `waitForChildrenTimeout`, on the scopes and on both `waitForChildren`
-  helpers. It is a subtype of `Duration` rather than a magic value, so the
-  parameters keep their type and no existing call site changes; the package
-  recognises it with `is`, never with `==`, so a `Duration` that some
-  arithmetic happened to make negative is still a limit rather than the
-  absence of one.
-* `initCancellationTimeout` refuses `ScopeTimeout.none` with an assert. A
+  helpers, and by all four `ScopeConfig` defaults, where it says for the whole
+  application what `null` says there — including the release of a dependency
+  container after a failed initialization, which reads
+  `ScopeConfig.defaultDisposeScopeTimeout` and takes no per-scope override. It
+  is a subtype of `Duration` rather than a magic value, so the parameters keep
+  their type and no existing call site changes; the package tells it apart by
+  its type rather than by `==`, so a `Duration` some arithmetic happened to
+  make negative is not mistaken for it. Such a `Duration` is refused instead,
+  with an assert, everywhere a limit is resolved: a wait cannot be bounded by a
+  length of time that has already passed, and a timer given one expires on its
+  first tick.
+* `initCancellationTimeout` and `pauseAfterInitialization` refuse
+  `ScopeTimeout.none`, each with an assert, and for opposite reasons. A
   cancellation waits for the initialization generator to run out, and one
   suspended on a future that never completes never does — an unbounded wait
-  there is the hang the limit exists to prevent. Removing that limit stays a
+  there is the hang the limit exists to prevent; removing that limit stays a
   decision for the whole application, through
-  `ScopeConfig.defaultInitCancellationTimeout`.
+  `ScopeConfig.defaultInitCancellationTimeout`, which takes `null` or
+  `ScopeTimeout.none` for it. A pause refuses the marker because it is not a
+  limit on a wait at all but a stretch of time to hold the ready branch back
+  for, and "wait as long as it takes" has nothing to say about one.
 * Fix an anonymous dependency group — the common shape for the root of a tree,
   `sequential('', […])` or `concurrent('', […])` — reporting through
   `ScopeConfig.observer` under an empty label instead of `[group]`.

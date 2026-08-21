@@ -277,6 +277,13 @@ final class ChildEntry {
 /// always made of completers this library owns, and those complete with a
 /// value or not at all.
 Future<void> _boundedByRootZone(Future<void> work, Duration limit) async {
+  // Every limit that reaches a timer in this package comes out of
+  // `resolveTimeout`, which refuses a negative one. A wait bounded without
+  // going through it is how the container of a `Scope` used to expire at once
+  // on a `ScopeTimeout.none`, so the timer says so itself rather than trusting
+  // its caller.
+  assert(!limit.isNegative, 'A wait cannot be bounded by $limit');
+
   var finished = false;
   final expired = Completer<void>();
   final timer = Zone.root.createTimer(limit, () {

@@ -175,8 +175,15 @@ abstract base class ScopeAutoDependencies<T extends ScopeAutoDependencies<T, C>,
   /// widget that owns it, and works without one. The timer comes from
   /// [Zone.root] because a timer of the current zone would still be pending
   /// when a widget test ends, which is what `flutter_test` ends a test on.
+  ///
+  /// The default is read through the same resolver the other five bounded
+  /// waits read theirs through, and for the same reason: it is one switch, and
+  /// a `ScopeTimeout.none` written on it has to mean "no limit at all" here as
+  /// well. Read straight out of [ScopeConfig] it meant the opposite — the
+  /// marker went on to the timer as the negative length it is made of, and
+  /// this wait gave up on its first tick.
   Future<void> _disposeBounded() async {
-    final limit = ScopeConfig.defaultDisposeScopeTimeout;
+    final limit = resolveTimeout(null, ScopeConfig.defaultDisposeScopeTimeout);
     // ignore: discarded_futures
     final released = dispose();
 
@@ -185,6 +192,13 @@ abstract base class ScopeAutoDependencies<T extends ScopeAutoDependencies<T, C>,
 
       return;
     }
+
+    // Every limit that reaches a timer in this package comes out of
+    // `resolveTimeout`, which refuses a negative one. A wait bounded without
+    // going through it is how this very method used to expire at once on a
+    // `ScopeTimeout.none`, so the timer says so itself rather than trusting
+    // its caller.
+    assert(!limit.isNegative, 'A wait cannot be bounded by $limit');
 
     var finished = false;
     final expired = Completer<void>();

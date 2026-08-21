@@ -681,6 +681,22 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
             );
             _model.update(state);
           case AsyncScopeReady():
+            // Before the switch below rather than inside it, so a suite that
+            // turns every pause off does not also turn off the one thing that
+            // says this value is wrong.
+            assert(
+              !(pauseAfterInitialization?.isNegative ?? false),
+              'ScopeTimeout.none is not accepted by pauseAfterInitialization, '
+              'and neither is any other negative Duration '
+              '($pauseAfterInitialization). A pause is a stretch of time to '
+              'hold the ready branch back for, not a limit on a wait, so '
+              '"wait as long as it takes" has nothing to say about one -- and '
+              'the marker is a negative Duration, which a timer reads as no '
+              'pause at all. Give a Duration that is not negative, or leave '
+              'the parameter out to show the ready branch as soon as it is '
+              'built.',
+            );
+
             if (pauseAfterInitialization case final pauseAfterInitialization?
                 when ScopeConfig.pauseAfterInitializationEnabled) {
               _pauseTimer = Timer(pauseAfterInitialization, () {
@@ -1051,6 +1067,13 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
     String what,
     void Function() onExpiry,
   ) async {
+    // Every limit that reaches a timer in this package comes out of
+    // `resolveTimeout`, which refuses a negative one. A wait bounded without
+    // going through it is how the container of a `Scope` used to expire at
+    // once on a `ScopeTimeout.none`, so the timer says so itself rather than
+    // trusting its caller.
+    assert(!limit.isNegative, 'A wait cannot be bounded by $limit');
+
     var finished = false;
     final expired = Completer<void>();
     final timer = Zone.root.createTimer(limit, () {

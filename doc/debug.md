@@ -306,11 +306,23 @@ defaults live in `ScopeConfig`:
   child scopes to be disposed of before disposing of itself.
 
 All four are three seconds by default. `null` removes the limit and every scope
-waits indefinitely; a single scope says the same with `ScopeTimeout.none`,
-below. An expired timeout is not fatal: it is reported through
-`FlutterError.reportError`, and the scope then proceeds as if the wait had
-succeeded — so a dependency that never completes its disposal degrades into a
-delay plus an error report instead of a deadlock.
+waits indefinitely, and so does `ScopeTimeout.none` — the value below, which
+says the same thing for a single scope and is accepted here too. An expired
+timeout is not fatal: it is reported through `FlutterError.reportError`, and
+the scope then proceeds as if the wait had succeeded — so a dependency that
+never completes its disposal degrades into a delay plus an error report instead
+of a deadlock.
+
+A fifth wait shares one of these defaults and takes no override of its own.
+When the initialization of a `Scope` fails, the dependency container releases
+what it had already built, and that release is bounded by
+`ScopeConfig.defaultDisposeScopeTimeout` rather than by the `disposeScopeTimeout`
+of the scope: a container knows nothing of the widget that owns it and works
+without one, so there is nothing there to read a per-scope value from. It is
+bounded at all because it is the path of a failed initialization — nothing
+downstream sees that failure until the container lets go, so a disposer that
+never finishes leaves the scope above showing its loading branch with nothing
+on screen and nothing in the console.
 
 All four are measured on real time rather than on the clock of the zone the
 teardown runs in, which is what a widget test replaces with a fake one. A hang
@@ -343,16 +355,34 @@ AsyncScope(
 It is a `Duration` of its own kind rather than a value to remember, so every
 one of these parameters stays a `Duration?` and nothing else about them
 changes. `AsyncScopeCoordinator.waitForChildren` and a parent's own
-`waitForChildren` take it too, for one call.
+`waitForChildren` take it too, for one call, and so do the four `ScopeConfig`
+defaults above.
+
+Being a `Duration` of its own kind is also the one thing to know about it: it
+is told apart by its type, so it does not survive being computed with.
+`ScopeTimeout.none == const Duration(microseconds: -1)` is `true`, and
+`ScopeTimeout.none + Duration.zero` is an ordinary `Duration` — what comes back
+from any arithmetic is the negative length behind the marker, which a timer
+reads as "expire at once". The package asserts against a negative limit
+wherever it resolves one, so this is loud in debug rather than silent; a
+timeout is still a value to pass on rather than one to compute with.
 
 **`initCancellationTimeout` is the one that refuses it**, with an assert. A
 cancellation waits for the initialization generator to run out, and a generator
 suspended on a future that never completes never does — an unbounded wait there
 is the hang the limit exists to prevent. Removing that one is a decision for
-the whole application, and `ScopeConfig.defaultInitCancellationTimeout = null`
-is where it is made. The assert is raised inside the teardown's own guard for
-that stage, so it arrives as `onError` with `ScopePhase.initializationCancellation`
+the whole application, and `ScopeConfig.defaultInitCancellationTimeout` is
+where it is made — as `null`, or as the `ScopeTimeout.none` that means the same
+thing there. The assert is raised inside the teardown's own guard for that
+stage, so it arrives as `onError` with `ScopePhase.initializationCancellation`
 and the teardown goes on.
+
+**`pauseAfterInitialization` refuses it too**, with an assert of its own, and
+for the opposite reason: a pause is a stretch of time to hold the ready branch
+back for rather than a limit on a wait, and "wait as long as it takes" has
+nothing to say about one. That assert is raised while the scope is becoming
+ready, so it arrives as `onError` with `ScopePhase.initialization` and the
+scope shows its error branch.
 
 ## pauseAfterInitializationEnabled
 

@@ -36,8 +36,8 @@ abstract final class ScopeConfig {
   ///
   /// If zero, then the timeout expires immediately.
   ///
-  /// A single scope says the same with [ScopeTimeout.none], which its own
-  /// parameter accepts in place of a [Duration].
+  /// [ScopeTimeout.none] says the same as `null` here, and is what a single
+  /// scope writes to say it for itself.
   static Duration? defaultScopeKeyTimeout = _timeout;
 
   /// Timeout for waiting for scopes to be disposed of.
@@ -46,8 +46,8 @@ abstract final class ScopeConfig {
   ///
   /// If zero, then the timeout expires immediately.
   ///
-  /// A single scope says the same with [ScopeTimeout.none], which its own
-  /// parameter accepts in place of a [Duration].
+  /// [ScopeTimeout.none] says the same as `null` here, and is what a single
+  /// scope writes to say it for itself.
   static Duration? defaultWaitForChildrenTimeout = _timeout;
 
   /// Timeout for waiting for the asynchronous teardown of one scope.
@@ -61,8 +61,8 @@ abstract final class ScopeConfig {
   ///
   /// If zero, then the timeout expires immediately.
   ///
-  /// A single scope says the same with [ScopeTimeout.none], which its own
-  /// parameter accepts in place of a [Duration].
+  /// [ScopeTimeout.none] says the same as `null` here, and is what a single
+  /// scope writes to say it for itself.
   static Duration? defaultDisposeScopeTimeout = _timeout;
 
   /// Timeout for waiting for an initialization to be cancelled.
@@ -79,7 +79,8 @@ abstract final class ScopeConfig {
   /// This is the one timeout a single scope cannot remove for itself:
   /// `initCancellationTimeout` refuses [ScopeTimeout.none] with an assert, so
   /// an unbounded cancellation is a decision for the whole application and is
-  /// made here.
+  /// made here — as `null`, or as the [ScopeTimeout.none] that means the same
+  /// thing here as it does on the other three.
   static Duration? defaultInitCancellationTimeout = _timeout;
 
   /// The default every timeout above starts at.

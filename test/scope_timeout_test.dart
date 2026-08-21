@@ -159,6 +159,114 @@ void main() {
     await settle(tester, until: () => false);
   });
 
+  testWidgets(
+      'ScopeTimeout.none as the default removes the limit on the wait for a '
+      'cancelled initialization', (tester) async {
+    // The one timeout a single scope may not remove for itself. Every piece of
+    // documentation that says so sends the reader here to remove it for the
+    // whole application instead, so this is the value a reader who followed
+    // that advice writes.
+    ScopeConfig.defaultInitCancellationTimeout = ScopeTimeout.none;
+
+    final hold = Completer<void>();
+    addTearDown(() {
+      if (!hold.isCompleted) {
+        hold.complete();
+      }
+    });
+
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: _scope(tag: 'cancelled', initGate: hold),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await settle(tester, until: () => false);
+
+    expect(
+      expired(),
+      isFalse,
+      reason: 'the marker means "no limit at all" wherever it is written, and '
+          'a global default that expires at once is the opposite of what was '
+          'asked for',
+    );
+    expect(
+      observer.events,
+      isNot(contains('disposed AsyncScope(cancelled)')),
+      reason: 'and the teardown is still waiting for the cancellation',
+    );
+
+    hold.complete();
+    await settle(
+      tester,
+      until: () => observer.events.contains('disposed AsyncScope(cancelled)'),
+    );
+    expect(
+      observer.events,
+      contains('disposed AsyncScope(cancelled)'),
+      reason: 'the wait was unbounded, not stuck: letting the generator run '
+          'out finishes it',
+    );
+  });
+
+  testWidgets('ScopeTimeout.none is refused by pauseAfterInitialization',
+      (tester) async {
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: _scope(
+          tag: 'paused',
+          pauseAfterInitialization: ScopeTimeout.none,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      observer.events.where((event) => event.contains('initialization')),
+      contains(contains('not accepted by pauseAfterInitialization')),
+      reason: 'a pause is a length of time, not a limit on a wait: "wait as '
+          'long as it takes" says nothing here, and used to mean "do not '
+          'pause at all" -- the opposite of the one thing the parameter does',
+    );
+  });
+
+  testWidgets('a Duration that lost the marker is refused, not run at once',
+      (tester) async {
+    late BuildContext context;
+
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: AsyncScopeCoordinator(
+          child: Builder(
+            builder: (innerContext) {
+              context = innerContext;
+
+              return const SizedBox.shrink();
+            },
+          ),
+        ),
+      ),
+    );
+
+    expect(
+      () => AsyncScopeCoordinator.waitForChildren(
+        context,
+        // What arithmetic leaves of the marker: `ScopeTimeout.none` is
+        // recognised by its type, and `+` gives back a plain [Duration]. All
+        // that survives is the negative length behind it, which a timer reads
+        // as "expire at once" -- the opposite of what was written.
+        // ignore: prefer_const_constructors
+        timeout: ScopeTimeout.none + Duration.zero,
+      ),
+      throwsAssertionError,
+    );
+  });
+
   testWidgets('ScopeTimeout.none is refused by initCancellationTimeout',
       (tester) async {
     final hold = Completer<void>();
@@ -223,6 +331,7 @@ Widget _scope({
   Duration? scopeKeyTimeout,
   Duration? disposeScopeTimeout,
   Duration? initCancellationTimeout,
+  Duration? pauseAfterInitialization,
 }) =>
     AsyncScope(
       tag: tag,
@@ -230,6 +339,7 @@ Widget _scope({
       scopeKeyTimeout: scopeKeyTimeout,
       disposeScopeTimeout: disposeScopeTimeout,
       initCancellationTimeout: initCancellationTimeout,
+      pauseAfterInitialization: pauseAfterInitialization,
       initScope: (context) async* {
         if (initGate != null) {
           await initGate.future;

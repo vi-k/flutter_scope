@@ -1799,6 +1799,56 @@ void main() {
       },
       timeout: const Timeout(Duration(seconds: 10)),
     );
+
+    // The sixth bounded wait of the package, and the one that used to read the
+    // default straight out of `ScopeConfig` instead of resolving it. The other
+    // five turn a `ScopeTimeout.none` into the `null` that means "no limit at
+    // all"; here the marker went on to a timer as the negative length it is
+    // made of, and the wait gave up on the very first tick -- one value of one
+    // switch meaning opposite things in neighbouring places.
+    test(
+      'ScopeTimeout.none as the global default removes the limit',
+      () async {
+        ScopeConfig.defaultDisposeScopeTimeout = ScopeTimeout.none;
+        addTearDown(ScopeConfig.reset);
+
+        final dependencies = HangingDisposeDependencies();
+        addTearDown(() {
+          if (!dependencies.hang.isCompleted) {
+            dependencies.hang.complete();
+          }
+        });
+
+        var settled = false;
+        unawaited(
+          dependencies
+              .init(null)
+              .drain<void>()
+              .catchError((Object _) {})
+              .whenComplete(() => settled = true),
+        );
+
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+
+        expect(
+          settled,
+          isFalse,
+          reason: 'with no limit the failure stays inside the generator for as '
+              'long as the disposer holds it',
+        );
+
+        dependencies.hang.complete();
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+
+        expect(
+          settled,
+          isTrue,
+          reason: 'and the wait was unbounded rather than stuck: releasing the '
+              'disposer lets the failure out',
+        );
+      },
+      timeout: const Timeout(Duration(seconds: 10)),
+    );
   });
 
   group('ScopeAutoDependencies type argument', () {
