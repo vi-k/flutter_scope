@@ -1031,6 +1031,30 @@
   `FlutterError.reportError` and no further, which is the trade the rest of the
   teardown already makes. The `close()` path is unchanged: there a caller
   exists, and it still hears it.
+* Fix a disposer running twice when two disposals of one dependency overlap.
+  The hook was read at the top of the walk and cleared in the `finally` — that
+  is, after the `await` — so a second `dispose()` arriving while the first was
+  parked on the disposer read the same hook and ran it again: a second
+  rollback, a second close, a second write. It is taken off before it is
+  called now, the way `unmount` beside it always was, so "exactly once" holds
+  by construction rather than by which caller arrives first.
+  `ScopeAutoDependencies.dispose()` likewise hands a second caller the run
+  already going rather than opening a second teardown of the same tree; once it
+  is over a later call runs again, since a walk that was stopped halfway leaves
+  the tree still asking to be disposed of.
+* Fix a disposal that was cancelled halfway being recorded as one that
+  finished. `dispose()` marked the tree done either way, so it stopped saying
+  it needed disposing of — and the next `init()` replaced it, leaving
+  everything the walk had never reached holding what it took with nobody able
+  to reach it. Only a walk that reaches its end is done now, and a group whose
+  disposal was cancelled still answers `disposalRequired`, so a second `init()`
+  is refused rather than quietly losing a tree.
+* Fix a dependency that registered only `unmount` saying it held nothing.
+  `disposalRequired` asked about `dispose` alone, while `unmount` is the other
+  documented way of holding something — a subscription, usually. A bare leaf
+  standing as the root of a container therefore looked disposable, and a second
+  `init()` replaced it in silence: the `unmount` of the first run was never
+  called at all.
 * **Breaking:** `ScreenshotReplacer` and `ListenableSelector` are `final`, the
   way the other sixty-odd public classes of the package already were. They were
   the two left as a bare `class` by oversight rather than by decision, and

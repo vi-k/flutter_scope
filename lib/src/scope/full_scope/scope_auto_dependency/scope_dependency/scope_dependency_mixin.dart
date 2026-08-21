@@ -137,11 +137,16 @@ mixin ScopeDependencyMixin implements ScopeDependency, ScopeObservable {
         _ => const ScopeDependencyDisposed(),
       };
     } finally {
-      _isDisposalDone = true;
-
       // Catch the cancellation.
       if (_state is ScopeDependencyInitialized) {
         _state = ScopeDependencyDisposalCancelled();
+      } else {
+        // Only a walk that reached its end is done. Marked done either way, a
+        // disposal a caller stopped halfway made the tree stop saying it
+        // needed disposing of -- and the next `init()` then replaced it, so
+        // everything the walk never reached was left holding what it took
+        // with nobody able to reach it.
+        _isDisposalDone = true;
       }
     }
   }

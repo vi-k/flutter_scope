@@ -1955,6 +1955,140 @@ void main() {
     );
   });
 
+  group('ScopeAutoDependencies concurrent dispose', () {
+    // The mirror of the concurrent `init()` above, and the same shape: the
+    // handle is read at the top of the walk and cleared in the `finally`, so a
+    // second `dispose()` arriving while the first is parked on the disposer
+    // reads the same hook and runs it again. For a sink, a transaction, a file
+    // or a network client that is an exception, a double rollback, or damage
+    // outside the process.
+    test(
+      'a second dispose() while the first is still running releases once',
+      () async {
+        final gate = Completer<void>();
+        final log = <String>[];
+        addTearDown(() {
+          if (!gate.isCompleted) {
+            gate.complete();
+          }
+        });
+
+        final dependency = ScopeDependency('slow', (dep) {
+          dep.dispose = () async {
+            log.add('dispose slow');
+            await gate.future;
+          };
+        });
+
+        await dependency.init().drain<void>();
+
+        final first = dependency.dispose().drain<void>();
+        await Future<void>.delayed(Duration.zero);
+        final second = dependency.dispose().drain<void>();
+
+        gate.complete();
+        await first;
+        await second;
+
+        expect(log, ['dispose slow']);
+      },
+      timeout: const Timeout(Duration(seconds: 10)),
+    );
+
+    test(
+      'a container joins the disposal already running instead of starting one',
+      () async {
+        final gate = Completer<void>();
+        final log = <String>[];
+        addTearDown(() {
+          if (!gate.isCompleted) {
+            gate.complete();
+          }
+        });
+
+        final dependencies = SlowDisposeDependencies(gate, log);
+        await dependencies.init(null).drain<void>();
+
+        final first = dependencies.dispose();
+        await Future<void>.delayed(Duration.zero);
+        final second = dependencies.dispose();
+
+        expect(
+          identical(first, second),
+          isTrue,
+          reason: 'the second caller observes the run already going rather '
+              'than opening a second teardown of the same tree',
+        );
+
+        gate.complete();
+        await first;
+
+        expect(log, ['dispose slow']);
+      },
+      timeout: const Timeout(Duration(seconds: 10)),
+    );
+  });
+
+  group('ScopeAutoDependencies a disposal that was cancelled', () {
+    // `dispose()` is a stream, and a caller who stops listening leaves what the
+    // walk had not reached still holding what it took. Marked done all the
+    // same, the tree stopped saying it needed disposing of -- so the next
+    // `init()` replaced it, and everything the walk never reached became
+    // unreachable.
+    test('leaves the tree still asking to be disposed of', () async {
+      final log = <String>[];
+      final dependencies = TwoDisposersDependencies(log);
+
+      await dependencies.init(null).drain<void>();
+
+      // Stopped after the first path arrives, which is one child in.
+      final subscription = dependencies.root.dispose().listen(null);
+      await Future<void>.delayed(Duration.zero);
+      await subscription.cancel();
+
+      expect(
+        dependencies.root.disposalRequired,
+        isTrue,
+        reason: 'the walk was stopped, and what it never reached is still '
+            'holding what it took',
+      );
+      await expectLater(
+        dependencies.init(null).drain<void>(),
+        throwsA(isA<StateError>()),
+        reason: 'so a second init() is refused rather than quietly replacing '
+            'a tree nobody can reach any more',
+      );
+    });
+  });
+
+  group('ScopeAutoDependencies a leaf that registered only unmount', () {
+    // `unmount` is a documented way to hold something -- a subscription is the
+    // usual one -- and `disposalRequired` asked only about `dispose`. A bare
+    // leaf as the root of a container therefore said it held nothing, and the
+    // next `init()` replaced it in silence: the `unmount` of the first run was
+    // never called at all.
+    test('is not replaced by a second init()', () async {
+      final log = <String>[];
+      final dependencies = UnmountOnlyDependencies(log);
+
+      await dependencies.init(null).drain<void>();
+
+      expect(
+        dependencies.root.disposalRequired,
+        isTrue,
+        reason: 'a hook that has to run is something to hold on to',
+      );
+      await expectLater(
+        dependencies.init(null).drain<void>(),
+        throwsA(isA<StateError>()),
+      );
+
+      dependencies.onUnmount();
+
+      expect(log, ['unmount #1']);
+    });
+  });
+
   group('ScopeAutoDependencies type argument', () {
     // The first type argument is the container itself, and naming a different
     // container there compiles: the bound only asks for *a* container. It used
@@ -2001,6 +2135,61 @@ final class HangingDisposeDependencies
         dep('holds', (dep) => dep.dispose = () => hang.future),
         dep('fails', (dep) => throw Exception('the second one failed')),
       ]);
+}
+
+/// A container whose one dependency parks its *disposer* on a gate.
+final class SlowDisposeDependencies
+    extends ScopeAutoDependencies<SlowDisposeDependencies, void> {
+  final Completer<void> gate;
+  final List<String> log;
+
+  SlowDisposeDependencies(this.gate, this.log);
+
+  @override
+  ScopeDependency buildDependencies(void context) => dep('slow', (dep) {
+        dep.dispose = () async {
+          log.add('dispose slow');
+          await gate.future;
+        };
+      });
+}
+
+/// A container of two dependencies, each with a disposer, so a walk can be
+/// stopped between them.
+final class TwoDisposersDependencies
+    extends ScopeAutoDependencies<TwoDisposersDependencies, void> {
+  final List<String> log;
+
+  TwoDisposersDependencies(this.log);
+
+  @override
+  ScopeDependency buildDependencies(void context) => sequential('', [
+        dep('a', (dep) => dep.dispose = () => log.add('dispose a')),
+        dep('b', (dep) {
+          dep.dispose = () async {
+            log.add('dispose b');
+            await Future<void>.delayed(const Duration(milliseconds: 20));
+          };
+        }),
+      ]);
+}
+
+/// A bare leaf as the root of a container, holding a subscription through
+/// `unmount` alone — the shape `disposalRequired` could not see.
+final class UnmountOnlyDependencies
+    extends ScopeAutoDependencies<UnmountOnlyDependencies, void> {
+  final List<String> log;
+
+  int _runs = 0;
+
+  UnmountOnlyDependencies(this.log);
+
+  @override
+  ScopeDependency buildDependencies(void context) {
+    final run = ++_runs;
+
+    return dep('held', (dep) => dep.unmount = () => log.add('unmount #$run'));
+  }
 }
 
 /// A container whose one dependency parks on a gate, so a second `init()` can

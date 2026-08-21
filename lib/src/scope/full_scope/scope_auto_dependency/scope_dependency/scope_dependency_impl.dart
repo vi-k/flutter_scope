@@ -21,8 +21,17 @@ final class _ScopeDependencyImpl with ScopeDependencyMixin {
   /// that resource whether it then succeeded, failed or was cancelled — and the
   /// promise is to release everything that was created. Asking the state
   /// instead let a failure keep whatever it had already taken.
+  ///
+  /// [ScopeDependencyHandle.unmount] counts as much as `dispose`: it is the
+  /// other documented way of holding something — a subscription, usually — and
+  /// a hook that still has to run is a thing to hold on to. Asked about
+  /// `dispose` alone, a bare leaf standing as the root of a container said it
+  /// held nothing, and the next `init()` replaced it in silence: the `unmount`
+  /// of the first run was never called at all.
   @override
-  bool get disposalRequired => !_isDisposalDone && _helper?.dispose != null;
+  bool get disposalRequired =>
+      !_isDisposalDone &&
+      (_helper?.dispose != null || _helper?.unmount != null);
 
   @override
   Stream<String> _runInit() async* {
@@ -54,10 +63,23 @@ final class _ScopeDependencyImpl with ScopeDependencyMixin {
 
   @override
   Stream<String> _runDispose() async* {
-    final disposer = _helper?.dispose;
-    if (disposer == null) {
+    final helper = _helper;
+    final disposer = helper?.dispose;
+    if (helper == null || disposer == null) {
       return;
     }
+
+    // Taken off before it is called, the way [onUnmount] above takes its own
+    // hook off, and for the same reason: "exactly once" then holds by
+    // construction rather than by which caller happens to arrive first. Left
+    // in place until the `finally`, as it was, the clearing came *after* the
+    // `await`, so a second `dispose()` arriving while the first was parked on
+    // the disposer read the same hook and ran it a second time — a second
+    // rollback, a second close, a second write.
+    //
+    // The hook alone: the handle itself is what answers `dep.name`, which the
+    // disposer may well read, and it is let go of below.
+    helper.dispose = null;
 
     try {
       final result = disposer();

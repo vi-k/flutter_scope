@@ -293,8 +293,18 @@ abstract base class ScopeAutoDependencies<T extends ScopeAutoDependencies<T, C>,
     _root?.onUnmount();
   }
 
+  /// The disposal that is running right now, joined rather than repeated.
+  ///
+  /// Cleared once it is over, so a later call runs again: a walk a caller
+  /// stopped halfway leaves the tree still asking to be disposed of, and a
+  /// second call has to be able to pick it up.
+  Future<void>? _disposal;
+
   @override
-  Future<void> dispose() async {
+  Future<void> dispose() =>
+      _disposal ??= _runDispose().whenComplete(() => _disposal = null);
+
+  Future<void> _runDispose() async {
     final dependencies = _root;
     if (dependencies == null) {
       return;
