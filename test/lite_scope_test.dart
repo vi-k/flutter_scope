@@ -83,6 +83,119 @@ void main() {
       },
     );
 
+    // The barrier is released by a `ScreenshotReplacer` that has to be mounted
+    // first, and everything between the decision to close and that mounting is
+    // a way of never getting there. Two of them below: the widget the package
+    // builds around the replacer, and the closing screen the user builds
+    // beside it.
+    //
+    // This is the shape the topic and `example/minimal` teach for a scope at
+    // the root of the application: each branch builds its own `MaterialApp`,
+    // and `wrapState` returns the app around the ready branch — so every
+    // `Directionality` in the tree is *below* this scope. The `Stack` the
+    // closing build wraps the ready branch in resolved its alignment through a
+    // `Directionality` above itself, of which there is none, so the first
+    // rebuild after `close()` threw while that `Stack` was being mounted.
+    testWidgets(
+      'completes for a root scope whose branches build the app themselves',
+      (tester) async {
+        await tester.pumpWidget(
+          const _CloseScope(init: _becomesReady, wrapInApp: true),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('ready'), findsOneWidget);
+
+        final element = _scopeOf(tester);
+
+        // Deliberately not awaited: before the fix this future never
+        // completes, so awaiting it would hang the whole run.
+        var isClosed = false;
+        unawaited(element.close().whenComplete(() => isClosed = true));
+
+        await settle(tester, until: () => isClosed);
+
+        expect(
+          isClosed,
+          isTrue,
+          reason: 'the documented shape of a root scope must not be the one '
+              'shape close() cannot finish in',
+        );
+      },
+    );
+
+    // The other way of never reaching the replacer, and this one is the user's
+    // own code: the closing screen is built in the same pass, and a screen
+    // that reads something already gone throws there. The teardown behind it
+    // is not that screen's to cancel — the whole of it, four stages, the
+    // `scopeKey` and the registration with the parent included.
+
+    testWidgets(
+      'completes when the closing screen refuses to build',
+      (tester) async {
+        await tester.pumpWidget(
+          _app(const _CloseScope(init: _becomesReady, failClosingBuild: true)),
+        );
+        await tester.pumpAndSettle();
+
+        final element = _scopeOf(tester);
+
+        var isClosed = false;
+        unawaited(element.close().whenComplete(() => isClosed = true));
+
+        await settle(tester, until: () => isClosed);
+
+        expect(
+          tester.takeException(),
+          isA<StateError>(),
+          reason: 'the failure is still reported',
+        );
+        expect(
+          isClosed,
+          isTrue,
+          reason: 'a closing screen that cannot be built is a screen nobody '
+              'sees, not a teardown nobody runs',
+        );
+      },
+    );
+
+    // The failure the guard around the closing build cannot see: a screen that
+    // is built without complaint and throws while it is being mounted. What
+    // covers it is the order of the two children -- the replacer is the first
+    // of them, so it is mounted, and its barrier released, before anything the
+    // closing screen does can be reached. That order is load-bearing rather
+    // than incidental, which is what this test is here to say.
+    testWidgets(
+      'completes when the closing screen refuses to mount',
+      (tester) async {
+        await tester.pumpWidget(
+          const _CloseScope(
+            init: _becomesReady,
+            wrapInApp: true,
+            failClosingMount: true,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final element = _scopeOf(tester);
+
+        var isClosed = false;
+        unawaited(element.close().whenComplete(() => isClosed = true));
+
+        await settle(tester, until: () => isClosed);
+
+        expect(
+          tester.takeException(),
+          isFlutterError,
+          reason: 'the failure is still reported',
+        );
+        expect(isClosed, isTrue, reason: 'and the teardown still ran');
+      },
+      // The violation this test is written for is raised while the closing
+      // screen is being mounted, and the `Stack` half-built around it is
+      // abandoned by the framework -- see [unmountableTree].
+      experimentalLeakTesting: unmountableTree,
+    );
+
     // `notifyDependents()` marks the element dirty *and* asks the next
     // rebuild to skip the subtree (`_shouldOnlyNotify`), so `updateChild`
     // returns the old child and the widget `buildOnReady()` just built is
@@ -1454,6 +1567,21 @@ final class _CloseScope
   /// on a scope that actually holds a key.
   final Object? testKey;
 
+  /// Makes every branch build its own [MaterialApp], the way the topic and
+  /// `example/minimal` build a root scope: `wrapState` returns the app, so
+  /// every [Directionality] in the tree is *below* this scope rather than
+  /// above it.
+  final bool wrapInApp;
+
+  /// Makes [_CloseScopeElement.buildOnClosing] fail, the way a closing screen
+  /// that reads something the teardown has already released does.
+  final bool failClosingBuild;
+
+  /// Makes [_CloseScopeElement.buildOnClosing] return a widget that fails
+  /// while it is being *mounted* rather than while it is being built — the one
+  /// failure the guard around the closing build cannot see.
+  final bool failClosingMount;
+
   const _CloseScope({
     super.key,
     required this.init,
@@ -1467,6 +1595,9 @@ final class _CloseScope
     this.body,
     this.disposeGate,
     this.testKey,
+    this.wrapInApp = false,
+    this.failClosingBuild = false,
+    this.failClosingMount = false,
   });
 
   @override
@@ -1524,11 +1655,35 @@ final class _CloseScopeElement extends LiteScopeElementBase<_CloseScope,
     await super.disposeScope();
   }
 
-  @override
-  Widget? buildOnWaiting() => const Text('waiting');
+  /// What the topic calls "a widget every branch needs": with no scope above
+  /// this one, the app is built by each branch rather than around them.
+  Widget _branch(Widget child) =>
+      widget.wrapInApp ? MaterialApp(home: child) : child;
 
   @override
-  Widget buildOnProgress(Object? progress) => const Text('initializing');
+  Widget wrapState(Widget child) => _branch(child);
+
+  @override
+  Widget? buildOnClosing() {
+    if (widget.failClosingBuild) {
+      throw StateError('buildOnClosing failed');
+    }
+    if (widget.failClosingMount) {
+      // Throws while it is being mounted rather than while it is being built:
+      // a bare `Stack` resolves its alignment through a `Directionality`, and
+      // under `wrapInApp` there is none above this point.
+      return const Stack();
+    }
+
+    return null;
+  }
+
+  @override
+  Widget? buildOnWaiting() => _branch(const Text('waiting'));
+
+  @override
+  Widget buildOnProgress(Object? progress) =>
+      _branch(const Text('initializing'));
 
   @override
   Widget buildOnError(
@@ -1536,7 +1691,7 @@ final class _CloseScopeElement extends LiteScopeElementBase<_CloseScope,
     StackTrace stackTrace,
     Object? progress,
   ) =>
-      const Text('error');
+      _branch(const Text('error'));
 
   @override
   _CloseScopeState createState() => createdState = _CloseScopeState();

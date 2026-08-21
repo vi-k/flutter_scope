@@ -233,40 +233,65 @@ abstract base class LiteScopeElementBase<
   /// Builds the ready branch, the state and its wrapper.
   ///
   /// From here on a notification no longer rebuilds the subtree.
+  ///
+  /// While a [close] is running this branch also carries the closing screen,
+  /// and the whole of it is guarded: the barrier [close] waits on is released
+  /// by the [ScreenshotReplacer] this build mounts, so a build that does not
+  /// finish is a teardown that never begins — not four stages skipped, but
+  /// the whole of it, the `scopeKey` and the registration with the parent
+  /// included. The failure still surfaces, as the [ErrorWidget] any failing
+  /// build turns into; what it no longer takes with it is the teardown behind
+  /// it.
   @mustCallSuper
   Widget buildOnReady() {
     _autoSelfDependence = false;
 
-    final child = wrapState(
-      _LiteScopeCoreWidget<W, E, S>(
-        key: _globalStateKey,
-        createState: _createState,
-      ),
-    );
+    Widget buildState() => wrapState(
+          _LiteScopeCoreWidget<W, E, S>(
+            key: _globalStateKey,
+            createState: _createState,
+          ),
+        );
 
-    return switch (_screenshotCompleter) {
-      null => child,
-      _ => Stack(
-          children: [
-            ScreenshotReplacer(
-              onCompleted: _completeScreenshot,
-              child: child,
-            ),
-            Positioned.fill(
-              child: buildOnClosing() ??
-                  ColoredBox(
-                    color: Theme.of(this)
-                        .colorScheme
-                        .surface
-                        .withValues(alpha: 0.8),
-                    child: const Center(
-                      child: CircularProgressIndicator.adaptive(),
-                    ),
+    if (_screenshotCompleter == null) {
+      return buildState();
+    }
+
+    try {
+      return Stack(
+        // Not the default `AlignmentDirectional.topStart`, which a bare
+        // `Stack` resolves through a `Directionality` *above* itself. A scope
+        // at the root of the application builds the app inside each of its
+        // branches -- the shape the topic and `example/minimal` teach -- so
+        // every `Directionality` in the tree is below this point and there is
+        // nothing here to resolve against: the first rebuild after `close()`
+        // threw while this `Stack` was being mounted. Nothing is aligned
+        // either way, the one child that is not positioned being what the
+        // stack takes its size from.
+        alignment: Alignment.topLeft,
+        children: [
+          ScreenshotReplacer(
+            onCompleted: _completeScreenshot,
+            child: buildState(),
+          ),
+          Positioned.fill(
+            child: buildOnClosing() ??
+                ColoredBox(
+                  color:
+                      Theme.of(this).colorScheme.surface.withValues(alpha: 0.8),
+                  child: const Center(
+                    child: CircularProgressIndicator.adaptive(),
                   ),
-            ),
-          ],
-        ),
-    };
+                ),
+          ),
+        ],
+      );
+      // ignore: avoid_catching_errors
+    } on Object {
+      _completeScreenshot();
+
+      rethrow;
+    }
   }
 
   S _createState() => _state = createState().._scopeElement = this as E;

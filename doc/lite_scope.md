@@ -173,6 +173,17 @@ never painted — inside an `Offstage`, or in the unselected branch of an
 `IndexedStack` — cannot be captured either; after `ScreenshotReplacer.maxRetries`
 frames `close()` proceeds and `buildOnClosing` is drawn over the live subtree.
 
+A closing build that fails does not hold the teardown up either. The barrier is
+released by the `ScreenshotReplacer` that build mounts, so a `wrapState` or a
+`buildOnClosing` that throws used to mean a `close()` that never completed and
+four stages that never began. Such a failure now surfaces as the `ErrorWidget`
+any failing build turns into, and the teardown behind it goes on.
+
+The default closing overlay reads its colour from the theme **above** the
+scope, which for a scope at the root of the application — one whose `wrapState`
+builds the `MaterialApp` — is `ThemeData.fallback()`. Write `buildOnClosing`
+there, which is what a root scope wants anyway.
+
 Calling `close()` twice does not restart anything: the second call joins the
 disposal already running rather than installing a second barrier.
 

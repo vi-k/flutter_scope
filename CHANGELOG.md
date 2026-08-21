@@ -1031,6 +1031,23 @@
   `FlutterError.reportError` and no further, which is the trade the rest of the
   teardown already makes. The `close()` path is unchanged: there a caller
   exists, and it still hears it.
+* Fix `close()` never completing when the build that starts it failed. The
+  barrier `close()` waits on is released by the `ScreenshotReplacer` that the
+  closing build mounts, so anything that stops that build from finishing was a
+  teardown that never began at all — not four stages skipped, but the whole of
+  it, the `scopeKey` and the registration with the parent included, while
+  Flutter's own `State.dispose` had already run under the `ErrorWidget`. The
+  closing build is now guarded and releases the barrier before the failure goes
+  on to the boundary above.
+  The reachable trigger was the package's own: the ready branch was wrapped in
+  a bare `Stack`, which resolves its alignment through a `Directionality`
+  *above* itself, and a scope at the root of the application builds the
+  `MaterialApp` inside its own branches — so every `Directionality` in the tree
+  is below that point and the first rebuild after `close()` threw while the
+  `Stack` was being mounted. That `Stack` now aligns with `Alignment.topLeft`,
+  which needs none; nothing is aligned by it either way. The `LiteScope` topic
+  says both, and says that the default closing overlay reads the theme above
+  the scope, which for such a root scope is `ThemeData.fallback()`.
 * `ScopeController.performDispose()` runs `dispose` even when `onUnmount`
   threw. The two stages were chained, so a synchronous half that failed left
   everything the controller had taken held — and `_disposeCompleter` was

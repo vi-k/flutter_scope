@@ -17,6 +17,10 @@ import 'package:leak_tracker_flutter_testing/leak_tracker_flutter_testing.dart';
 /// An exception thrown from `build` does not do this; the tree unmounts as
 /// usual.
 ///
+/// Inflating a *new* subtree behaves like the update rather than like the
+/// build: the element being mounted when the throw happened is abandoned
+/// half-built, and the exemption covers that case too.
+///
 /// Nothing there is scopo's to release, and no amount of settling reaches it.
 /// Checked by probe: twenty lines of plain Flutter -- a `StatefulWidget` whose
 /// `didUpdateWidget` throws, then `pumpWidget(SizedBox())` -- leak seven
