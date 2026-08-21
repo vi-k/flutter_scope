@@ -116,24 +116,22 @@ final class _ScreenshotReplacerState extends State<ScreenshotReplacer> {
   ///
   /// Retrying does not report completion: the screenshot does not exist yet,
   /// so whoever waits for it must keep waiting. Giving up does, so that the
-  /// caller is never left waiting forever; an [error] that survived every
-  /// retry is reported once, non-fatally — the screenshot is an embellishment,
-  /// and failing to take it must not bring the application down.
+  /// caller is never left waiting forever.
   ///
   /// Giving up also takes the child away, which is the half that is not an
   /// embellishment: see [ScreenshotReplacer.maxRetries].
-  void _retryOrGiveUp({Object? error, StackTrace? stackTrace}) {
+  ///
+  /// **Nothing is reported.** An error that survived every retry used to go
+  /// to [FlutterError.reportError], and the case it reported was the one this
+  /// class documents as ordinary: a subtree that is never painted cannot be
+  /// captured. In debug the pre-check above catches that before `toImage` is
+  /// ever reached, so the report only ever happened in release — a line in a
+  /// crash reporter for a situation the developer could not see happening, and
+  /// one that is not a failure of the application at all. What did happen is
+  /// said the way it is always said, through [ScreenshotReplacer.onCompleted]
+  /// and the absence of a picture.
+  void _retryOrGiveUp() {
     if (_retries >= ScreenshotReplacer.maxRetries) {
-      if (error != null) {
-        FlutterError.reportError(
-          FlutterErrorDetails(
-            exception: error,
-            stack: stackTrace,
-            library: 'scopo',
-            context: ErrorDescription('while capturing a screenshot'),
-          ),
-        );
-      }
       // Before the report, so a caller told that the screenshot is no longer
       // pending finds the subtree already on its way out rather than still
       // standing.
@@ -163,7 +161,8 @@ final class _ScreenshotReplacerState extends State<ScreenshotReplacer> {
     // enabled, so this pre-check exists in debug builds alone. In release and
     // profile builds a boundary that has not been painted yet is detected by
     // [RenderRepaintBoundary.toImage] failing below, and is retried the same
-    // way.
+    // way. There is no release-safe question to ask instead: what `toImage`
+    // dereferences is [RenderObject.layer], and that getter is `@protected`.
     var needsPaint = false;
     assert(() {
       needsPaint = boundary?.debugNeedsPaint ?? false;
@@ -184,10 +183,13 @@ final class _ScreenshotReplacerState extends State<ScreenshotReplacer> {
       image = await boundary.toImage(
         pixelRatio: MediaQuery.of(context).devicePixelRatio,
       );
-    } on Object catch (error, stackTrace) {
+      // ignore: avoid_catching_errors
+    } on Object {
       // In release and profile builds this is what a not-yet-painted boundary
-      // looks like, so it is retried rather than reported at once.
-      _retryOrGiveUp(error: error, stackTrace: stackTrace);
+      // looks like -- the pre-check above is debug-only -- so it is retried,
+      // and if the retries run out it is not reported either: see
+      // [_retryOrGiveUp].
+      _retryOrGiveUp();
 
       return;
     }

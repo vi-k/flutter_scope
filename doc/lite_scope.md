@@ -91,7 +91,7 @@ scope, so it may only touch what the state holds in its own fields.
 
 There are two phases, and they are not the same thing.
 
-`LiteScope.init()` on the **widget** is a pre-initialization: a stream of
+`LiteScope.initScope()` on the **widget** is a pre-initialization: a stream of
 `AsyncScopeInitState`, exactly as in the `AsyncScope` topic, running *before*
 the state is created. Its default yields `AsyncScopeReady()` at once, which is
 why most scopes never override it. Override it when something has to be ready

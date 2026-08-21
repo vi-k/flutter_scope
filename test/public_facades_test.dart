@@ -155,11 +155,12 @@ void main() {
 
     // `buildOnProgress` and `buildOnError` are optional here, and rightly
     // so: a `LiteScope` initializes nothing of its own, so most of them have
-    // no progress branch to build. Overriding `init()` is what gives them
+    // no progress branch to build. Overriding `initScope()` is what gives them
     // one, and the defaults left behind then throw rather than show a blank
     // screen. What they throw has to say which method is missing — a bare
-    // `UnimplementedError` names neither the method nor the scope.
-    testWidgets('says which builder is missing when init() is overridden',
+    // `UnimplementedError` names neither the method nor the scope — and it has
+    // to name the method by the name it actually has.
+    testWidgets('says which builder is missing when initScope() is overridden',
         (tester) async {
       await tester.pumpWidget(_wrap(const _HalfWritten()));
       await tester.pump();
@@ -171,7 +172,7 @@ void main() {
           'message',
           allOf(
             contains('buildOnProgress'),
-            contains('init()'),
+            contains('initScope()'),
             contains('_HalfWritten'),
           ),
         ),

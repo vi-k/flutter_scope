@@ -72,6 +72,14 @@ base mixin _ScopeModelElementMixin<W extends _ScopeModelBaseMixin<M>,
   /// ignored the one it was handed, and left nothing to ever release the
   /// first.
   ///
+  /// **"Refuses" here means an assertion, and an assertion is debug-only.** In
+  /// a release build the switch still happens, and it still ends the two ways
+  /// above: a leaked model with a listener pointing at it, or a null check on
+  /// a `value` that is gone. Nothing repairs it at runtime, because there is
+  /// nothing honest to repair it with — see the paragraph above — so what a
+  /// release build is left with is what the assertion is there to keep out of
+  /// it. Test in debug, where it is loud.
+  ///
   /// To change the mode, give the widget a different [Widget.key]: the
   /// framework then builds a new element, which reads the mode afresh and
   /// releases what the old one owned.

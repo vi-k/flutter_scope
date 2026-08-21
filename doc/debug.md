@@ -171,17 +171,23 @@ else can be handed go to `FlutterError.reportError`. Leaving
 
 ### What `onTimeout` covers
 
-Every bounded wait reports an expiry through the observer — all six of them —
+Every bounded wait reports an expiry through the observer — all seven of them —
 and `what` names the one that expired:
 
 | `what` | the wait |
 | --- | --- |
 | `access to its scopeKey` | a scope queued behind the previous one on the same key |
 | `its own teardown` | a scope waiting out `disposeScope` |
+| `its state to be disposed of` | the first half of that wait on a `Scope`, which has two |
+| `its dependencies to be disposed of` | and the second half |
 | `its initialization to be cancelled` | a teardown that arrived while the initialization was still running |
 | `its controller to be released` | an `AsyncControllerScope` giving back a controller its own initialization never handed over |
 | `its child scopes` | a parent waiting for the scopes below it |
 | `the disposal` | a dependency container waiting for the tree it built to be released |
+
+Seven rows and eight labels: a `Scope` has two steps behind `disposeScope` and
+bounds each of them, so it reports one of the middle two rather than
+`its own teardown`, which is what every other family reports.
 
 An expiry is never announced through the observer alone. The first two of
 these also reach `onScopeKeyTimeout` and `onWaitForChildrenTimeout` — the
@@ -301,8 +307,8 @@ once per refused call, and the first one runs to its end.
 
 ## Timeouts
 
-Four waits in the scope lifecycle are bounded by a timeout, and all four
-defaults live in `ScopeConfig`:
+Four kinds of wait in the scope lifecycle are bounded by a timeout, and all
+four defaults live in `ScopeConfig`:
 
 - `ScopeConfig.defaultScopeKeyTimeout` — how long a scope waits for its
   `scopeKey` to be released by the previous owner;
@@ -321,7 +327,8 @@ the scope then proceeds as if the wait had succeeded — so a dependency that
 never completes its disposal degrades into a delay plus an error report instead
 of a deadlock.
 
-A fifth wait shares one of these defaults and takes no override of its own.
+Two more waits share one of these defaults. The first takes no override of its
+own.
 When the initialization of a `Scope` fails, the dependency container releases
 what it had already built, and that release is bounded by
 `ScopeConfig.defaultDisposeScopeTimeout` rather than by the `disposeScopeTimeout`
@@ -331,6 +338,14 @@ bounded at all because it is the path of a failed initialization — nothing
 downstream sees that failure until the container lets go, so a disposer that
 never finishes leaves the scope above showing its loading branch with nothing
 on screen and nothing in the console.
+
+The second is the other half of the teardown of a `Scope`, and it does take the
+override. `disposeScope` is one method there and two steps — the state's own
+teardown, and then the container's — and each is bounded by
+`disposeScopeTimeout` of its own rather than by what the first left of the
+other. So a teardown where both steps hang reports two expiries and calls
+`onDisposeScopeTimeout` twice: two steps were given up on. Every other family
+has one step behind that method and one limit around it.
 
 All four are measured on real time rather than on the clock of the zone the
 teardown runs in, which is what a widget test replaces with a fake one. A hang

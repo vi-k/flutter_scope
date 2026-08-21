@@ -218,7 +218,9 @@ A subtree that is never painted — inside an `Offstage`, or in the unselected
 branch of an `IndexedStack` — cannot be captured. The attempt is therefore
 bounded by `ScreenshotReplacer.maxRetries` frames, after which `onCompleted` is
 called anyway — and the child is taken away all the same, with nothing in the
-picture's place. Giving up on the picture is not giving up on replacing the
+picture's place. Nothing is reported: that is the case this widget documents as
+ordinary, and `onCompleted` together with the absence of a picture is how it is
+said. Giving up on the picture is not giving up on replacing the
 child: what waits on `onCompleted` waits in order to let go of whatever the
 child holds, and a child left standing gives that caller the report without the
 thing it was reported for. `onCompleted` fires exactly once per state,

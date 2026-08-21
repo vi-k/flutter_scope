@@ -1031,6 +1031,31 @@
   `FlutterError.reportError` and no further, which is the trade the rest of the
   teardown already makes. The `close()` path is unchanged: there a caller
   exists, and it still hears it.
+* `ScreenshotReplacer` no longer reports a failed capture through
+  `FlutterError.reportError` when it gives up. The case it reported is the one
+  the widget documents as ordinary — a subtree that is never painted cannot be
+  captured — and in debug the pre-check catches it before `toImage` is reached,
+  so the report only ever happened in release: a line in a crash reporter for
+  something the developer could not see happening, and not a failure of the
+  application at all. `onCompleted` and the absence of a picture say what
+  happened.
+* The dartdoc of the four timeout parameters of `Scope` and `LiteScope` says
+  what the three asynchronous families' already did: which `ScopeConfig`
+  default each takes, that `ScopeTimeout.none` removes the limit for one scope,
+  that `initCancellationTimeout` is the one that refuses it, and what happens
+  when a wait expires. On `Scope`, `disposeScopeTimeout` also says that it
+  bounds two steps rather than one.
+* The dartdoc of the constructor-mode check on `ScopeModel` and `ScopeNotifier`
+  says that "refuses" means an assertion, and an assertion is debug-only: in
+  release the switch still happens and still ends in a leaked model or a null
+  check on a `value` that is gone. There is nothing honest to repair it with at
+  runtime, which is the reason the check is where it is.
+* The error a `LiteScope` throws for a missing branch names `initScope()`, the
+  method that exists, rather than `init()`, which is a different hook. The
+  `LiteScope` topic said the same thing in the same place.
+* The `debug` topic counts the bounded waits the same way in both places it
+  mentions them, and lists all of them: the two a `Scope` reports for the two
+  steps behind `disposeScope` were missing from the table.
 * Fix `PreviousNavigatorExtension.previous` throwing for a `NavigatorState`
   whose tree is gone. The guard was written the wrong way round — `State.context`
   asserts on an unmounted state, so asking the *context* whether it is mounted

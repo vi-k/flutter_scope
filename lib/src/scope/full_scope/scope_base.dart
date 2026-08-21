@@ -50,31 +50,59 @@ abstract base class Scope<W extends Scope<W, D, S>, D extends ScopeDependencies,
   /// A key used to synchronize the initialization of the scope.
   final Object? scopeKey;
 
-  /// The timeout duration for the [scopeKey] before it triggers
-  /// [onScopeKeyTimeout].
+  /// How long to wait for [scopeKey]; `null` takes the default.
+  ///
+  /// Defaults to [ScopeConfig.defaultScopeKeyTimeout]; [ScopeTimeout.none]
+  /// removes the limit for this scope alone.
   final Duration? scopeKeyTimeout;
 
-  /// A callback invoked when the [scopeKeyTimeout] expires.
+  /// Called when the wait for [scopeKey] expires.
+  ///
+  /// The expiry is reported through [FlutterError.reportError] either way,
+  /// and the scope proceeds as if the wait had succeeded.
   final void Function()? onScopeKeyTimeout;
 
-  /// The timeout duration for cancelling the initialization during the
-  /// teardown, before it triggers [onInitCancellationTimeout].
+  /// How long the teardown waits for the initialization to be cancelled;
+  /// `null` takes the default.
+  ///
+  /// Defaults to [ScopeConfig.defaultInitCancellationTimeout]. This is the one
+  /// timeout that refuses [ScopeTimeout.none], with an assert: a cancellation
+  /// waits for a generator to run out, and one suspended on a future that
+  /// never completes never does. Removing this limit is a decision for the
+  /// whole application, and it is made there.
   final Duration? initCancellationTimeout;
 
-  /// A callback invoked when the [initCancellationTimeout] expires.
+  /// Called when the wait for the cancellation expires.
+  ///
+  /// The expiry is reported through [FlutterError.reportError] either way,
+  /// and the teardown goes on without the initialization.
   final void Function()? onInitCancellationTimeout;
 
-  /// The timeout duration for the asynchronous teardown of this scope, before
-  /// it triggers [onDisposeScopeTimeout].
+  /// How long to wait for each half of the teardown; `null` takes the default.
+  ///
+  /// Defaults to [ScopeConfig.defaultDisposeScopeTimeout]; [ScopeTimeout.none]
+  /// removes the limit for this scope alone. There are two halves behind it —
+  /// `disposeStateAsync` of the state, and then the disposal of the dependency
+  /// container — and each is bounded by this on its own, so a teardown where
+  /// both hang reports two expiries.
   final Duration? disposeScopeTimeout;
 
-  /// A callback invoked when the [disposeScopeTimeout] expires.
+  /// Called when the wait for the teardown expires.
+  ///
+  /// The expiry is reported through [FlutterError.reportError] either way,
+  /// and the release goes on without waiting for the step to finish.
   final void Function()? onDisposeScopeTimeout;
 
-  /// The timeout duration for waiting to dispose child scopes.
+  /// How long to wait for the child scopes; `null` takes the default.
+  ///
+  /// Defaults to [ScopeConfig.defaultWaitForChildrenTimeout];
+  /// [ScopeTimeout.none] removes the limit for this scope alone.
   final Duration? waitForChildrenTimeout;
 
-  /// A callback invoked when the [waitForChildrenTimeout] expires.
+  /// Called when the wait for the child scopes expires.
+  ///
+  /// The expiry is reported through [FlutterError.reportError] either way,
+  /// and the teardown goes on without the children that never finished.
   final void Function()? onWaitForChildrenTimeout;
 
   /// An optional duration to pause after initialization is successful.
