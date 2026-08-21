@@ -278,6 +278,61 @@ void main() {
       );
     });
 
+    // The promise "a root node keeps a pop to itself" lives in two places, and
+    // only one of them was held down: `pop` was, `maybePop` was not, and
+    // removing the guard from it left the whole suite green. `maybePop` is the
+    // path the back arrow of an `AppBar` takes and the one a caller holding
+    // the `navigatorKey` takes, and on a root node it would push the pop out
+    // of the node and take the route the node stands on with it.
+    testWidgets('a root node keeps a maybePop to itself, not only a pop',
+        (tester) async {
+      final key = GlobalKey<NodeNavigatorState>();
+
+      await tester.pumpWidget(_RootNodeKeyHost(navigatorKey: key));
+      await tester.tap(find.text('go'));
+      await tester.pumpAndSettle();
+      expect(find.text('node content'), findsOneWidget);
+
+      final answered = await key.currentState!.maybePop();
+      await tester.pumpAndSettle();
+
+      expect(
+        answered,
+        isFalse,
+        reason: 'there was nothing of the node to give up, and a root node '
+            'does not go looking outside itself',
+      );
+      expect(
+        find.text('node content'),
+        findsOneWidget,
+        reason: "the route the node stands on is not the node's to give up",
+      );
+    });
+
+    // The one guard of the public `PreviousNavigatorExtension`, and it had no
+    // test: the walk starts from a context, and a caller that kept a
+    // `NavigatorState` past the life of its tree gets one that is gone. A
+    // public getter answers that rather than throwing out of an ancestor walk.
+    testWidgets('previous answers null for a navigator whose tree is gone',
+        (tester) async {
+      final key = GlobalKey<NodeNavigatorState>();
+
+      await tester.pumpWidget(_RootNodeKeyHost(navigatorKey: key));
+      await tester.tap(find.text('go'));
+      await tester.pumpAndSettle();
+
+      final navigator = key.currentState!;
+      expect(navigator.previous, isNotNull, reason: 'control: there is one');
+
+      await tester.pumpWidget(const SizedBox.shrink());
+
+      expect(
+        navigator.previous,
+        isNull,
+        reason: 'and nothing is thrown at a caller for holding on to it',
+      );
+    });
+
     testWidgets('system back respects a guarded route inside the node', (
       tester,
     ) async {
@@ -1324,6 +1379,38 @@ final class _DrawerScreen extends StatelessWidget {
         appBar: AppBar(title: const Text('node content')),
         drawer: const Drawer(child: Center(child: Text('drawer'))),
         body: const SizedBox.shrink(),
+      );
+}
+
+/// A root node reachable by its `navigatorKey`, so the two paths out of it —
+/// `pop` and `maybePop` — can be driven by hand.
+final class _RootNodeKeyHost extends StatelessWidget {
+  final GlobalKey<NodeNavigatorState> navigatorKey;
+
+  const _RootNodeKeyHost({required this.navigatorKey});
+
+  @override
+  Widget build(BuildContext context) => MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: Builder(
+              builder: (context) => TextButton(
+                onPressed: () => unawaited(
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (context) => NavigationNode(
+                        navigatorKey: navigatorKey,
+                        isRoot: true,
+                        child: const Text('node content'),
+                      ),
+                    ),
+                  ),
+                ),
+                child: const Text('go'),
+              ),
+            ),
+          ),
+        ),
       );
 }
 

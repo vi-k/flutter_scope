@@ -1031,6 +1031,29 @@
   `FlutterError.reportError` and no further, which is the trade the rest of the
   teardown already makes. The `close()` path is unchanged: there a caller
   exists, and it still hears it.
+* Fix `PreviousNavigatorExtension.previous` throwing for a `NavigatorState`
+  whose tree is gone. The guard was written the wrong way round — `State.context`
+  asserts on an unmounted state, so asking the *context* whether it is mounted
+  read it first and raised. It asks the state now, and answers `null`.
+* Fix a root `NavigationNode` letting a `maybePop` out of itself. "A root node
+  keeps a pop to itself" was honoured by `pop` and not by `maybePop`, which is
+  the path the back arrow of an `AppBar` takes and the one a caller holding the
+  `navigatorKey` takes: it would have pushed the pop out of the node and taken
+  the route the node stands on with it.
+* `NavigationNode.onPop` is asked wherever the press reaches the node, a node
+  with no navigator above it included. It used to be skipped when there was
+  nothing outside to hand a pop to, which made the promise wider than the code:
+  the hook is where an application decides what its own outermost back means,
+  and a root node's `true` was already documented as taking nothing.
+* `PopEntry.onPopInvoked` is a no-op rather than an `UnimplementedError`. It is
+  the deprecated half of the pair and the framework's own is empty; raising
+  from it made the node refuse to be a `PopEntry` at all in any version that
+  still calls it.
+* The dartdoc of `onPop` and the `utils` topic say what the hook actually
+  answers: every pop the route is *asked* about — the system back,
+  `Navigator.maybePop()`, and the back arrow of an `AppBar` above the node as
+  much as one inside it — and not `Navigator.pop()`, which takes the route
+  rather than asking and consults no `PopEntry`.
 * Fix a notification made from the build of a *descendant* being refused. The
   guard that defers such a notification asked whether *this* element was
   rebuilding, and a model touched from a descendant's build — a lazy load, a

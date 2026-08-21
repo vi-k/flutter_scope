@@ -28,7 +28,15 @@ final class NavigationNode extends StatefulWidget {
   /// key in a `State` field rather than writing `GlobalKey()` inside `build`.
   final GlobalKey<NodeNavigatorState>? navigatorKey;
 
-  /// Intercepts the system back gesture.
+  /// Answers a pop the route this node stands on is *asked* about.
+  ///
+  /// The system back is the usual one, and not the only one: the node is a
+  /// [PopEntry] of that route, so everything that asks the route reaches here
+  /// — `Navigator.maybePop()`, and the back arrow of an `AppBar` **above** the
+  /// node as much as one inside it. What does not reach here is
+  /// `Navigator.pop()`: it takes the route rather than asking it, and no
+  /// [PopEntry] of any kind is consulted. If a screen has a button of its own
+  /// that must go through this hook, give it `maybePop`.
   ///
   /// Return `true` to let the pop through, `false` to keep the route, or a
   /// [Future] to decide after asking — a confirmation dialog, usually. The
@@ -116,7 +124,12 @@ final class _NavigationNodeState extends State<NavigationNode> {
   /// Whether an [NavigationNode.onPop] is still deciding about a press.
   bool _deciding = false;
 
-  NodeNavigatorState get _navigator => _navigatorKey.currentState!;
+  /// The nested navigator, or `null` when the node is not on the tree.
+  ///
+  /// Nullable rather than `!`: a node that is gone answers for itself — its
+  /// key resolves to nothing — and every other read of this key in the file is
+  /// already written that way.
+  NodeNavigatorState? get _navigator => _navigatorKey.currentState;
 
   /// The page list the nested navigator is handed, kept rather than rebuilt.
   ///
@@ -176,12 +189,20 @@ final class _NavigationNodeState extends State<NavigationNode> {
     // A decision already under way is the answer to this press too. Nothing
     // queues: a second back while a confirmation is on screen must not ask a
     // second time, and two answers of `true` must not take two routes.
-    if (_deciding || _navigator.previous == null) {
+    //
+    // Whether there is a navigator above is *not* asked here, and used to be.
+    // The hook is documented to be asked wherever the press reaches the node —
+    // a root node included, where it is asked for the press itself and `true`
+    // takes nothing — so refusing to ask it because there is nothing outside
+    // to hand a pop to made the promise wider than the code. What the pop is
+    // handed to is [_popOutside]'s question, and it asks it null-safely.
+    final navigator = _navigator;
+    if (_deciding || navigator == null) {
       return;
     }
 
     // ignore: discarded_futures
-    switch (widget.onPop?.call(_navigator.context, result)) {
+    switch (widget.onPop?.call(navigator.context, result)) {
       case final Future<bool> future:
         _deciding = true;
         final route = ModalRoute.of(outerContext);
@@ -379,8 +400,16 @@ final class _NodeBackDispatcherState extends State<_NodeBackDispatcher>
           !_innerCanPop &&
           !widget.node._handlesBackInside);
 
+  /// Nothing, the way [PopEntry.onPopInvoked] is nothing.
+  ///
+  /// It is the deprecated half of the pair, replaced by
+  /// [onPopInvokedWithResult], and the framework's own implementation is empty.
+  /// Raising from it made this class refuse to be a `PopEntry` in any version
+  /// of Flutter that still calls it — for a method the package has nothing to
+  /// say through.
+  @Deprecated('Use onPopInvokedWithResult instead')
   @override
-  void onPopInvoked(bool didPop) => throw UnimplementedError();
+  void onPopInvoked(bool didPop) {}
 
   @override
   void onPopInvokedWithResult(bool didPop, Object? result) {
@@ -393,7 +422,7 @@ final class _NodeBackDispatcherState extends State<_NodeBackDispatcher>
       // whether its top route accepts it. Nothing outside the node moves, so
       // onPop and isRoot stay out of this.
       // ignore: discarded_futures
-      widget.node._navigator._popInside(result);
+      widget.node._navigator?._popInside(result);
 
       return;
     }
@@ -604,14 +633,22 @@ extension PreviousNavigatorExtension on NavigatorState {
   ///
   /// This is how a [NavigationNode] forwards a pop it cannot handle itself.
   NavigatorState? get previous {
-    NavigatorState? prevNavigator;
-
-    if (context.mounted) {
-      context.visitAncestorElements((element) {
-        prevNavigator = Navigator.maybeOf(element);
-        return false;
-      });
+    // [State.mounted] before [State.context], and not the `mounted` of the
+    // context: `State.context` asserts on a state whose element is gone, so
+    // asking the context whether it is mounted reads it first and throws --
+    // the guard could only ever have held in a release build. A caller that
+    // kept a [NavigatorState] past the life of its tree gets `null` here, the
+    // way a getter answers rather than raising out of an ancestor walk.
+    if (!mounted) {
+      return null;
     }
+
+    NavigatorState? prevNavigator;
+    context.visitAncestorElements((element) {
+      prevNavigator = Navigator.maybeOf(element);
+
+      return false;
+    });
 
     return prevNavigator;
   }

@@ -137,6 +137,13 @@ the node. That is the node's doing: the page is the first route of its own
 navigator, so nothing about that navigator implies a way back. A root node draws
 no arrow there, since it keeps a pop to itself and there would be nowhere to go.
 
+`onPop` answers a pop the route is *asked* about, which is more than the system
+back and less than every pop. The node is a `PopEntry` of the route it stands
+on, so `Navigator.maybePop()` and the back arrow of an `AppBar` above the node
+reach the hook as much as a system back does. `Navigator.pop()` does not: it
+takes the route rather than asking it, and no `PopEntry` is consulted. A button
+of your own that has to go through the hook wants `maybePop`.
+
 A node stands aside for a press the route will handle by itself. A `Drawer` or a
 `showBottomSheet` above the node puts a local history entry on the route the
 node stands on, and a route asks its `PopEntry`s before it looks at that entry —
