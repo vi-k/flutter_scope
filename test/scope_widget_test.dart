@@ -391,6 +391,45 @@ void main() {
         reason: 'a scope updated by its parent still builds its subtree',
       );
     });
+
+    // The other side of the same rule. A notify-only rebuild hands back what
+    // the last real build made and leaves the child element alone -- which
+    // needs there to have been a real build. When the first one threw, the
+    // boundary above put an `ErrorWidget` in the subtree's place and the cache
+    // stayed empty; every notification after that built a fresh subtree,
+    // handed it to an `updateChild` that kept the `ErrorWidget` instead, and
+    // filled the cache with what it had just thrown away -- so the second
+    // notification did not even build. The scope was frozen on the error for
+    // the rest of its life, and only a rebuild from above could bring it back.
+    testWidgets('a notification rebuilds a subtree the first build never made',
+        (tester) async {
+      await tester.pumpWidget(
+        const _Host(param: 'a', failFirstBuild: true),
+      );
+
+      expect(
+        tester.takeException(),
+        isA<StateError>(),
+        reason: 'the first build failed, and the boundary above showed it',
+      );
+      expect(find.byType(ErrorWidget), findsOneWidget);
+
+      (tester.element(find.byType(_CounterScope)) as _CounterScopeElement)
+          .bump();
+      await tester.pump();
+
+      expect(
+        find.text('1'),
+        findsOneWidget,
+        reason: 'with nothing cached there is nothing to hand back, so the '
+            'rebuild cannot be notify-only',
+      );
+      expect(
+        find.byType(ErrorWidget),
+        findsNothing,
+        reason: 'and the error branch is gone rather than there for good',
+      );
+    });
   });
 }
 
@@ -456,13 +495,14 @@ final class _InitReaderScopeElement
 /// notification.
 final class _Host extends StatelessWidget {
   final String param;
+  final bool failFirstBuild;
 
-  const _Host({required this.param});
+  const _Host({required this.param, this.failFirstBuild = false});
 
   @override
   Widget build(BuildContext context) => Directionality(
         textDirection: TextDirection.ltr,
-        child: _CounterScope(param: param),
+        child: _CounterScope(param: param, failFirstBuild: failFirstBuild),
       );
 }
 
@@ -470,7 +510,11 @@ final class _CounterScope
     extends ScopeWidgetCore<_CounterScope, _CounterScopeElement> {
   final String param;
 
-  const _CounterScope({required this.param});
+  /// Makes the very first `buildChild()` fail, the way a builder reading a
+  /// field the scope has not filled in yet does.
+  final bool failFirstBuild;
+
+  const _CounterScope({required this.param, this.failFirstBuild = false});
 
   @override
   _CounterScopeElement createScopeElement() => _CounterScopeElement(this);
@@ -525,9 +569,16 @@ final class _CounterScopeElement
   /// How many times the scope itself built its subtree.
   static int buildChildCount = 0;
 
+  /// Whether the one failure [_CounterScope.failFirstBuild] asks for is spent.
+  bool _firstBuildFailed = false;
+
   @override
   Widget buildChild() {
     buildChildCount++;
+    if (widget.failFirstBuild && !_firstBuildFailed) {
+      _firstBuildFailed = true;
+      throw StateError('the first build failed');
+    }
     // A subscription of the scope to itself. `notifyClients` runs it before
     // any dependent, so whatever it does to a notification it does to all of
     // them -- which is what makes the test below deterministic, where the

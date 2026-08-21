@@ -1031,6 +1031,17 @@
   `FlutterError.reportError` and no further, which is the trade the rest of the
   teardown already makes. The `close()` path is unchanged: there a caller
   exists, and it still hears it.
+* Fix a scope frozen on an `ErrorWidget` for the rest of its life after one
+  failed build. A rebuild made for a notification alone hands back what the
+  last real build produced and leaves the child element as it is — which needs
+  there to have been a real build. When the first one threw, the boundary above
+  put an `ErrorWidget` in the subtree's place and the cache stayed empty: every
+  notification after that built a fresh subtree, handed it to an `updateChild`
+  that kept the `ErrorWidget` instead, and filled the cache with what it had
+  just thrown away, so the next notification did not even build. Only a rebuild
+  from the parent could bring the scope back. A rebuild with nothing cached is
+  no longer treated as notify-only. This is the layer every family is built on,
+  so it applies to all nine.
 * Fix `close()` never completing when the build that starts it failed. The
   barrier `close()` waits on is released by the `ScreenshotReplacer` that the
   closing build mounts, so anything that stops that build from finishing was a

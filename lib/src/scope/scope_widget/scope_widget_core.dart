@@ -544,7 +544,17 @@ abstract base class ScopeWidgetElementBase<W extends ScopeWidgetCore<W, E>,
       if (_notifyPending) {
         _notifyPending = false;
         notifyClients(widget);
-        _rebuildIsNotifyOnly = !autoSelfDependence && !_forceRebuild;
+        // `_builtChild` among the conditions, and not as a precaution: a
+        // notify-only rebuild hands back what the last real build made and
+        // leaves the child element alone, which needs there to have been one.
+        // With the cache empty -- a first build that threw, so the boundary
+        // above put an `ErrorWidget` in the subtree's place -- `build()` below
+        // builds a fresh subtree, `updateChild` keeps the `ErrorWidget`
+        // instead, and the cache is filled with what was just thrown away. The
+        // scope then stays on the error for the rest of its life: the next
+        // notification finds a cache and does not even build.
+        _rebuildIsNotifyOnly =
+            !autoSelfDependence && !_forceRebuild && _builtChild != null;
       }
 
       super.performRebuild();
@@ -631,6 +641,12 @@ abstract base class ScopeWidgetElementBase<W extends ScopeWidgetCore<W, E>,
     // returned was thrown away unlooked at. For a scope notified once a frame
     // that is the whole widget graph of its subtree, built and dropped, once
     // a frame.
+    //
+    // The empty cache is not a case any more: `performRebuild` will not call a
+    // rebuild notify-only without one. The pattern stays because it is how a
+    // nullable field is read without an assertion, and because reading the
+    // same fact twice costs nothing -- not because there is a path here where
+    // the flag is set and the cache is empty.
     if (_rebuildIsNotifyOnly) {
       if (_builtChild case final builtChild?) {
         return builtChild;
