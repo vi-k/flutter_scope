@@ -70,6 +70,23 @@ mixin ScopeDependencyMixin implements ScopeDependency, ScopeObservable {
   Stream<String> init() async* {
     assert(_state is ScopeDependencyInitial);
 
+    // [_state] cannot answer this: it stays [ScopeDependencyInitial] for the
+    // whole of the run below and leaves it only at the end, so a second call
+    // arriving while the first is parked on an `await` finds every check
+    // satisfied. A leaf has one [ScopeDependencyHandle], and running the
+    // initializer again replaces it -- along with the `unmount` and `dispose`
+    // the first run registered on it, which is everything that could ever give
+    // back what that run had taken.
+    if (_initializing) {
+      throw StateError(
+        '$wrappedName is initializing right now. A second `init()` would run '
+        'its initializer again and replace what the first one registered, so '
+        'whatever that run had already taken would be left with nothing to '
+        'release it. Await the initialization that is running.',
+      );
+    }
+    _initializing = true;
+
     try {
       yield* runStreamGuarded(
         _runInit,
@@ -81,12 +98,16 @@ mixin ScopeDependencyMixin implements ScopeDependency, ScopeObservable {
         _state = const ScopeDependencyInitialized();
       }
     } finally {
+      _initializing = false;
       // Catch the cancellation.
       if (_state is ScopeDependencyInitial) {
         _state = ScopeDependencyCancelled();
       }
     }
   }
+
+  /// Whether [init] is running right now.
+  bool _initializing = false;
 
   /// Automates the disposal process.
   ///

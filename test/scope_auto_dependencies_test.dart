@@ -1851,6 +1851,110 @@ void main() {
     );
   });
 
+  group('ScopeAutoDependencies concurrent init', () {
+    // `_prepareDependencies` refuses a second `init()` on a live tree, and the
+    // test above proves it. What it asked was whether the tree had left
+    // `ScopeDependencyInitial` -- and a tree that is initializing right now has
+    // not: that state is set at the very end of the run. So a second call
+    // arriving while the first was parked on an `await` was handed the same
+    // tree and started it again. The second run overwrote the one
+    // `ScopeDependencyHandle` of each dependency, and with it the `unmount` and
+    // `dispose` the first run had registered: what the first run took was left
+    // with nothing to release it.
+    test(
+      'a second init() while the first is still running is refused',
+      () async {
+        final gate = Completer<void>();
+        final log = <String>[];
+        final dependencies = SlowInitDependencies(gate, log);
+        addTearDown(() {
+          if (!gate.isCompleted) {
+            gate.complete();
+          }
+        });
+
+        final first = dependencies.init(null).drain<void>();
+        // One turn, so the initializer runs as far as its own `await`.
+        await Future<void>.delayed(Duration.zero);
+
+        // Not awaited before the gate is released: without the refusal the
+        // second run parks on the very same gate, so awaiting it here would
+        // hang the run rather than fail this test.
+        Object? refused;
+        final second = dependencies
+            .init(null)
+            .drain<void>()
+            .catchError((Object error) => refused = error);
+
+        gate.complete();
+        await first;
+        await second;
+
+        expect(
+          log,
+          ['init slow'],
+          reason: 'the initializer of a dependency runs once per tree',
+        );
+        expect(
+          refused,
+          isA<StateError>(),
+          reason: 'and the caller is told, rather than left believing it '
+              'started something',
+        );
+
+        await dependencies.dispose();
+
+        expect(
+          log,
+          ['init slow', 'dispose slow'],
+          reason: 'what the one run took is what the disposal gives back',
+        );
+      },
+      timeout: const Timeout(Duration(seconds: 10)),
+    );
+
+    // The same hole one layer down, and reachable without the container:
+    // `ScopeDependency` is public and `init()` is on its interface, so a tree
+    // driven by hand -- or a `ScopeDependencies` written against the interface
+    // rather than built by `ScopeAutoDependencies` -- never passes the guard
+    // above. The handle is the leaf's, so this is where the loss happens.
+    test(
+      'a dependency refuses a second init() while the first is running',
+      () async {
+        final gate = Completer<void>();
+        final log = <String>[];
+        addTearDown(() {
+          if (!gate.isCompleted) {
+            gate.complete();
+          }
+        });
+
+        final dependency = ScopeDependency('slow', (dep) async {
+          log.add('init slow');
+          dep.dispose = () => log.add('dispose slow');
+          await gate.future;
+        });
+
+        final first = dependency.init().drain<void>();
+        await Future<void>.delayed(Duration.zero);
+
+        Object? refused;
+        final second = dependency
+            .init()
+            .drain<void>()
+            .catchError((Object error) => refused = error);
+
+        gate.complete();
+        await first;
+        await second;
+
+        expect(log, ['init slow']);
+        expect(refused, isA<StateError>());
+      },
+      timeout: const Timeout(Duration(seconds: 10)),
+    );
+  });
+
   group('ScopeAutoDependencies type argument', () {
     // The first type argument is the container itself, and naming a different
     // container there compiles: the bound only asks for *a* container. It used
@@ -1897,6 +2001,23 @@ final class HangingDisposeDependencies
         dep('holds', (dep) => dep.dispose = () => hang.future),
         dep('fails', (dep) => throw Exception('the second one failed')),
       ]);
+}
+
+/// A container whose one dependency parks on a gate, so a second `init()` can
+/// arrive while the first is still running.
+final class SlowInitDependencies
+    extends ScopeAutoDependencies<SlowInitDependencies, void> {
+  final Completer<void> gate;
+  final List<String> log;
+
+  SlowInitDependencies(this.gate, this.log);
+
+  @override
+  ScopeDependency buildDependencies(void context) => dep('slow', (dep) async {
+        log.add('init slow');
+        dep.dispose = () => log.add('dispose slow');
+        await gate.future;
+      });
 }
 
 /// A container that names another one where it should name itself -- the

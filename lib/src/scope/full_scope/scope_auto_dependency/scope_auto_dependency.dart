@@ -92,9 +92,30 @@ abstract base class ScopeAutoDependencies<T extends ScopeAutoDependencies<T, C>,
       );
     }
 
+    // Asked before [_prepareDependencies], because that is what decides
+    // whether the tree is reused, and it decides by asking whether the tree
+    // has left [ScopeDependencyInitial] -- which a tree that is initializing
+    // right now has not: that state is set at the very end of the run. So a
+    // second call arriving while the first was parked on an `await` used to be
+    // handed the same tree and start it again, and each dependency has one
+    // handle: the second run replaced it, and with it the `unmount` and
+    // `dispose` the first run had registered. What the first run had already
+    // taken was left with nothing to release it.
+    if (_initializing) {
+      throw StateError(
+        '$T is initializing right now, and a second `init()` would run every '
+        'initializer of the same tree a second time -- each dependency has '
+        'one handle, so the `unmount` and `dispose` registered by the run '
+        'already going would be replaced and nothing would ever release what '
+        'it had taken. Await the initialization that is running, or dispose '
+        'of the container before initializing it again.',
+      );
+    }
+
     final dependencies = _prepareDependencies(context);
     final progressIterator = ProgressIterator(dependencies.count);
 
+    _initializing = true;
     try {
       notifyObserver((observer) => observer.onInit(this));
       yield* dependencies.init().map((path) {
@@ -155,8 +176,16 @@ abstract base class ScopeAutoDependencies<T extends ScopeAutoDependencies<T, C>,
           await _disposeBounded();
         }
       }
+
+      _initializing = false;
     }
   }
+
+  /// Whether [init] is running right now.
+  ///
+  /// The tree cannot answer this: it stays in [ScopeDependencyInitial] for the
+  /// whole of the run and leaves it only at the end.
+  bool _initializing = false;
 
   /// Awaits [dispose] with a limit, and gives up rather than holding the
   /// generator open for ever.

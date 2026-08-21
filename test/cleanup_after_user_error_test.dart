@@ -655,6 +655,58 @@ void main() {
   });
 
   group('Scope', () {
+    // The container is assigned inside the `map` the family wraps the
+    // initialization in, one step ahead of the "already initialized" check in
+    // the layer above: `map` runs as the event goes past, `asyncMap` only
+    // after it. A second `ScopeReady` therefore replaced the field before
+    // anything could refuse it -- the model stayed as it was, the dependents
+    // heard nothing, and the container the scope had actually been using was
+    // left with nobody to unmount or dispose of it. The neighbouring
+    // `AsyncDataScope` refuses the same thing in the same place, and has since
+    // before this was written.
+    testWidgets('a second ready neither replaces the container nor strands it',
+        (tester) async {
+      final log = <String>[];
+      final gate = Completer<void>();
+      final first = _PlainDeps(log: log, label: 'first');
+      final second = _PlainDeps(log: log, label: 'second');
+
+      await tester.pumpWidget(
+        _wrap(
+          _PlainDepScope(
+            log: log,
+            init: (context) async* {
+              yield ScopeReady(first);
+              await gate.future;
+
+              yield ScopeReady(second);
+            },
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      gate.complete();
+      await tester.pumpAndSettle();
+
+      expect(
+        tester.takeException(),
+        isA<StateError>(),
+        reason: 'a second ready is a mistake in the initialization, and the '
+            'scope says so instead of quietly acting on it',
+      );
+
+      await tester.pumpWidget(_wrap(const SizedBox.shrink()));
+      await settle(tester, until: () => log.contains('dispose deps first'));
+
+      expect(
+        log,
+        ['unmount deps first', 'dispose deps first'],
+        reason: 'what is torn down is the container the scope was given and '
+            'handed on, and the one it never used is not touched at all',
+      );
+    });
+
     // `unmount` on a dependency is the one hook that runs synchronously, in
     // the middle of the element leaving the tree. A failure there used to stop
     // the walk over the siblings and skip the base teardown behind it, so
@@ -1255,18 +1307,24 @@ final class _PlainDepScope
   final bool failOnStateUnmount;
   final bool failOnStateDispose;
 
+  /// Replaces the one-container default, so a test can write an
+  /// initialization of its own — one that reports ready more than once, say.
+  final Stream<ScopeInitState<Object, _PlainDeps>> Function(BuildContext)? init;
+
   const _PlainDepScope({
     required this.log,
     this.failOnDepsUnmount = false,
     this.failOnDepsDispose = false,
     this.failOnStateUnmount = false,
     this.failOnStateDispose = false,
+    this.init,
   }) : super(child: const SizedBox.shrink());
 
   @override
   Stream<ScopeInitState<Object, _PlainDeps>> initDependencies(
     BuildContext context,
   ) =>
+      init?.call(context) ??
       _PlainDeps(
         log: log,
         failOnUnmount: failOnDepsUnmount,
@@ -1295,15 +1353,23 @@ final class _PlainDeps implements ScopeDependencies {
   final bool failOnUnmount;
   final bool failOnDispose;
 
+  /// Tells two containers of one test apart in [log]; empty when there is only
+  /// one, so every test that has no use for it reads as it always did.
+  final String label;
+
   _PlainDeps({
     required this.log,
     this.failOnUnmount = false,
     this.failOnDispose = false,
+    this.label = '',
   });
+
+  String _line(String verb) =>
+      label.isEmpty ? '$verb deps' : '$verb deps $label';
 
   @override
   void onUnmount() {
-    log.add('unmount deps');
+    log.add(_line('unmount'));
     if (failOnUnmount) {
       throw StateError('the dependencies failed to unmount');
     }
@@ -1311,7 +1377,7 @@ final class _PlainDeps implements ScopeDependencies {
 
   @override
   FutureOr<void> dispose() {
-    log.add('dispose deps');
+    log.add(_line('dispose'));
     if (failOnDispose) {
       throw StateError('the dependencies failed to dispose');
     }

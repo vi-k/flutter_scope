@@ -1031,6 +1031,28 @@
   `FlutterError.reportError` and no further, which is the trade the rest of the
   teardown already makes. The `close()` path is unchanged: there a caller
   exists, and it still hears it.
+* Fix a second `ScopeReady` from a `Scope`'s own `initDependencies` replacing
+  the container before anything could refuse it. The field was assigned inside
+  the `map` the family wraps the initialization in, one step ahead of the
+  "already initialized" check in the layer above — `map` runs as the event goes
+  past, `asyncMap` only after it. The model stayed as it was and the dependents
+  heard nothing, but the container the scope had been using was gone from the
+  field: the teardown unmounted and disposed of the newcomer, and what the
+  scope had actually been running on was left with nobody to release it. The
+  second `ready` is now refused where the assignment is, which is where the
+  neighbouring `AsyncDataScope` has always refused it.
+* Fix two `ScopeAutoDependencies.init()` runs overlapping. A second `init()` on
+  a live tree was already refused, but the question asked was whether the tree
+  had left `ScopeDependencyInitial` — and a tree that is initializing right now
+  has not: that state is set at the very end of the run. A call arriving while
+  the first was parked on an `await` was therefore handed the same tree and
+  started it again. Each dependency has one `ScopeDependencyHandle`, so the
+  second run replaced it along with the `unmount` and `dispose` the first had
+  registered, and whatever that run had already acquired was left with nothing
+  to release it; worse, the second run's own teardown then tore the tree down
+  under the first. Both `ScopeAutoDependencies.init()` and
+  `ScopeDependency.init()` now refuse a call that arrives while one is running,
+  the second because a dependency tree driven by hand never passes the first.
 * Fix a scope frozen on an `ErrorWidget` for the rest of its life after one
   failed build. A rebuild made for a notification alone hands back what the
   last real build produced and leaves the child element as it is — which needs
