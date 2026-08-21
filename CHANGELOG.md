@@ -1031,6 +1031,23 @@
   `FlutterError.reportError` and no further, which is the trade the rest of the
   teardown already makes. The `close()` path is unchanged: there a caller
   exists, and it still hears it.
+* `NavigationNode` gains `enabled`, for the one shape where a node cannot work
+  out whether the press is its own: **several nodes on one route**, of which
+  one is on screen — a node per tab of an `IndexedStack`, which builds every
+  branch and shows one. A route asks each of its `PopEntry`s and calls each of
+  them back, so a single back press unwound the stack of every tab at once, the
+  hidden ones included. Which node is the one on screen cannot be found out
+  from inside: a hidden branch answers `TickerMode.of(context)` and
+  `ModalRoute.of(context)` exactly as a shown one does, and the order sibling
+  nodes register in says nothing. The application knows, and writes
+  `NavigationNode(enabled: i == tab, …)`. A disabled node takes no place on the
+  route — not asked, not called back — while its nested navigator keeps its
+  stack and goes on answering `Navigator.of(context)` from inside. Nodes nested
+  one inside another never need it: an inner node registers on the page of the
+  navigator above it rather than on the route both stand on. The ambiguity is
+  Flutter's own — two `PopScope`s on one route are both consulted — and this is
+  the same answer an application gives there. `README.md`, the `utils` topic
+  and the dartdoc all carry the reasoning.
 * Fix a `NavigationNode` with an `onPop` taking a system back that belonged to
   the route it stands on. A route asks its `PopEntry`s before it looks at its
   own local history, so an entry that says "do not pop" ends the matter — and

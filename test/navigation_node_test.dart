@@ -117,6 +117,71 @@ void main() {
       );
     });
 
+    // Several nodes on one route, of which one is on screen: a node per tab of
+    // an `IndexedStack`, which keeps the branches it does not show mounted. A
+    // route asks every `PopEntry` it has and calls every one of them back, so
+    // one press unwound the stack of every node on the route at once.
+    //
+    // Which one is on screen is not something a node can find out --
+    // `TickerMode` and `ModalRoute` read the same in a hidden branch as in a
+    // shown one -- so the application says it, and `enabled` is where.
+    testWidgets('a back press reaches only the node that is enabled',
+        (tester) async {
+      await tester.pumpWidget(const _TabbedNodesHost(useEnabled: true));
+
+      await tester.tap(find.text('push tab0'));
+      await tester.pumpAndSettle();
+      expect(find.text('tab0 inner'), findsOneWidget);
+
+      await tester.tap(find.text('switch'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('push tab1'));
+      await tester.pumpAndSettle();
+      expect(find.text('tab1 inner'), findsOneWidget);
+
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('tab1 inner'),
+        findsNothing,
+        reason: 'the node on screen took the press',
+      );
+      expect(
+        find.text('tab0 inner', skipOffstage: false),
+        findsOneWidget,
+        reason: 'and the hidden one kept its stack, though it is still '
+            'mounted and still holds a navigator of its own',
+      );
+    });
+
+    // The control, and the reason `enabled` exists: with both nodes taking
+    // part, the same press unwinds both stacks. This is Flutter's own
+    // behaviour for two `PopScope`s on one route, and it is what an
+    // application asks for by leaving `enabled` alone.
+    testWidgets('control: without it the press reaches both nodes',
+        (tester) async {
+      await tester.pumpWidget(const _TabbedNodesHost(useEnabled: false));
+
+      await tester.tap(find.text('push tab0'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('switch'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('push tab1'));
+      await tester.pumpAndSettle();
+
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+
+      expect(find.text('tab1 inner'), findsNothing);
+      expect(
+        find.text('tab0 inner', skipOffstage: false),
+        findsNothing,
+        reason: 'the hidden node was asked about the same press and acted on '
+            'it, which is the whole of the finding',
+      );
+    });
+
     // The same press, one layer up: the drawer belongs to the route the node
     // stands on rather than to a route inside it. A node with `onPop` said
     // `doNotPop` unconditionally, so the route never got as far as the local
@@ -1259,6 +1324,62 @@ final class _DrawerScreen extends StatelessWidget {
         appBar: AppBar(title: const Text('node content')),
         drawer: const Drawer(child: Center(child: Text('drawer'))),
         body: const SizedBox.shrink(),
+      );
+}
+
+/// Two nodes on one route, one per branch of an `IndexedStack` — the shape that
+/// keeps the branch it does not show mounted and registered.
+final class _TabbedNodesHost extends StatefulWidget {
+  /// Whether the nodes are told which of them is on screen.
+  final bool useEnabled;
+
+  const _TabbedNodesHost({required this.useEnabled});
+
+  @override
+  State<_TabbedNodesHost> createState() => _TabbedNodesHostState();
+}
+
+final class _TabbedNodesHostState extends State<_TabbedNodesHost> {
+  int _tab = 0;
+
+  @override
+  Widget build(BuildContext context) => MaterialApp(
+        home: Scaffold(
+          body: IndexedStack(
+            index: _tab,
+            children: [
+              for (var i = 0; i < 2; i++)
+                NavigationNode(
+                  enabled: !widget.useEnabled || i == _tab,
+                  child: _TabScreen(name: 'tab$i'),
+                ),
+            ],
+          ),
+          bottomNavigationBar: TextButton(
+            onPressed: () => setState(() => _tab = 1 - _tab),
+            child: const Text('switch'),
+          ),
+        ),
+      );
+}
+
+final class _TabScreen extends StatelessWidget {
+  final String name;
+
+  const _TabScreen({required this.name});
+
+  @override
+  Widget build(BuildContext context) => Center(
+        child: TextButton(
+          onPressed: () => unawaited(
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (context) => Center(child: Text('$name inner')),
+              ),
+            ),
+          ),
+          child: Text('push $name'),
+        ),
       );
 }
 

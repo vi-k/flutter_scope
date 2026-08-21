@@ -53,12 +53,47 @@ final class NavigationNode extends StatefulWidget {
   /// `SystemNavigator.pop()` the application makes on its own terms.
   final FutureOr<bool> Function(BuildContext context, Object? result)? onPop;
 
+  /// Whether this node takes part in the system back of the route it stands on.
+  ///
+  /// `true` by default, and there is one shape where it has to be told
+  /// otherwise: **several nodes on one route**, of which only one is on
+  /// screen — a node per tab of an `IndexedStack`, which keeps the branches it
+  /// does not show mounted. A route asks every one of its `PopEntry`s and
+  /// calls every one of them back, so a single back press unwound the stack of
+  /// every node on the route at once, the hidden ones included.
+  ///
+  /// Which node is the one on screen is not something a node can find out:
+  /// `TickerMode` and `ModalRoute` read exactly the same in a hidden branch as
+  /// in a shown one, and the order sibling nodes register in says nothing. The
+  /// application knows, and this is where it says so:
+  ///
+  /// ```dart
+  /// NavigationNode(
+  ///   enabled: index == _currentTab,
+  ///   child: TabScreen(),
+  /// )
+  /// ```
+  ///
+  /// A disabled node takes no place on the route at all — it is not asked, and
+  /// it is not called back. Everything else about it goes on working: the
+  /// nested navigator keeps its stack, and `Navigator.of(context)` from inside
+  /// still pushes and pops there.
+  ///
+  /// Nodes nested one inside another never need this. An inner node registers
+  /// on the page of the navigator above it rather than on the route both stand
+  /// on, so two of them are never asked about the same press.
+  ///
+  /// The same ambiguity is Flutter's own: two `PopScope`s on one route are both
+  /// consulted, and an application resolves it the same way.
+  final bool enabled;
+
   /// Creates a navigation node around [child].
   const NavigationNode({
     super.key,
     this.navigatorKey,
     this.isRoot = false,
     this.onPop,
+    this.enabled = true,
     required this.child,
   });
 
@@ -378,13 +413,30 @@ final class _NodeBackDispatcherState extends State<_NodeBackDispatcher>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    _syncPopEntry();
+  }
 
-    final nextRoute = ModalRoute.of(context);
-    if (nextRoute != _route) {
-      _route?.unregisterPopEntry(this);
-      _route = nextRoute;
-      _route?.registerPopEntry(this);
+  @override
+  void didUpdateWidget(_NodeBackDispatcher oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // `enabled` lives on the node's widget rather than on this one, so there
+    // is nothing here to compare it against -- what is compared is the route
+    // this is registered on, which is `null` while the node is disabled.
+    _syncPopEntry();
+  }
+
+  /// Takes a place on the route, or gives it up, following
+  /// [NavigationNode.enabled].
+  void _syncPopEntry() {
+    final nextRoute =
+        widget.node.widget.enabled ? ModalRoute.of(context) : null;
+    if (identical(nextRoute, _route)) {
+      return;
     }
+
+    _route?.unregisterPopEntry(this);
+    _route = nextRoute;
+    _route?.registerPopEntry(this);
   }
 
   @override

@@ -137,6 +137,35 @@ the node. That is the node's doing: the page is the first route of its own
 navigator, so nothing about that navigator implies a way back. A root node draws
 no arrow there, since it keeps a pop to itself and there would be nowhere to go.
 
+A node stands aside for a press the route will handle by itself. A `Drawer` or a
+`showBottomSheet` above the node puts a local history entry on the route the
+node stands on, and a route asks its `PopEntry`s before it looks at that entry —
+so a node that always said "do not pop" took a press whose whole job was to
+close a drawer, and with an `onPop` that refused, the drawer could not be closed
+with back at all. `ModalRoute.willHandlePopInternally` is what the node reads,
+at press time, and it means "somebody else's entry": the node gave up keeping
+one of its own precisely because a route reports only whether that list is
+empty.
+
+**`enabled` is for several nodes on one route**, of which one is on screen: a
+node per tab of an `IndexedStack`, which builds every branch and shows one. A
+route asks each of its `PopEntry`s and calls each of them back, so one press
+unwound the stack of every tab at once, the hidden ones included. Which node is
+the one on screen cannot be worked out from inside — a hidden branch answers
+`TickerMode.of(context)` and `ModalRoute.of(context)` exactly as a shown one
+does — so the application says it:
+
+```dart
+NavigationNode(enabled: i == _tab, child: tabs[i])
+```
+
+A disabled node takes no place on the route: it is not asked and it is not
+called back, while its nested navigator keeps its stack and goes on answering
+`Navigator.of(context)` from inside. Nodes nested one inside another never need
+this — an inner node registers on the page of the navigator above it rather than
+on the route both stand on. The ambiguity is Flutter's own: two `PopScope`s on
+one route are both consulted.
+
 `PreviousNavigatorExtension.previous` gives the navigator above a given one,
 which is how a node forwards a pop it cannot handle itself.
 
@@ -181,9 +210,13 @@ ScreenshotReplacer(
 A subtree that is never painted — inside an `Offstage`, or in the unselected
 branch of an `IndexedStack` — cannot be captured. The attempt is therefore
 bounded by `ScreenshotReplacer.maxRetries` frames, after which `onCompleted` is
-called anyway and the live child stays in place. `onCompleted` fires exactly
-once per state, whichever way it ended, including when the widget is removed
-from the tree first.
+called anyway — and the child is taken away all the same, with nothing in the
+picture's place. Giving up on the picture is not giving up on replacing the
+child: what waits on `onCompleted` waits in order to let go of whatever the
+child holds, and a child left standing gives that caller the report without the
+thing it was reported for. `onCompleted` fires exactly once per state,
+whichever way it ended, including when the widget is removed from the tree
+first.
 
 ## The two small ones
 

@@ -563,8 +563,54 @@ void main() {
 - `ScreenshotReplacer` — renders a subtree once, then replaces it with the
   captured image; used to keep the last frame while a scope is closing. A
   subtree that is never painted cannot be captured, so the attempt is bounded
-  by `ScreenshotReplacer.maxRetries`, after which `buildOnClosing` renders over
-  the live subtree instead.
+  by `ScreenshotReplacer.maxRetries`, after which the subtree is taken away
+  with nothing in the picture's place — waiting for the screenshot is how the
+  scope waits to let go of what that subtree holds, so leaving it standing
+  would defeat the wait.
+
+### One node per tab: `NavigationNode(enabled:)`
+
+A node takes part in the system back of the route it stands on. That is the
+whole point of it — a back press closes what the node has open before it
+touches the route around it — and it is fine as long as one node stands on a
+route.
+
+Tabs break that assumption. The usual shape keeps a node per tab in an
+`IndexedStack`, which builds every branch and shows one, so all of them are on
+the route at once. A route asks each of its `PopEntry`s and calls each of them
+back, so **one back press unwound the stack of every tab**, the hidden ones
+included: you pressed back on tab B and tab A quietly lost a screen.
+
+The node cannot work out which of them is the one on screen. A hidden branch of
+an `IndexedStack` — and an `Offstage` subtree — answers `TickerMode.of(context)`
+and `ModalRoute.of(context)` exactly as a shown one does, and the order sibling
+nodes register in says nothing about which is visible. The application knows,
+and `enabled` is where it says so:
+
+```dart
+IndexedStack(
+  index: _tab,
+  children: [
+    for (var i = 0; i < tabs.length; i++)
+      NavigationNode(
+        enabled: i == _tab,
+        child: tabs[i],
+      ),
+  ],
+)
+```
+
+A disabled node takes no place on the route: it is not asked and it is not
+called back. Everything else goes on working — its nested navigator keeps its
+stack, and `Navigator.of(context)` from inside still pushes and pops there, so
+switching back to the tab finds it where it was left.
+
+Nodes nested one inside another never need this: an inner node registers on the
+page of the navigator above it rather than on the route both stand on, so two of
+them are never asked about the same press.
+
+The ambiguity is Flutter's own — two `PopScope`s on one route are both consulted
+— and an application resolves it the same way.
 
 ## Examples
 
