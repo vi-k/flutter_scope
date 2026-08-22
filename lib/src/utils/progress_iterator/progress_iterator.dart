@@ -75,9 +75,16 @@ final class Progress {
   /// Between 0 and 1 whatever it was built from, since that is what a progress
   /// indicator is handed: a task of no steps at all is complete rather than
   /// the `NaN` of `0 / 0`, and a count that ran past its total reads as 1
-  /// rather than as `4/3`. The assertions above and in [ProgressIterator.addSteps]
-  /// are what say so out loud, and they are off in a release build.
-  double get value => total == 0 ? 1 : (number / total).clamp(0.0, 1.0);
+  /// rather than as `4/3`. The assertions above and in
+  /// [ProgressIterator.addSteps] are what say so out loud, and they are off in
+  /// a release build.
+  ///
+  /// [num.clamp] answers for all three, the empty task included: it compares
+  /// with [Comparable.compareTo], which treats `NaN` as the maximal double, so
+  /// `0 / 0` comes back as the upper limit. An explicit `total == 0` branch
+  /// stood here as well and said the same thing twice — no test could tell the
+  /// two apart, because there is no case where they disagree.
+  double get value => (number / total).clamp(0.0, 1.0);
 
   /// Two readings of the same step are the same value.
   ///

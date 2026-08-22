@@ -1031,6 +1031,12 @@
   `FlutterError.reportError` and no further, which is the trade the rest of the
   teardown already makes. The `close()` path is unchanged: there a caller
   exists, and it still hears it.
+* `Progress.value` drops a branch that said the same thing twice. `num.clamp`
+  compares with `compareTo`, which treats `NaN` as the maximal double, so
+  `0 / 0` already came back as the upper limit and the explicit `total == 0`
+  test in front of it could not change any answer. Nothing about the value
+  changes; what does is that the promise now has one implementation and a test
+  that holds it.
 * Fix the first failure of an asynchronous teardown leaving as an unhandled
   error of the zone while every failure behind it was reported through
   `FlutterError.reportError`. The teardown runs on a future `dispose()`
