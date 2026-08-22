@@ -674,7 +674,26 @@ abstract base class ScopeWidgetElementBase<W extends ScopeWidgetCore<W, E>,
       }
     }
 
-    return _builtChild = buildChild();
+    try {
+      return _builtChild = buildChild();
+    } on Object catch (error, stackTrace) {
+      // The one point every build of every family passes through: the five
+      // `buildOn*` of a state-carrying family, `ScopeWidgetBase.build` and
+      // `ScopeModel.build` are all reached from here and nowhere else.
+      //
+      // Reported *and* re-thrown, unlike a teardown with no caller left to
+      // hear it. A build has one, and a load-bearing one: the error boundary
+      // of [ComponentElement.performRebuild] above, which puts an
+      // `ErrorWidget` in the subtree's place. That is what the subtree shows;
+      // this is what the observer hears -- the same split that put a report
+      // on the `init()` hook higher up this method.
+      notifyObserver(
+        (observer) =>
+            observer.onError(this, ScopePhase.build, error, stackTrace),
+      );
+
+      rethrow;
+    }
   }
 
   /// What the last build that was not notify-only produced.

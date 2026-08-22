@@ -340,6 +340,21 @@
   `ScopePhase.initialization` before it raises the failure again — the one
   point both kinds of family pass through; for a structural scope that single
   event is its whole recording.
+* **Breaking:** add `ScopePhase.build`, and report a failing build through
+  `ScopeConfig.observer`. `buildOnReady`, `buildOnProgress`, `buildOnError`,
+  `buildOnWaiting`, `buildOnClosing`, `ScopeWidgetBase.build` and
+  `ScopeModel.build` all run from `ScopeWidgetElementBase.build()`, whose
+  failure Flutter's build error boundary answers with an `ErrorWidget` — what
+  the subtree shows, not what the observer hears, the same split a failing
+  `init()` used to fall into. This was the last family of user code the
+  observer could not hear; every other lifecycle hook already reported. The
+  report is added to the raise rather than put in its place: unlike a teardown
+  with nobody left to hand a failure to, a build has a caller, and the
+  `ErrorWidget` it draws is unchanged. A widget that is not a scope —
+  `NavigationNode`, `ListenableSelector`, the views of `ScopeNotifier` — has no
+  `debugLabel` to be named as the target, so its build is not covered.
+  `ScopePhase` already asked a `switch` over it in your own code to carry a
+  `default` branch; one written without it stops compiling.
 * Fix an `AsyncControllerScope` failing to give back a controller its own
   initialization never handed over, and telling `ScopeConfig.observer` nothing
   about it. That release runs from the `finally` of the initialization, where

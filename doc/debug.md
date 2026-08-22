@@ -163,6 +163,7 @@ Wrapping those three in a common type would have meant inventing a fourth.
 | ------------------------------ | ------------------------------------------ |
 | `initialization` | the initialization: the `init()` hook or the phase |
 | `initializationCancellation` | cancelling an initialization still running |
+| `build` | a build of the scope's own subtree |
 | `preparationForDisposal` | the synchronous half of the teardown |
 | `unmount` | the `onUnmount` hook |
 | `disposal` | any `dispose`: `disposeScope`, a dependency's, a controller's, a `ScopeModel`'s |
@@ -170,6 +171,19 @@ Wrapping those three in a common type would have meant inventing a fourth.
 
 The enum can grow, so a `switch` over it in your own code wants a `default`
 branch.
+
+`build` is the one phase you would have seen something of without an observer:
+Flutter's build error boundary answers a failing build with an `ErrorWidget`.
+The report is added to that rather than put in its place — the `ErrorWidget`
+still appears, and the failure also arrives through the channel the rest of the
+lifecycle arrives through. Every build of every family passes one point, so the
+five `buildOn*` branches, `ScopeWidgetBase.build` and `ScopeModel.build` all
+report under this phase.
+
+A widget that is not a scope does not: `NavigationNode`, `ListenableSelector`
+and the views of `ScopeNotifier` build like any other widget, and `onError`
+needs a `ScopeObservable` to name as the target. Their builds stay where they
+were — inside the build error boundary, and nowhere else.
 
 A teardown that fails more than once reports every failure, not the first
 alone. A `Scope` tears its state down before its dependencies, and each half is
@@ -287,9 +301,9 @@ and the stack trace on a line of its own when the event carries one.
 
 The phase of a failure is spelled out as English rather than as the name of the
 `ScopePhase` value: `initialization failed`, `initialization cancellation
-failed`, `preparation for disposal failed`, `unmount failed`, `disposal
-failed`, and — the one that does not fit that shape — `an abandoned wait ended
-in a failure`.
+failed`, `build failed`, `preparation for disposal failed`, `unmount failed`,
+`disposal failed`, and — the one that does not fit that shape — `an abandoned
+wait ended in a failure`.
 
 Two parameters, both optional:
 

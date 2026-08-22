@@ -26,6 +26,14 @@ enum ScopePhase {
   /// The cancellation of an initialization that was still running.
   initializationCancellation,
 
+  /// A build of the scope's own subtree.
+  ///
+  /// The `buildOn*` branch a state-carrying family chose, or the `build` of a
+  /// `ScopeWidgetBase` or a `ScopeModel`. Flutter's build error boundary
+  /// answers such a failure with an `ErrorWidget` either way — that is what
+  /// the subtree shows; this is the same failure told to the observer.
+  build,
+
   /// The synchronous half of a teardown, before the asynchronous one.
   preparationForDisposal,
 
@@ -292,7 +300,7 @@ final class ScopePrintObserver extends ScopeObserver {
 /// for callers who cannot make that promise about a release they have not
 /// seen yet; this one can.
 ///
-/// Five of the six read as `'<phrase> failed'`; [ScopePhase.abandonedWait]
+/// Six of the seven read as `'<phrase> failed'`; [ScopePhase.abandonedWait]
 /// does not, because the deleted logger this mirrors named what the wait was
 /// for (`'an abandoned wait for $what ended in a failure'`), and the
 /// observer has no `$what` to put there. Rather than force that phrase into
@@ -302,6 +310,7 @@ String _failureMessage(ScopePhase phase) => switch (phase) {
       ScopePhase.initialization => 'initialization failed',
       ScopePhase.initializationCancellation =>
         'initialization cancellation failed',
+      ScopePhase.build => 'build failed',
       ScopePhase.preparationForDisposal => 'preparation for disposal failed',
       ScopePhase.unmount => 'unmount failed',
       ScopePhase.disposal => 'disposal failed',

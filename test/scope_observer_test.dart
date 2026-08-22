@@ -1068,6 +1068,69 @@ void main() {
 
     expect(lines, ['scopo | [group] | initialize…']);
   });
+
+  // The last family of user code the observer could not hear. A failing build
+  // is turned into an `ErrorWidget` by Flutter's build error boundary -- which
+  // is what the subtree shows, not what the observer hears, the same
+  // distinction that put a report on the `init()` hook. The report is added to
+  // the throw rather than put in its place: unlike a teardown with no caller,
+  // a build has one, and it is the boundary that draws the red rectangle.
+  testWidgets(
+    'a build that throws reports onError for the build phase',
+    (tester) async {
+      await tester.pumpWidget(
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: AsyncScope(
+            initScope: (context) => Stream.value(AsyncScopeReady()),
+            disposeScope: () {},
+            progressBuilder: (context, progress) => const Text('init'),
+            errorBuilder: (context, error, stackTrace, progress) =>
+                Text('$error'),
+            builder: (context) => throw StateError('build failed'),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isStateError);
+      expect(observer.events, [
+        'init AsyncScope',
+        'ready AsyncScope',
+        'error AsyncScope build Bad state: build failed',
+      ]);
+
+      // The scope is Ready and still mounted -- only its subtree was replaced
+      // -- so the teardown is the ordinary asynchronous one, and a test that
+      // ended here would leave it half-done for the leak tracker to find.
+      await tester.pumpWidget(const SizedBox.shrink());
+      await settle(
+        tester,
+        until: () => observer.events.contains('disposed AsyncScope'),
+      );
+    },
+  );
+
+  // The same phase from a family that has no `buildOn*` at all, and the reason
+  // the guard stands where it does: one in `buildOnState` covers the four
+  // asynchronous families, passes the test above and fails this one.
+  testWidgets(
+    'a scope widget whose own build throws reports the same phase',
+    (tester) async {
+      await tester.pumpWidget(
+        const Directionality(
+          textDirection: TextDirection.ltr,
+          child: _BuildFailingScope(),
+        ),
+      );
+
+      expect(tester.takeException(), isStateError);
+      expect(observer.events, [
+        'init _BuildFailingScope',
+        'error _BuildFailingScope build Bad state: build failed',
+      ]);
+    },
+  );
 }
 
 /// A minimal [LiteScope]: nothing to initialize asynchronously, and [child]
@@ -1086,6 +1149,18 @@ final class _CounterScopeState
     extends LiteScopeState<_CounterScope, _CounterScopeState> {
   @override
   Widget build(BuildContext context) => params.child;
+}
+
+/// A scope with no `buildOn*` of its own, whose [build] throws.
+///
+/// The failure has to come from the widget's own build rather than from a
+/// state branch: that is the half of the surface a guard around `buildOnState`
+/// would not reach.
+final class _BuildFailingScope extends ScopeWidgetBase<_BuildFailingScope> {
+  const _BuildFailingScope();
+
+  @override
+  Widget build(BuildContext context) => throw StateError('build failed');
 }
 
 /// A scope with no phase of its own: [ScopeWidgetBase] goes no further than

@@ -1,6 +1,6 @@
 # debug
 
-> Перевод `doc/debug.md` (blob `1c464523ac3959dc21e8fdeae0de2c971124fe38`).
+> Перевод `doc/debug.md` (blob `8253aaff92fd3301d5429a701b60ceb1b7649a69`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 Наблюдатель и глобальные настройки пакета. Всё на этой странице статическое и
@@ -165,6 +165,7 @@ ScopeConfig.observer = const ScopeCompositeObserver([
 | ------------------------------ | ------------------------------------------ |
 | `initialization` | инициализация: хук `init()` или фаза |
 | `initializationCancellation` | отмена ещё идущей инициализации |
+| `build` | сборка собственного поддерева скоупа |
 | `preparationForDisposal` | синхронная половина разбора |
 | `unmount` | хук `onUnmount` |
 | `disposal` | любой `dispose`: `disposeScope`, зависимости, контроллера, `ScopeModel` |
@@ -172,6 +173,20 @@ ScopeConfig.observer = const ScopeCompositeObserver([
 
 Перечисление может пополниться, поэтому `switch` по нему в вашем коде хочет
 ветку `default`.
+
+`build` — единственная фаза, кое-что от которой вы увидели бы и без
+наблюдателя: на упавшую сборку граница ошибок Flutter отвечает `ErrorWidget`.
+Отчёт к этому добавляется, а не встаёт на его место — `ErrorWidget` по-прежнему
+появляется, а отказ вдобавок приходит тем же каналом, каким приходит весь
+остальной жизненный цикл. Сборка любого семейства проходит через одну точку,
+поэтому под этой фазой отчитываются и пять веток `buildOn*`, и
+`ScopeWidgetBase.build`, и `ScopeModel.build`.
+
+Виджет, который скоупом не является, — нет: `NavigationNode`,
+`ListenableSelector` и представления `ScopeNotifier` собираются как любой
+другой виджет, а `onError` нужен `ScopeObservable`, которого можно назвать
+целью. Их сборки остаются там же, где были, — внутри границы ошибок, и больше
+нигде.
 
 Разбор, упавший не один раз, сообщает о каждом отказе, а не только о первом.
 `Scope` разбирает своё состояние раньше зависимостей, и каждая половина
@@ -283,9 +298,10 @@ scopo | CounterScope(#4e0b7) | initialization failed: Exception: no network
 `: <ошибка>`, а если событие несёт стек вызовов — и его, отдельной строкой.
 
 Фаза отказа проговаривается по-английски, а не именем значения `ScopePhase`:
-`initialization failed`, `initialization cancellation failed`, `preparation for
-disposal failed`, `unmount failed`, `disposal failed` и — единственная, что не
-влезает в эту форму, — `an abandoned wait ended in a failure`.
+`initialization failed`, `initialization cancellation failed`, `build failed`,
+`preparation for disposal failed`, `unmount failed`, `disposal failed` и —
+единственная, что не влезает в эту форму, — `an abandoned wait ended in a
+failure`.
 
 Два параметра, оба необязательные:
 
