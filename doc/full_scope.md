@@ -177,7 +177,7 @@ Widget buildOnProgress(
     Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        LinearProgressIndicator(value: progress?.progress ?? 0),
+        LinearProgressIndicator(value: progress?.value ?? 0),
         Text(progress?.path ?? ''),
       ],
     );

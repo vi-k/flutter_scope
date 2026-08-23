@@ -1,6 +1,6 @@
 # AsyncScope
 
-> Перевод `doc/async_scope.md` (blob `883fdd7f6eb3e0b2773bad1fb7ffff24d7c4dacd`).
+> Перевод `doc/async_scope.md` (blob `3a0f3aff29b4275a68beff0fcd507ec6e62084f7`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 Скоуп, всё содержимое которого — жизненный цикл: асинхронная инициализация и
@@ -106,7 +106,7 @@ post-frame-колбэке, поэтому значение прогресса, �
 ### Счёт шагов
 
 Для инициализации, которая знает число своих шагов, есть `ProgressIterator`, а
-`Progress` — значение, которое он выдаёт: `number`, `total`, `progress` как доля
+`Progress` — значение, которое он выдаёт: `number`, `total`, `value` как доля
 от 0 до 1 и `toString` вида `2/3`.
 
 ```dart
@@ -125,7 +125,7 @@ init: (context) async* {
   yield AsyncScopeReady();
 },
 progressBuilder: (context, progress) => switch (progress) {
-  final Progress progress => LinearProgressIndicator(value: progress.progress),
+  final Progress progress => LinearProgressIndicator(value: progress.value),
   _ => const LinearProgressIndicator(),
 },
 ```

@@ -54,10 +54,23 @@ final class ConnectionScope extends AsyncScopeBase<ConnectionScope> {
   @override
   Future<void> disposeScope() async {}
 
+  /// Whatever [initScope] reported — here the caption it yields, and
+  /// `null` until it yields anything. This family keeps the progress
+  /// untyped on purpose: it is a caption rather than something the scope
+  /// carries, and a `ProgressIterator` puts its `Progress` here when the
+  /// steps are counted.
   @override
-  Widget buildOnProgress(BuildContext context, Object? progress) =>
-      const Center(child: CircularProgressIndicator());
+  Widget buildOnProgress(BuildContext context, Object? progress) => Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CircularProgressIndicator(),
+            Text(progress?.toString() ?? ''),
+          ],
+        ),
+      );
 
+  /// The last progress before the failure, `null` if it failed before any.
   @override
   Widget buildOnError(
     BuildContext context,
@@ -65,7 +78,7 @@ final class ConnectionScope extends AsyncScopeBase<ConnectionScope> {
     StackTrace stackTrace,
     Object? progress,
   ) =>
-      Center(child: Text('$error'));
+      Center(child: Text(progress == null ? '$error' : '$progress: $error'));
 
   @override
   Widget buildOnReady(BuildContext context) => child;

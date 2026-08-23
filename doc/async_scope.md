@@ -105,7 +105,7 @@ spinner, usually — and then the ready branch.
 
 For an initialization that knows how many steps it has, `ProgressIterator`
 counts them and `Progress` is the value it produces: `number`, `total`,
-`progress` as a fraction between 0 and 1, and a `toString` of `2/3`.
+`value` as a fraction between 0 and 1, and a `toString` of `2/3`.
 
 ```dart
 init: (context) async* {
@@ -123,7 +123,7 @@ init: (context) async* {
   yield AsyncScopeReady();
 },
 progressBuilder: (context, progress) => switch (progress) {
-  final Progress progress => LinearProgressIndicator(value: progress.progress),
+  final Progress progress => LinearProgressIndicator(value: progress.value),
   _ => const LinearProgressIndicator(),
 },
 ```

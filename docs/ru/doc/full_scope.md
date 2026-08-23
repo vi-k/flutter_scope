@@ -1,6 +1,6 @@
 # Scope
 
-> Перевод `doc/full_scope.md` (blob `90fbb2cff48f4710802c7f990711aa103eadecc0`).
+> Перевод `doc/full_scope.md` (blob `31b4c81f49247df02d2e036f6c63865c4ff2f1bb`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 `Scope` — основной строительный блок пакета: виджет, который владеет контейнером
@@ -179,7 +179,7 @@ Widget buildOnProgress(
     Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        LinearProgressIndicator(value: progress?.progress ?? 0),
+        LinearProgressIndicator(value: progress?.value ?? 0),
         Text(progress?.path ?? ''),
       ],
     );
