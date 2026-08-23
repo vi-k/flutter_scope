@@ -122,7 +122,7 @@ provider, ни riverpod этого не дают — они решают зад�
 `ScopeDependencies`, `ScopeInitState` с тремя наследниками, `AsyncScope`,
 `ScopeModel`, `ScopeNotifier`, `LiteScope`, `ScopeConfig`, `ScopeObserver`.
 Остальные восемьдесят с лишним — это базы для расширения (`*Core`, `*Base`,
-`*ElementBase`, по три-четыре на каждое из девяти семейств) и прямые
+`*ElementBase`, по три-четыре на каждое из восьми семейств) и прямые
 внутренности: `ScopeInheritedElement`, `ScopeInheritedWidget`,
 `ScopeModelInheritedElement`.
 
@@ -141,7 +141,7 @@ provider, ни riverpod этого не дают — они решают зад�
 
 - **откуда берутся сто два.** По месту объявления: `lib/src/scope/` — **84**,
   `lib/src/utils/` — 12, `lib/src/environment/` — 6. То есть поверхность
-  порождена не базовыми классами, а тем, что семейств девять и у каждого свой
+  порождена не базовыми классами, а тем, что семейств восемь и у каждого свой
   виджет, `Base`, `Core`, `ElementBase`, `Context` и `State`;
 - **разделение уносит 23 из 102.** Во второй барель по суффиксам уходят
   `*Core`, `*CoreState`, `*ElementBase`, `Inherited*`, плюс `AsyncScopeParent` и

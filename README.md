@@ -77,7 +77,7 @@ import 'package:scopo/scopo.dart';
 
 ## The families
 
-Nine of them, and the right one is the smallest that fits. They are listed here
+Eight of them, and the right one is the smallest that fits. They are listed here
 from the smallest up — the same order the topics are in — and the largest,
 `Scope`, gets a section of its own below.
 
