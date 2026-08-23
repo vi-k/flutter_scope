@@ -21,6 +21,13 @@ import 'package:scopo/scopo.dart';
 final class ConnectionScope extends AsyncScopeBase<ConnectionScope> {
   const ConnectionScope({super.key, required super.child});
 
+  /// The state of the scope: `state`, `isInitialized`, `hasError`.
+  ///
+  /// `listen` is a real choice here, unlike in the data and controller
+  /// families: what comes back is the state, and the state changes —
+  /// waiting, progress, ready, error. Reading one field through [select]
+  /// is the usual way in, since it subscribes to that field alone; take
+  /// the whole context with `listen: false` when one read is enough.
   static AsyncScopeContext<ConnectionScope> of(
     BuildContext context, {
     required bool listen,
