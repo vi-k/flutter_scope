@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:navigation_node/navigation_node.dart';
 import 'package:scopo/scopo.dart';
 
 import '../../../utils/console/console.dart';

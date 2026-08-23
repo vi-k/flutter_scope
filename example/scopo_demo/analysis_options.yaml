@@ -4,9 +4,9 @@ include: ../../analysis_options.yaml
 
 linter:
   rules:
-    # Off for an example, the same three `example/minimal` and
-    # `example/navigation_node` switch off: an example app exports no API to
-    # document, its one-line widget methods read better as blocks, and a
+    # Off for an example, the same three `example/minimal` and the example of
+    # `navigation_node` switch off: an example app exports no API to document,
+    # its one-line widget methods read better as blocks, and a
     # fire-and-forget call is the demo itself rather than a forgotten `await`.
     public_member_api_docs: false
     prefer_expression_function_bodies: false

@@ -11,7 +11,6 @@ tends to want the same tools; nothing here needs a scope above it.
 | `ListenableSelector` | the widget form of that selector |
 | `ListenableView` | a read-only façade over a `Listenable` |
 | `StateAsNotifier` | a mixin that makes a `State` listenable |
-| `NavigationNode` | a nested `Navigator` that keeps its routes inside the scope |
 | `ProgressIterator`, `Progress` | step counting for an initialization |
 | `ScreenshotReplacer` | freezes a subtree into the image it last painted |
 | `CompareUtils` | four comparison functions with names |
@@ -71,110 +70,6 @@ idea applied to a state model.
 itself becomes a `Listenable`, with a `notifyListeners()` for its own use. The
 `ChangeNotifier` behind it is created on the first listener and disposed of with
 the state, so a state nobody listens to costs nothing.
-
-## NavigationNode
-
-A nested `Navigator` whose routes stay inside the current scope. A dialog, a
-bottom sheet or a pushed screen opened through it is built below the scope
-rather than above it, so everything the scope provides is still reachable from
-those routes — which is not true of the root navigator of an application.
-
-```dart
-NavigationNode(child: const ScreenBody())
-```
-
-`navigatorKey` exposes the inner `NodeNavigatorState` when a caller needs to
-push from outside. It is fixed for the lifetime of the node — it is the key the
-nested navigator is built with, so another one would mean another navigator and
-an empty stack — and handing over a different one is refused by an assertion.
-Hold it in a `State` field rather than writing `GlobalKey()` inside `build`.
-
-`isRoot` marks a node that must not forward a pop any further. `onPop`
-intercepts the system back gesture: return `true` to let the pop through,
-`false` to keep the route, or a `Future<bool>` to decide after asking something
-— a confirmation dialog, typically. The context it is given is one from inside
-the node, so `showDialog(useRootNavigator: false)` puts that dialog in the node,
-below everything the node stands under.
-
-An asynchronous `onPop` is asked once at a time: a back press arriving while an
-answer is still pending is dropped rather than starting a second question. And
-an answer is only acted on if it still applies — if the route the node sits on
-was closed by something else, or buried under a newer one, a `true` takes
-nothing, since a pop would otherwise take whatever is on top instead of what
-was asked about.
-
-Anything that falls over on the way — the question itself, or a guard the
-application put on the route, which is read when the node asks what a pop there
-would do — is reported through `FlutterError.reportError` rather than left in a
-chain nobody holds, where it would surface as an unhandled zone error far from
-the widget that caused it. The press is simply not acted on, and the next one is
-asked as usual.
-
-System back first asks the node's nested navigator to close its top route —
-and "route" includes what a `Drawer` or a `showBottomSheet` puts on the page
-without pushing anything, so a node takes none of that away. Only when that
-navigator has nothing left to pop do `onPop` and `isRoot` decide what
-happens outside the node. The two never compete: on a root node the hook is
-asked as it is anywhere else, and an answer of `true` still takes nothing, since
-a root node has nothing outside it to let the pop through to. Such a hook is
-there for the press itself — a "press again to exit", or a `SystemNavigator
-.pop()` the application makes on its own terms.
-
-A node never empties itself. `Navigator.pop()` on its first page — from the back
-arrow of an `AppBar`, say — leaves the node instead of taking that page away: an
-ordinary node hands the pop to the navigator above it, as often as it is asked,
-and a root node keeps it and does nothing.
-
-Nor does it empty the navigator above, or overrule it. Handing a pop over is
-asking, not taking: a node placed on the first route of the application has
-nothing outside it to hand a pop to and hands over nothing, and a `PopScope` the
-application put around the node is answered by the application, not walked past.
-`isRoot` is still worth setting on a node that is the first route: it says so at
-the node rather than leaving it to be discovered from the stack.
-
-An `AppBar` on the node's first page draws a back arrow, and pressing it leaves
-the node. That is the node's doing: the page is the first route of its own
-navigator, so nothing about that navigator implies a way back. A root node draws
-no arrow there, since it keeps a pop to itself and there would be nowhere to go.
-
-`onPop` answers a pop the route is *asked* about, which is more than the system
-back and less than every pop. The node is a `PopEntry` of the route it stands
-on, so `Navigator.maybePop()` and the back arrow of an `AppBar` above the node
-reach the hook as much as a system back does. `Navigator.pop()` does not: it
-takes the route rather than asking it, and no `PopEntry` is consulted. A button
-of your own that has to go through the hook wants `maybePop`.
-
-A node stands aside for a press the route will handle by itself. A `Drawer` or a
-`showBottomSheet` above the node puts a local history entry on the route the
-node stands on, and a route asks its `PopEntry`s before it looks at that entry —
-so a node that always said "do not pop" took a press whose whole job was to
-close a drawer, and with an `onPop` that refused, the drawer could not be closed
-with back at all. `ModalRoute.willHandlePopInternally` is what the node reads,
-at press time, and it means "somebody else's entry": the node gave up keeping
-one of its own precisely because a route reports only whether that list is
-empty.
-
-**`enabled` is for several nodes on one route**, of which one is on screen: a
-node per tab of an `IndexedStack`, which builds every branch and shows one. A
-route asks each of its `PopEntry`s and calls each of them back, so one press
-unwound the stack of every tab at once, the hidden ones included. Which node is
-the one on screen cannot be worked out from inside — a hidden branch answers
-`TickerMode.of(context)` and `ModalRoute.of(context)` exactly as a shown one
-does — so the application says it:
-
-```dart
-NavigationNode(enabled: i == _tab, child: tabs[i])
-```
-
-A disabled node takes no place on the route: it is not asked and it is not
-called back, while its nested navigator keeps its stack and goes on answering
-`Navigator.of(context)` from inside. Nodes nested one inside another never need
-this — an inner node registers on the page of the navigator above it rather than
-on the route both stand on. The ambiguity is Flutter's own: two `PopScope`s on
-one route are both consulted.
-
-`PreviousNavigatorExtension.previous` gives the navigator above a given one,
-which is how a node forwards a pop it cannot handle itself.
 
 ## ProgressIterator
 

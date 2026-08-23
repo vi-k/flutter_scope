@@ -83,11 +83,11 @@ jobs:
             (cd "$example" && flutter analyze)
           done
 
-      # Two of the three have suites of their own. They are outside the local
-      # gate, which is exactly why a machine should run them.
+      # One of the two has a suite of its own. It is outside the local gate,
+      # which is exactly why a machine should run it.
       - name: Examples, tested
         run: |
-          for example in example/scopo_demo example/navigation_node; do
+          for example in example/scopo_demo; do
             echo "== $example"
             (cd "$example" && flutter test)
           done

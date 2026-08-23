@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:scopo/scopo.dart';
+import 'package:navigation_node/navigation_node.dart';
 
 import 'child_screen.dart';
 import 'counter_scope.dart';

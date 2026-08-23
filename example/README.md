@@ -5,8 +5,9 @@ deferred closing, and navigation nodes.
 
 For `NavigationNode` on its own — nested navigators, dialogs that belong to the
 screen, `onPop`, `isRoot`, and a system back you can press on a desktop — see
-[navigation_node](https://github.com/vi-k/scopo/tree/main/example/navigation_node),
-six lessons with a journal that shows what answered each press.
+the [navigation_node](https://pub.dev/packages/navigation_node) package. It
+shipped inside scopo up to 0.10.0 and now lives on its own, with six lessons of
+an example and a journal that shows what answered each press.
 
 The minimal example below demonstrates a simple counter app where
 `SharedPreferences` is initialized asynchronously before the UI is shown. It

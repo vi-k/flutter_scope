@@ -11,6 +11,10 @@ dependencies:
   equatable: ^2.0.7
   flutter:
     sdk: flutter
+  # From git until the package is published; then `navigation_node: ^0.1.0`.
+  navigation_node:
+    git:
+      url: https://github.com/vi-k/navigation_node.git
   scopo:
     path: ../..
   shared_preferences: ^2.5.3

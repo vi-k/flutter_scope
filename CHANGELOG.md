@@ -1,5 +1,20 @@
 ## 0.11.0
 
+* **Breaking:** `NavigationNode`, `NodeNavigatorState` and
+  `PreviousNavigatorExtension` have left this package. They are the
+  [navigation_node](https://pub.dev/packages/navigation_node) package now — the
+  same code, the same behaviour, the same six lessons of an example. Add the
+  dependency and change one import:
+
+  ```dart
+  import 'package:navigation_node/navigation_node.dart';
+  ```
+
+  Nothing in scopo used the widget, and the widget used nothing in scopo — it
+  imports nothing but Flutter — so a package about scopes was carrying a nested
+  navigator that nobody looking for one would think to find there. The two
+  still go together: a scope over a screen is exactly what a pushed route
+  loses, and a node is what keeps it.
 * Added an accessor object per family — `ScopeAccess`, `LiteScopeAccess`,
   `ScopeWidgetAccess`, `ScopeModelAccess`, `ScopeNotifierAccess`,
   `AsyncScopeAccess`, `AsyncDataScopeAccess`, `AsyncControllerScopeAccess`.

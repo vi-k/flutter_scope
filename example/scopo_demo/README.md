@@ -23,7 +23,7 @@ Ten tabs, one per family plus two scenarios that need a screen of their own:
 | LiteScope | a state class with the full lifecycle |
 | Scope | the full family: a dependency tree, progress per dependency, a state |
 | Deferred closing | `close()`: the closing screen over a frozen subtree |
-| NavigationNode | a nested `Navigator` whose routes stay inside the scope |
+| NavigationNode | a nested `Navigator` whose routes stay inside the scope, from the `navigation_node` package |
 
 Under each demo is a **console**. It prints the lifecycle calls of the scopes
 on that tab as they happen — mounting, initializing, progress, ready,

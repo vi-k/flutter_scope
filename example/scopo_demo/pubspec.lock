@@ -160,6 +160,15 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.15.0"
+  navigation_node:
+    dependency: "direct main"
+    description:
+      path: "."
+      ref: HEAD
+      resolved-ref: "646246f644a1db16eeaf221580f3c3f26f9e5cd4"
+      url: "https://github.com/vi-k/navigation_node.git"
+    source: git
+    version: "0.1.0"
   path:
     dependency: transitive
     description:

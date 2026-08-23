@@ -25,6 +25,5 @@ export 'src/utils/listenable/listen.dart';
 export 'src/utils/listenable/listenable_selector.dart';
 export 'src/utils/listenable/listenable_view.dart';
 export 'src/utils/listenable/state_as_notifier.dart';
-export 'src/utils/navigation_node/navigation_node.dart';
 export 'src/utils/progress_iterator/progress_iterator.dart';
 export 'src/utils/screenshot_replacer.dart';

@@ -115,7 +115,6 @@ fvm flutter test                     # все зелёные; число — в 
 fvm flutter analyze                  # корень
 (cd example/minimal && fvm flutter analyze)
 (cd example/scopo_demo && fvm flutter analyze)
-(cd example/navigation_node && fvm flutter analyze)
 fvm dart format --set-exit-if-changed lib test
 fvm dart doc --dry-run               # 0 warnings, 0 errors
 fvm dart pub publish --dry-run       # 0 warnings
@@ -124,6 +123,12 @@ sh docs/ru/check.sh                  # переводы отвечают ори�
 
 Перед мержем в `main` проходят все восемь. Утверждать «работает» без вывода
 команды нельзя: сначала прогон, потом заявление.
+
+**`NavigationNode` живёт в соседнем репозитории** —
+[vi-k/navigation_node](https://github.com/vi-k/navigation_node), вынесен
+2026-08-24 по находке U7. `example/scopo_demo` от него зависит, поэтому правка
+там может упереться в чужой пакет; свой гейт у него свой, в его же
+`AGENTS.md`.
 
 **Прогнал что-то другим SDK** — глобальным `flutter` с `PATH` (там 3.44.9) или
 через `fvm spawn <версия>` — сразу после этого:
@@ -144,8 +149,7 @@ fvm flutter clean && fvm flutter pub get
 файл в корень репозитория — прогони `dart pub publish --dry-run` и посмотри
 список: всё лишнее сразу в `.pubignore`.
 
-Особенности: у `example/minimal`, `example/scopo_demo` и
-`example/navigation_node` свои `pubspec`, при
+Особенности: у `example/minimal` и `example/scopo_demo` свои `pubspec`, при
 обновлении зависимостей их обновляют отдельно; корневой `pubspec.lock` в
 `.gitignore`, локи примеров закоммичены и пересозданы закреплённым тулчейном.
 Форматирование примеров в гейт §6 не входит, но `example/scopo_demo` с

@@ -180,8 +180,8 @@ lifecycle arrives through. Every build of every family passes one point, so the
 five `buildOn*` branches, `ScopeWidgetBase.build` and `ScopeModel.build` all
 report under this phase.
 
-A widget that is not a scope does not: `NavigationNode`, `ListenableSelector`
-and the views of `ScopeNotifier` build like any other widget, and `onError`
+A widget that is not a scope does not: `ListenableSelector` and the views of
+`ScopeNotifier` build like any other widget, and `onError`
 needs a `ScopeObservable` to name as the target. Their builds stay where they
 were — inside the build error boundary, and nowhere else.
 

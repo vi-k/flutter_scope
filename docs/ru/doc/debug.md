@@ -1,6 +1,6 @@
 # debug
 
-> Перевод `doc/debug.md` (blob `8253aaff92fd3301d5429a701b60ceb1b7649a69`).
+> Перевод `doc/debug.md` (blob `5f2243aae0a14192cc995fd99f7805ce89dcab84`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 Наблюдатель и глобальные настройки пакета. Всё на этой странице статическое и
@@ -182,9 +182,8 @@ ScopeConfig.observer = const ScopeCompositeObserver([
 поэтому под этой фазой отчитываются и пять веток `buildOn*`, и
 `ScopeWidgetBase.build`, и `ScopeModel.build`.
 
-Виджет, который скоупом не является, — нет: `NavigationNode`,
-`ListenableSelector` и представления `ScopeNotifier` собираются как любой
-другой виджет, а `onError` нужен `ScopeObservable`, которого можно назвать
+Виджет, который скоупом не является, — нет: `ListenableSelector` и
+представления `ScopeNotifier` собираются как любой другой виджет, а `onError` нужен `ScopeObservable`, которого можно назвать
 целью. Их сборки остаются там же, где были, — внутри границы ошибок, и больше
 нигде.
 
