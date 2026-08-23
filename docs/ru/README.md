@@ -1,6 +1,6 @@
 # scopo
 
-> Перевод `README.md` (blob `e8621203e91b521b9b3652e6e06fe943d118c860`).
+> Перевод `README.md` (blob `f7959e73ac7dc34b75a8a8bc12dc134a18b49f3e`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 [![pub version](https://img.shields.io/pub/v/scopo)](https://pub.dev/packages/scopo)
@@ -625,8 +625,11 @@ void main() {
 Сравнивайте список целиком: так ловится и пропавшее событие, и лишнее:
 
 ```dart
+late RecordingObserver observer;
+
 setUp(() {
-  ScopeConfig.observer = observer = RecordingObserver();
+  observer = RecordingObserver();
+  ScopeConfig.observer = observer;
   ScopeConfig.pauseAfterInitializationEnabled = false;
 });
 

@@ -610,8 +610,11 @@ lifecycle into a value to assert on — compare the whole list at once and a
 missing event is caught along with one too many:
 
 ```dart
+late RecordingObserver observer;
+
 setUp(() {
-  ScopeConfig.observer = observer = RecordingObserver();
+  observer = RecordingObserver();
+  ScopeConfig.observer = observer;
   ScopeConfig.pauseAfterInitializationEnabled = false;
 });
 
