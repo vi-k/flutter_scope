@@ -42,17 +42,12 @@ final class DbScope extends AsyncDataScopeBase<DbScope, Database> {
         listen: false,
       ).data;
 
-  /// Subscribes to the state of the scope, not to anything inside the
-  /// value: `hasData` and `isInitialized` change, the rows of a database
-  /// do not.
-  static V select<V>(
-    BuildContext context,
-    V Function(AsyncDataScopeContext<DbScope, Database> scope) selector,
-  ) =>
-      AsyncDataScopeBase.select<DbScope, Database, V>(
-        context,
-        selector,
-      );
+  // No `select` here on purpose. It would subscribe to the state of the
+  // scope — `hasData`, `isInitialized` — and a widget under the ready
+  // branch is past all of those. To follow something *inside* the value,
+  // make the value a `Listenable` and wrap the widget in a
+  // `ListenableSelector`, or put a `ScopeNotifier` under this scope.
+  // `AsyncDataScopeBase.select` is there if the state is what you need.
 
   @override
   Stream<AsyncDataScopeInitState<Object, Database>> initData(

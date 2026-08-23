@@ -60,19 +60,13 @@ final class PlayerScope
         listen: false,
       ).controller;
 
-  /// Subscribes to the state of the scope, not to anything inside the
-  /// controller: `hasController` and `isInitialized` change, the position
-  /// of a player does not.
-  static V select<V>(
-    BuildContext context,
-    V Function(
-      AsyncControllerScopeContext<PlayerScope, PlayerController> scope,
-    ) selector,
-  ) =>
-      AsyncControllerScopeBase.select<PlayerScope, PlayerController, V>(
-        context,
-        selector,
-      );
+  // No `select` here on purpose. It would subscribe to the state of the
+  // scope — `hasController`, `isInitialized` — and a widget under the
+  // ready branch is past all of those. To follow something *inside* the
+  // controller, make it a `Listenable` and wrap the widget in a
+  // `ListenableSelector`, or put a `ScopeNotifier` under this scope.
+  // `AsyncControllerScopeBase.select` is there if the state is what you
+  // need.
 
   @override
   PlayerController createController(BuildContext context) => PlayerController();
