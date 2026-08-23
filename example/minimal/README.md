@@ -2,6 +2,13 @@
 
 One scope, in as few files as it takes: `lib/main.dart`, 245 lines.
 
+"Minimal" is about the number of files and the number of scopes, not about the
+number of lines: what it walks through is `Scope`, the largest family, with its
+dependency container, its state and its four branches, commented step by step.
+If what you want is the smallest thing that works, the table of families in the
+[README](https://github.com/vi-k/scopo#the-families) points at `ScopeModel` or
+`ScopeWidgetBase`, and either fits in fifteen lines.
+
 ```sh
 cd example/minimal
 flutter run

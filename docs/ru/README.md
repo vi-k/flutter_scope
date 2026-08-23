@@ -1,6 +1,6 @@
 # scopo
 
-> Перевод `README.md` (blob `7e32db3f8a5474339c33dcbbae5326ebd8564ddc`).
+> Перевод `README.md` (blob `e8621203e91b521b9b3652e6e06fe943d118c860`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 [![pub version](https://img.shields.io/pub/v/scopo)](https://pub.dev/packages/scopo)
@@ -10,6 +10,43 @@ Flutter-пакет для управления скоупами: внедрен�
 жизненный цикл внутри дерева виджетов. Скоуп владеет своими зависимостями,
 инициализирует их асинхронно, отдаёт их своему поддереву и утилизирует по
 порядку — после того, как исчезнут его дочерние скоупы.
+
+## Зачем ещё один
+
+`provider`, `riverpod` и `get_it` отвечают на один вопрос: как значение
+доходит до виджета, которому оно нужно. scopo отвечает на другой — **как
+значением владеют во времени**: когда его создают, что показывает экран, пока
+оно создаётся, что будет, если виджет уйдёт раньше, чем оно готово, и в каком
+порядке всё отпускают на выходе.
+
+Это стоит отдельного пакета только тогда, когда у объектов есть собственный
+жизненный цикл — база данных, сокет, плеер, сессия вошедшего пользователя. Что
+даёт scopo:
+
+- **инициализация — это `Stream`**, поэтому у скоупа есть ветка загрузки,
+  значение прогресса и ветка ошибки без собственной машины состояний;
+- **недоделанную инициализацию отменяют**, а взятое ею возвращают; чтобы это
+  началось, достаточно убрать виджет с дерева;
+- **разбор идёт по порядку** — скоуп дожидается дочерних скоупов, прежде чем
+  отпустить собственные зависимости, так что ничего не отпускают, пока за него
+  держится что-то снизу;
+- **`scopeKey` выстраивает два скоупа в очередь за одним ресурсом**:
+  пересозданный скоуп ждёт, пока предыдущий владелец того же ключа закончит
+  отпускать;
+- **`close()` удерживает на экране последний кадр**, пока идёт асинхронный
+  разбор, вместо того чтобы вырвать поддерево на полпути;
+- **каждый шаг наблюдаем** типизированным наблюдателем — отказы в том числе.
+
+Riverpod закрывает часть этого: `FutureProvider` и `AsyncValue` дают ветки
+загрузки и ошибки, а `ref.onDispose` отпускает взятое провайдером. Чего он не
+даёт — это *ожидания*: `onDispose` — синхронный колбэк, поэтому фразе
+«отпустить базу только после того, как её отпустят все скоупы, которые ею
+пользовались» там негде поместиться. Разбор там идёт по графу провайдеров и их
+слушателей; здесь — по дереву виджетов.
+
+**Когда scopo брать не стоит.** Если зависимости создаются синхронно и
+отпускаются одним `dispose()`, всё перечисленное чего-то стоит и ничего не даёт:
+`provider` меньше, известнее и его достаточно.
 
 ## Возможности
 
@@ -29,9 +66,9 @@ Flutter-пакет для управления скоупами: внедрен�
   доходит.
 - **Аккуратное закрытие**: `close()` замораживает поддерево снимком и показывает
   `buildOnClosing`, пока идёт асинхронная утилизация.
-- **Специализированные скоупы**: облегчённые варианты для параметров виджета,
-  обычных моделей, `Listenable` и для асинхронной работы, которой не нужен
-  контейнер зависимостей.
+- **Девять семейств**: от виджета, который только отдаёт вниз собственные
+  параметры, до полного скоупа с контейнером зависимостей — берут самое
+  маленькое из подходящих.
 - **Наблюдаемый жизненный цикл**: типизированному наблюдателю сообщают о каждой
   инициализации, шаге прогресса, отказе и разборе.
 
@@ -45,194 +82,22 @@ flutter pub add scopo
 import 'package:scopo/scopo.dart';
 ```
 
-## Scope
+## Семейства
 
-`Scope` — основной строительный блок. У него три части:
+Их девять, и нужное — самое маленькое из подходящих. Ниже они идут от меньшего
+к большему, в том же порядке, что и темы; самому большому, `Scope`, отведён
+отдельный раздел следом.
 
-1. виджет скоупа (`Scope`) — параметры его конструктора и есть параметры
-   скоупа;
-2. контейнер зависимостей (`ScopeDependencies`) — инициализируется асинхронно
-   до создания состояния;
-3. состояние (`ScopeState`) — то же, что `State` у `StatefulWidget`, но с
-   прямым доступом к зависимостям.
-
-### 1. Зависимости
-
-Реализуйте `ScopeDependencies` и инициализируйте его генератором потока: именно
-это позволяет скоупу сообщать о прогрессе и отменять недоделанную инициализацию,
-когда виджет убирают с дерева.
-
-```dart
-final class AppDependencies implements ScopeDependencies {
-  final SharedPreferences sharedPreferences;
-
-  AppDependencies({required this.sharedPreferences});
-
-  static Stream<ScopeInitState<String, AppDependencies>> init() async* {
-    yield ScopeProgress('Initializing storage…');
-    final sharedPreferences = await SharedPreferences.getInstance();
-
-    yield ScopeReady(AppDependencies(sharedPreferences: sharedPreferences));
-  }
-
-  /// Отпускает то, что не может ждать асинхронного разбора. Выполняется
-  /// один раз и всегда до `dispose` — и когда скоуп ушёл с дерева, и когда
-  /// его закрыли через `close()`.
-  @override
-  void onUnmount() {}
-
-  /// Вызывается после того, как состояние утилизировано. Может быть
-  /// асинхронным.
-  @override
-  Future<void> dispose() async {}
-}
-```
-
-### 2. Состояние
-
-Наследуйтесь от `ScopeState`. К моменту выполнения `initState` зависимости уже
-готовы. `notifyDependents` обновляет подписанных потомков, не перестраивая
-собственное поддерево состояния.
-
-Половины разведены намеренно, и `setState` здесь ничем не отключён: состояние
-скоупа — обычный `State` и сохраняет его. Что звать, следует из того, кто
-должен увидеть изменение:
-
-| что должно обновиться | вызов |
+| чем владеете | что брать |
 | --- | --- |
-| потомки, подписанные через `select` / `selectParam` | `notifyDependents()` |
-| виджеты, которые возвращает собственный `build` состояния | `setState()` |
-| и то и другое | оба |
-
-Стоит назвать ошибку прямо: поменять поле и позвать один `notifyDependents()`
-— подписчики увидят новое значение, а собственный `build` состояния не
-выполнится, и всё, что он рисует по этому полю, останется прежним.
-
-```dart
-final class AppState extends ScopeState<App, AppDependencies, AppState> {
-  late int _counter;
-  int get counter => _counter;
-
-  @override
-  void initState() {
-    super.initState();
-    _counter = dependencies.sharedPreferences.getInt('counter') ?? 0;
-  }
-
-  Future<void> increment() async {
-    _counter++;
-    notifyDependents();
-    await dependencies.sharedPreferences.setInt('counter', _counter);
-  }
-
-  @override
-  Widget build(BuildContext context) => const HomeScreen();
-}
-```
-
-### 3. Виджет скоупа
-
-Наследуйтесь от `Scope` и предоставьте `initDependencies`, `createState` и
-виджеты для веток инициализации и ошибки. `wrapState` оборачивает только готовую
-ветку, поэтому виджеты, общие для всех веток (например, `MaterialApp`), обычно
-создают в каждом билдере.
-
-```dart
-final class App extends Scope<App, AppDependencies, AppState> {
-  final String title;
-
-  const App({super.key, required this.title});
-
-  @override
-  Stream<ScopeInitState<String, AppDependencies>> initDependencies(
-    BuildContext context,
-  ) =>
-      AppDependencies.init();
-
-  @override
-  AppState createState() => AppState();
-
-  @override
-  Widget buildOnProgress(
-    BuildContext context,
-    covariant String? progress,
-  ) =>
-      MaterialApp(home: Scaffold(body: Center(child: Text(progress ?? ''))));
-
-  @override
-  Widget buildOnError(
-    BuildContext context,
-    Object error,
-    StackTrace stackTrace,
-    covariant String? progress,
-  ) =>
-      MaterialApp(home: Scaffold(body: Center(child: Text('$error'))));
-
-  /// Виджеты между [App] и [AppState] в готовой ветке.
-  @override
-  Widget wrapState(
-    BuildContext context,
-    AppDependencies dependencies,
-    Widget child,
-  ) =>
-      MaterialApp(title: title, home: child);
-
-  /// Вспомогательные методы доступа для потомков.
-  static AppState of(BuildContext context) =>
-      Scope.of<App, AppDependencies, AppState>(context);
-
-  static V select<V>(
-    BuildContext context,
-    V Function(AppState state) selector,
-  ) =>
-      Scope.select<App, AppDependencies, AppState, V>(context, selector);
-
-  static V selectParam<V>(
-    BuildContext context,
-    V Function(App widget) selector,
-  ) =>
-      Scope.selectParam<App, AppDependencies, AppState, V>(context, selector);
-}
-```
-
-### 4. Доступ из потомков
-
-`Scope.of` никогда не подписывает — им пользуются, чтобы звать методы. Чтобы
-перестраиваться на изменения, подпишитесь на одно значение через `select`
-(состояние) или `selectParam` (параметры скоупа). Есть ещё `Scope.paramsOf` и
-`Scope.maybeOf`.
-
-```dart
-class HomeScreen extends StatelessWidget {
-  const HomeScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    // Подписка на одно значение: перестраивается, только когда меняется
-    // `counter`.
-    final counter = App.select(context, (state) => state.counter);
-
-    // Подписка на параметр скоупа.
-    final title = App.selectParam(context, (widget) => widget.title);
-
-    return Scaffold(
-      appBar: AppBar(title: Text(title)),
-      body: Center(child: Text('$counter')),
-      floatingActionButton: FloatingActionButton(
-        // Читает состояние, не подписываясь на него.
-        onPressed: () => App.of(context).increment(),
-        child: const Icon(Icons.add),
-      ),
-    );
-  }
-}
-```
-
-**Подробнее:** тема [Scope](https://pub.dev/documentation/scopo/latest/topics/Scope-topic.html).
-
-## Специализированные скоупы
-
-Облегчённые варианты для случаев, когда полный `Scope` — это слишком.
+| ничем, кроме собственных параметров виджета | `ScopeWidgetBase` |
+| обычным объектом с `dispose()` | `ScopeModel` |
+| `Listenable` — `ChangeNotifier`, `ValueNotifier`, … | `ScopeNotifier` |
+| объектами, которые уже есть, но их жизненным циклом должно править дерево | `AsyncScope` |
+| значением, которое создаётся асинхронно | `AsyncDataScope` |
+| …и это значение — контроллер с собственными `init` и `dispose` | `AsyncControllerScope` |
+| объектом состояния с полным асинхронным циклом и `close()` | `LiteScope` |
+| контейнером зависимостей **и** состоянием поверх него | `Scope` |
 
 ### ScopeWidgetBase
 
@@ -500,11 +365,198 @@ final class ScreenScopeState
 }
 ```
 
-Все семейства выше показаны рядом, с живым журналом каждого вызова жизненного
+Все семейства — и это, и полный `Scope` ниже — показаны рядом, с живым
+журналом каждого вызова жизненного
 цикла, в приложении
 [scopo_demo](https://github.com/vi-k/scopo/tree/main/example/scopo_demo).
 
 **Подробнее:** тема [LiteScope](https://pub.dev/documentation/scopo/latest/topics/LiteScope-topic.html).
+
+## Scope: полное семейство
+
+Самое большое из них, и то, из которого урезаны остальные. У него три
+части:
+
+1. виджет скоупа (`Scope`) — параметры его конструктора и есть параметры
+   скоупа;
+2. контейнер зависимостей (`ScopeDependencies`) — инициализируется асинхронно
+   до создания состояния;
+3. состояние (`ScopeState`) — то же, что `State` у `StatefulWidget`, но с
+   прямым доступом к зависимостям.
+
+### 1. Зависимости
+
+Реализуйте `ScopeDependencies` и инициализируйте его генератором потока: именно
+это позволяет скоупу сообщать о прогрессе и отменять недоделанную инициализацию,
+когда виджет убирают с дерева.
+
+```dart
+final class AppDependencies implements ScopeDependencies {
+  final SharedPreferences sharedPreferences;
+
+  AppDependencies({required this.sharedPreferences});
+
+  static Stream<ScopeInitState<String, AppDependencies>> init() async* {
+    yield ScopeProgress('Initializing storage…');
+    final sharedPreferences = await SharedPreferences.getInstance();
+
+    yield ScopeReady(AppDependencies(sharedPreferences: sharedPreferences));
+  }
+
+  /// Отпускает то, что не может ждать асинхронного разбора. Выполняется
+  /// один раз и всегда до `dispose` — и когда скоуп ушёл с дерева, и когда
+  /// его закрыли через `close()`.
+  @override
+  void onUnmount() {}
+
+  /// Вызывается после того, как состояние утилизировано. Может быть
+  /// асинхронным.
+  @override
+  Future<void> dispose() async {}
+}
+```
+
+### 2. Состояние
+
+Наследуйтесь от `ScopeState`. К моменту выполнения `initState` зависимости уже
+готовы. `notifyDependents` обновляет подписанных потомков, не перестраивая
+собственное поддерево состояния.
+
+Половины разведены намеренно, и `setState` здесь ничем не отключён: состояние
+скоупа — обычный `State` и сохраняет его. Что звать, следует из того, кто
+должен увидеть изменение:
+
+| что должно обновиться | вызов |
+| --- | --- |
+| потомки, подписанные через `select` / `selectParam` | `notifyDependents()` |
+| виджеты, которые возвращает собственный `build` состояния | `setState()` |
+| и то и другое | оба |
+
+Стоит назвать ошибку прямо: поменять поле и позвать один `notifyDependents()`
+— подписчики увидят новое значение, а собственный `build` состояния не
+выполнится, и всё, что он рисует по этому полю, останется прежним.
+
+```dart
+final class AppState extends ScopeState<App, AppDependencies, AppState> {
+  late int _counter;
+  int get counter => _counter;
+
+  @override
+  void initState() {
+    super.initState();
+    _counter = dependencies.sharedPreferences.getInt('counter') ?? 0;
+  }
+
+  Future<void> increment() async {
+    _counter++;
+    notifyDependents();
+    await dependencies.sharedPreferences.setInt('counter', _counter);
+  }
+
+  @override
+  Widget build(BuildContext context) => const HomeScreen();
+}
+```
+
+### 3. Виджет скоупа
+
+Наследуйтесь от `Scope` и предоставьте `initDependencies`, `createState` и
+виджеты для веток инициализации и ошибки. `wrapState` оборачивает только готовую
+ветку, поэтому виджеты, общие для всех веток (например, `MaterialApp`), обычно
+создают в каждом билдере.
+
+```dart
+final class App extends Scope<App, AppDependencies, AppState> {
+  final String title;
+
+  const App({super.key, required this.title});
+
+  @override
+  Stream<ScopeInitState<String, AppDependencies>> initDependencies(
+    BuildContext context,
+  ) =>
+      AppDependencies.init();
+
+  @override
+  AppState createState() => AppState();
+
+  @override
+  Widget buildOnProgress(
+    BuildContext context,
+    covariant String? progress,
+  ) =>
+      MaterialApp(home: Scaffold(body: Center(child: Text(progress ?? ''))));
+
+  @override
+  Widget buildOnError(
+    BuildContext context,
+    Object error,
+    StackTrace stackTrace,
+    covariant String? progress,
+  ) =>
+      MaterialApp(home: Scaffold(body: Center(child: Text('$error'))));
+
+  /// Виджеты между [App] и [AppState] в готовой ветке.
+  @override
+  Widget wrapState(
+    BuildContext context,
+    AppDependencies dependencies,
+    Widget child,
+  ) =>
+      MaterialApp(title: title, home: child);
+
+  /// Вспомогательные методы доступа для потомков.
+  static AppState of(BuildContext context) =>
+      Scope.of<App, AppDependencies, AppState>(context);
+
+  static V select<V>(
+    BuildContext context,
+    V Function(AppState state) selector,
+  ) =>
+      Scope.select<App, AppDependencies, AppState, V>(context, selector);
+
+  static V selectParam<V>(
+    BuildContext context,
+    V Function(App widget) selector,
+  ) =>
+      Scope.selectParam<App, AppDependencies, AppState, V>(context, selector);
+}
+```
+
+### 4. Доступ из потомков
+
+`Scope.of` никогда не подписывает — им пользуются, чтобы звать методы. Чтобы
+перестраиваться на изменения, подпишитесь на одно значение через `select`
+(состояние) или `selectParam` (параметры скоупа). Есть ещё `Scope.paramsOf` и
+`Scope.maybeOf`.
+
+```dart
+class HomeScreen extends StatelessWidget {
+  const HomeScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    // Подписка на одно значение: перестраивается, только когда меняется
+    // `counter`.
+    final counter = App.select(context, (state) => state.counter);
+
+    // Подписка на параметр скоупа.
+    final title = App.selectParam(context, (widget) => widget.title);
+
+    return Scaffold(
+      appBar: AppBar(title: Text(title)),
+      body: Center(child: Text('$counter')),
+      floatingActionButton: FloatingActionButton(
+        // Читает состояние, не подписываясь на него.
+        onPressed: () => App.of(context).increment(),
+        child: const Icon(Icons.add),
+      ),
+    );
+  }
+}
+```
+
+**Подробнее:** тема [Scope](https://pub.dev/documentation/scopo/latest/topics/Scope-topic.html).
 
 ## scopeKey
 
@@ -565,6 +617,38 @@ void main() {
 
 `ScopeConfig.pauseAfterInitializationEnabled = false` отключает искусственные
 задержки `pauseAfterInitialization` — полезно в тестах.
+
+## Тестирование
+
+Тот же наблюдатель, который в приложении печатает, в тесте записывает — и
+превращает жизненный цикл в значение, о котором можно писать ожидания.
+Сравнивайте список целиком: так ловится и пропавшее событие, и лишнее:
+
+```dart
+setUp(() {
+  ScopeConfig.observer = observer = RecordingObserver();
+  ScopeConfig.pauseAfterInitializationEnabled = false;
+});
+
+tearDown(() {
+  ScopeConfig.observer = null;
+  ScopeConfig.reset();
+});
+```
+
+Три вещи, которые стоит знать до первого теста:
+
+- **`ScopeConfig.reset()` наблюдателя не сбрасывает.** Забытый наблюдатель
+  продолжит записывать в список следующего теста — снимайте его явно, как выше.
+- **Помечайте тегом скоупы, о которых пишете ожидания.** Скоуп без тега
+  подписывается коротким хешем, а он в каждом прогоне свой.
+- **Разбор асинхронный, и `pumpAndSettle` его не дожидается.** Он двигает
+  фейковые часы; разбор, ожидающий настоящей работы, — как и все четыре
+  таймаута, которые нарочно меряются по реальному времени, — на момент конца
+  теста ещё идёт. Дожидайтесь нужного события, а не считайте, что кадр всё
+  доделал.
+
+**Подробнее:** тема [debug](https://pub.dev/documentation/scopo/latest/topics/debug-topic.html).
 
 ## Что ещё в коробке
 
@@ -629,7 +713,9 @@ IndexedStack(
 
 - [minimal](https://github.com/vi-k/scopo/tree/main/example/minimal) — один
   скоуп, асинхронно инициализируемые `SharedPreferences`, экраны загрузки и
-  ошибки, счётчик.
+  ошибки, счётчик. Минимальный по файлам, а не по строкам: разбирает полный
+  `Scope` с комментариями по шагам. Самое маленькое, что работает, — в таблице
+  семейств выше.
 - [scopo_demo](https://github.com/vi-k/scopo/tree/main/example/scopo_demo) —
   демонстрация каждого семейства скоупов с консолью, показывающей события
   жизненного цикла, плюс вложенные скоупы, `scopeKey`, отложенное закрытие и
