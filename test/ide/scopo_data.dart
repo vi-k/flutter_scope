@@ -20,33 +20,33 @@ import 'package:scopo/scopo.dart';
 
 final class Database {
   static Future<Database> open() async => Database();
+  final bool isOpen = true;
   Future<void> close() async {}
 }
 
 final class DbScope extends AsyncDataScopeBase<DbScope, Database> {
   const DbScope({super.key, required super.child});
 
-  static AsyncDataScopeContext<DbScope, Database> of(
-    BuildContext context, {
-    required bool listen,
-  }) =>
+  /// The value itself. Throws until there is one — read it from below
+  /// [buildOnReady], where there always is.
+  static Database of(BuildContext context, {required bool listen}) =>
       AsyncDataScopeBase.of<DbScope, Database>(
         context,
         listen: listen,
-      );
+      ).data;
 
   static V select<V>(
     BuildContext context,
-    V Function(AsyncDataScopeContext<DbScope, Database> context) selector,
+    V Function(Database data) selector,
   ) =>
       AsyncDataScopeBase.select<DbScope, Database, V>(
         context,
-        selector,
+        (scope) => selector(scope.data),
       );
 
-  /// The value itself, without subscribing to anything else.
-  static Database dataOf(BuildContext context) =>
-      select(context, (scope) => scope.data);
+  /// One value of the data, subscribed to on its own.
+  static bool isOpenOf(BuildContext context) =>
+      select(context, (data) => data.isOpen);
 
   @override
   Stream<AsyncDataScopeInitState<Object, Database>> initData(

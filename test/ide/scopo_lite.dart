@@ -77,10 +77,10 @@ final class ScreenScopeState
   int counter = 0;
 
   @override
-  FutureOr<void> initStateAsync() {}
+  Future<void> initStateAsync() async {}
 
   @override
-  FutureOr<void> disposeStateAsync() {}
+  Future<void> disposeStateAsync() async {}
 
   @override
   Widget build(BuildContext context) => params.child;

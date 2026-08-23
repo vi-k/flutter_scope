@@ -22,29 +22,29 @@ final class PlayerScope
     extends AsyncControllerScopeBase<PlayerScope, PlayerController> {
   const PlayerScope({super.key, required super.child});
 
-  static AsyncControllerScopeContext<PlayerScope, PlayerController> of(
+  /// The controller itself, for calling methods on it. Throws until there
+  /// is one — read it from below [buildOnReady], where there always is.
+  static PlayerController of(
     BuildContext context, {
     required bool listen,
   }) =>
       AsyncControllerScopeBase.of<PlayerScope, PlayerController>(
         context,
         listen: listen,
-      );
+      ).controller;
 
   static V select<V>(
     BuildContext context,
-    V Function(
-      AsyncControllerScopeContext<PlayerScope, PlayerController> context,
-    ) selector,
+    V Function(PlayerController controller) selector,
   ) =>
       AsyncControllerScopeBase.select<PlayerScope, PlayerController, V>(
         context,
-        selector,
+        (scope) => selector(scope.controller),
       );
 
-  /// The controller itself, for calling methods on it.
-  static PlayerController controllerOf(BuildContext context) =>
-      select(context, (scope) => scope.controller);
+  /// One value of the controller, subscribed to on its own.
+  static bool isPlayingOf(BuildContext context) =>
+      select(context, (controller) => controller.isPlaying);
 
   @override
   PlayerController createController(BuildContext context) => PlayerController();
@@ -71,6 +71,8 @@ final class PlayerScope
 
 final class PlayerController extends ScopeController {
   Timer? _ticker;
+
+  bool isPlaying = false;
 
   @override
   Future<void> init() async {

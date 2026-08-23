@@ -20,6 +20,7 @@ import 'package:scopo/scopo.dart';
 
 final class Database {
   static Future<Database> open() async => Database();
+  final bool isOpen = true;
   Future<void> close() async {}
 }
 

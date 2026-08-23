@@ -20,6 +20,7 @@ import 'package:scopo/scopo.dart';
 
 final class Database {
   static Future<Database> open() async => Database();
+  final bool isOpen = true;
   Future<void> close() async {}
 }
 
@@ -103,10 +104,10 @@ final class AppState extends ScopeState<App, AppDependencies, AppState> {
   int counter = 0;
 
   @override
-  FutureOr<void> initStateAsync() {}
+  Future<void> initStateAsync() async {}
 
   @override
-  FutureOr<void> disposeStateAsync() {}
+  Future<void> disposeStateAsync() async {}
 
   @override
   Widget build(BuildContext context) => params.child;
