@@ -12,7 +12,10 @@
 * Editor templates now ship with the package: `ide/scopo.code-snippets` for VS
   Code (and Cursor, Windsurf, Antigravity) and `ide/scopo-live-templates.xml`
   for IntelliJ and Android Studio. Nine templates — a class skeleton per
-  family, a dependency container, and the accessor line. Installation is in
+  family, a dependency container, and the accessor line. The skeletons write
+  the accessors out as statics of the scope, which is the shape to prefer when
+  something else is doing the typing; `ScopeAccess` is the shape to prefer when
+  you are. Installation is in
   `ide/README.md`. The skeletons they insert are expanded into
   `test/ide/snippet_skeletons.dart` and compiled by the gate, so a template
   that stops being valid Dart fails the build.

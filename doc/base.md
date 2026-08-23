@@ -246,8 +246,11 @@ name — so the two are interchangeable, and a scope that wants accessors under
 its own names still writes them. The `README` of the package has the table of
 all eight.
 
-What is left to type is the class skeleton, and that comes with the package
-too: `ide/scopo.code-snippets` for VS Code (and Cursor, Windsurf, Antigravity)
+A template answers the same cost the other way round. Its skeletons write the
+accessors out as statics of the scope — `App.select(context, …)` at every call
+site, with nothing to type, because the template typed them. The two are not
+rivals: one is for code written by hand, the other for code written by a key
+stroke. They ship with the package: `ide/scopo.code-snippets` for VS Code (and Cursor, Windsurf, Antigravity)
 and `ide/scopo-live-templates.xml` for IntelliJ and Android Studio, both in the
 package directory alongside `lib/`. Nine templates — one per family, one for a
 dependency container, one for the accessor line:

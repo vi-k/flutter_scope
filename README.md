@@ -594,9 +594,11 @@ where they were: a scope that wants its accessors under names of its own, or
 one that exposes only two of the five, still writes them by hand. The accessor
 is the shortest way to have all of them, not the only way to have any.
 
-**Editor templates.** The class skeletons and the accessor line come with the
-package as VS Code snippets and IntelliJ live templates — see `ide/README.md`
-in the package directory, or the topic
+**Or let a template write the wrappers.** The editor templates that ship with
+the package take the other route: their skeletons write the five statics out in
+full, so a descendant reads `App.select(context, …)` and nothing had to be
+typed. Use the accessor when you write the scope by hand, a template when you
+do not — see `ide/README.md` in the package directory, or the topic
 [base](https://pub.dev/documentation/scopo/latest/topics/base-topic.html).
 
 ## scopeKey

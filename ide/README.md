@@ -3,6 +3,12 @@
 Nine templates for the boilerplate a scope needs: the class skeletons of every
 family, the dependency container, and the accessor line.
 
+The skeletons write out the accessors as **statics of the scope**, so a
+descendant reads `App.select(context, …)`. That is what a template is for — the
+cost of those wrappers was typing them, and a template has already paid it. The
+`ScopeAccess` objects are the other answer to the same cost, for code written by
+hand; `scopo-access` inserts one for a scope that prefers them.
+
 Two files, one set. They are maintained side by side by hand, and a test
 (`test/ide_snippets_test.dart`) fails if one of them gains a template the other
 does not.
@@ -32,7 +38,7 @@ and pick `scopo-live-templates.xml`. The templates arrive in a group named
 
 | type this | and get |
 | --- | --- |
-| `scopo-scope` | a full `Scope`: widget, state and the accessor |
+| `scopo-scope` | a full `Scope`: widget, state and the five statics |
 | `scopo-deps` | a `ScopeDependencies` container with async initialization |
 | `scopo-lite` | a `LiteScope` and its state |
 | `scopo-widget` | a `ScopeWidgetBase` |
@@ -40,7 +46,7 @@ and pick `scopo-live-templates.xml`. The templates arrive in a group named
 | `scopo-notifier` | a `ScopeNotifierBase` over a `Listenable` |
 | `scopo-async` | an `AsyncScopeBase` |
 | `scopo-data` | an `AsyncDataScopeBase` |
-| `scopo-access` | the accessor line on its own |
+| `scopo-access` | the accessor line, for a scope that prefers `ScopeAccess` |
 
 ## What is checked, and what is not
 

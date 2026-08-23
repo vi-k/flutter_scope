@@ -28,7 +28,35 @@ final class Database {
 final class App extends Scope<App, AppDependencies, AppState> {
   const App({super.key, required super.child});
 
-  static const access = ScopeAccess<App, AppDependencies, AppState>();
+  static AppState of(BuildContext context) =>
+      Scope.of<App, AppDependencies, AppState>(context);
+
+  static AppState? maybeOf(BuildContext context) =>
+      Scope.maybeOf<App, AppDependencies, AppState>(context);
+
+  static V select<V>(
+    BuildContext context,
+    V Function(AppState state) selector,
+  ) =>
+      Scope.select<App, AppDependencies, AppState, V>(
+        context,
+        selector,
+      );
+
+  static App paramsOf(BuildContext context, {required bool listen}) =>
+      Scope.paramsOf<App, AppDependencies, AppState>(
+        context,
+        listen: listen,
+      );
+
+  static V selectParam<V>(
+    BuildContext context,
+    V Function(App widget) selector,
+  ) =>
+      Scope.selectParam<App, AppDependencies, AppState, V>(
+        context,
+        selector,
+      );
 
   @override
   Stream<ScopeInitState<Object, AppDependencies>> initDependencies(
@@ -80,7 +108,38 @@ final class AppDependencies implements ScopeDependencies {
 final class ScreenScope extends LiteScope<ScreenScope, ScreenScopeState> {
   const ScreenScope({super.key, required super.child});
 
-  static const access = LiteScopeAccess<ScreenScope, ScreenScopeState>();
+  static ScreenScopeState of(BuildContext context) =>
+      LiteScope.of<ScreenScope, ScreenScopeState>(context);
+
+  static ScreenScopeState? maybeOf(BuildContext context) =>
+      LiteScope.maybeOf<ScreenScope, ScreenScopeState>(context);
+
+  static V select<V>(
+    BuildContext context,
+    V Function(ScreenScopeState state) selector,
+  ) =>
+      LiteScope.select<ScreenScope, ScreenScopeState, V>(
+        context,
+        selector,
+      );
+
+  static ScreenScope paramsOf(
+    BuildContext context, {
+    required bool listen,
+  }) =>
+      LiteScope.paramsOf<ScreenScope, ScreenScopeState>(
+        context,
+        listen: listen,
+      );
+
+  static V selectParam<V>(
+    BuildContext context,
+    V Function(ScreenScope widget) selector,
+  ) =>
+      LiteScope.selectParam<ScreenScope, ScreenScopeState, V>(
+        context,
+        selector,
+      );
 
   @override
   Widget? buildOnWaiting(BuildContext context) => const SizedBox.shrink();
@@ -101,7 +160,14 @@ final class ApiConfig extends ScopeWidgetBase<ApiConfig> {
 
   const ApiConfig({super.key, required this.apiKey, required super.child});
 
-  static const access = ScopeWidgetAccess<ApiConfig>();
+  static ApiConfig of(BuildContext context, {required bool listen}) =>
+      ScopeWidgetBase.of<ApiConfig>(context, listen: listen);
+
+  static V select<V>(
+    BuildContext context,
+    V Function(ApiConfig widget) selector,
+  ) =>
+      ScopeWidgetBase.select<ApiConfig, V>(context, selector);
 
   @override
   Widget build(BuildContext context) => child;
@@ -118,7 +184,23 @@ final class UserScope extends ScopeModelBase<UserScope, UserModel> {
         );
 
   /// Over a model somebody else owns: `super.value(value: model)`.
-  static const access = ScopeModelAccess<UserScope, UserModel>();
+  static ScopeModelContext<UserScope, UserModel> of(
+    BuildContext context, {
+    required bool listen,
+  }) =>
+      ScopeModelBase.of<UserScope, UserModel>(
+        context,
+        listen: listen,
+      );
+
+  static V select<V>(
+    BuildContext context,
+    V Function(ScopeModelContext<UserScope, UserModel> context) selector,
+  ) =>
+      ScopeModelBase.select<UserScope, UserModel, V>(
+        context,
+        selector,
+      );
 
   @override
   Widget build(BuildContext context) => builder(context);
@@ -135,7 +217,23 @@ final class CounterScope extends ScopeNotifierBase<CounterScope, Counter> {
         );
 
   /// Over a notifier somebody else owns: `super.value(value: model)`.
-  static const access = ScopeNotifierAccess<CounterScope, Counter>();
+  static ScopeModelContext<CounterScope, Counter> of(
+    BuildContext context, {
+    required bool listen,
+  }) =>
+      ScopeNotifierBase.of<CounterScope, Counter>(
+        context,
+        listen: listen,
+      );
+
+  static V select<V>(
+    BuildContext context,
+    V Function(ScopeModelContext<CounterScope, Counter> context) selector,
+  ) =>
+      ScopeNotifierBase.select<CounterScope, Counter, V>(
+        context,
+        selector,
+      );
 
   @override
   Widget build(BuildContext context) => builder(context);
@@ -145,7 +243,17 @@ final class CounterScope extends ScopeNotifierBase<CounterScope, Counter> {
 final class ConnectionScope extends AsyncScopeBase<ConnectionScope> {
   const ConnectionScope({super.key, required super.child});
 
-  static const access = AsyncScopeAccess<ConnectionScope>();
+  static AsyncScopeContext<ConnectionScope> of(
+    BuildContext context, {
+    required bool listen,
+  }) =>
+      AsyncScopeBase.of<ConnectionScope>(context, listen: listen);
+
+  static V select<V>(
+    BuildContext context,
+    V Function(AsyncScopeContext<ConnectionScope> context) selector,
+  ) =>
+      AsyncScopeBase.select<ConnectionScope, V>(context, selector);
 
   @override
   Stream<AsyncScopeInitState> initScope(BuildContext context) async* {
@@ -178,7 +286,23 @@ final class ConnectionScope extends AsyncScopeBase<ConnectionScope> {
 final class DbScope extends AsyncDataScopeBase<DbScope, Database> {
   const DbScope({super.key, required super.child});
 
-  static const access = AsyncDataScopeAccess<DbScope, Database>();
+  static AsyncDataScopeContext<DbScope, Database> of(
+    BuildContext context, {
+    required bool listen,
+  }) =>
+      AsyncDataScopeBase.of<DbScope, Database>(
+        context,
+        listen: listen,
+      );
+
+  static V select<V>(
+    BuildContext context,
+    V Function(AsyncDataScopeContext<DbScope, Database> context) selector,
+  ) =>
+      AsyncDataScopeBase.select<DbScope, Database, V>(
+        context,
+        selector,
+      );
 
   @override
   Stream<AsyncDataScopeInitState<Object, Database>> initData(
