@@ -15,7 +15,6 @@ import 'package:test/test.dart';
 void main() {
   final snippetsFile = File('ide/scopo.code-snippets');
   final templatesFile = File('ide/scopo-live-templates.xml');
-  final skeletonsFile = File('test/ide/snippet_skeletons.dart');
 
   late Map<String, dynamic> snippets;
 
@@ -83,47 +82,51 @@ void main() {
   });
 
   test('the analyzed skeletons match the snippets they came from', () {
+    // One file per skeleton, named after the prefix: several skeletons declare
+    // a class of the same default name, which is right in an editor and a
+    // conflict in one library.
+    //
     // Compared with the whitespace squeezed out of both sides. The generated
-    // file is formatted by `dart format` like every other file of the suite,
+    // files are formatted by `dart format` like everything else in the suite,
     // and the formatter is entitled to move a line break or drop the trailing
     // space a `$0` leaves behind — neither of which changes what the editor
-    // pastes. Comparing verbatim made the test fail on the format run rather
-    // than on a snippet that had actually drifted.
-    final actual = _squeezed(skeletonsFile.readAsStringSync());
+    // pastes.
+    for (final entry in snippets.values) {
+      final snippet = entry as Map;
+      final prefix = snippet['prefix'] as String;
+      if (prefix == 'scopo-access') continue;
 
-    for (final skeleton in _skeletonsOf(snippets)) {
+      final file = File('test/ide/${prefix.replaceAll('-', '_')}.dart');
       expect(
-        actual,
-        contains(_squeezed(skeleton)),
-        reason: 'a snippet was changed without regenerating '
-            '`test/ide/snippet_skeletons.dart`, so nothing compiles what the '
-            'editor now pastes',
+        file.existsSync(),
+        isTrue,
+        reason: 'a snippet was added without a skeleton to compile it: '
+            'expected ${file.path}',
+      );
+      expect(
+        _squeezed(file.readAsStringSync()),
+        contains(_squeezed(_skeletonOf(snippet))),
+        reason: 'the snippet `$prefix` was changed without regenerating '
+            '${file.path}, so nothing compiles what the editor now pastes',
       );
     }
   });
 }
 
-/// What an editor pastes, for every snippet but the one-liner: tab stops
-/// replaced by their defaults and the VS Code escape of `$` undone.
-List<String> _skeletonsOf(Map<String, dynamic> snippets) {
-  final out = <String>[];
-  for (final entry in snippets.values) {
-    final snippet = entry as Map;
-    if (snippet['prefix'] == 'scopo-access') continue;
+/// What an editor pastes: tab stops replaced by their defaults and the VS Code
+/// escape of `$` undone.
+String _skeletonOf(Map<dynamic, dynamic> snippet) {
+  var body = (snippet['body'] as List).cast<String>().join('\n');
+  body = body.replaceAllMapped(
+    RegExp(r'\$\{\d+:([^}]*)\}'),
+    (m) => m.group(1)!,
+  );
+  body = body.replaceAllMapped(
+    RegExp(r'\$\{\d+\|([^,|]*)[^}]*\}'),
+    (m) => m.group(1)!,
+  );
 
-    var body = (snippet['body'] as List).cast<String>().join('\n');
-    body = body.replaceAllMapped(
-      RegExp(r'\$\{\d+:([^}]*)\}'),
-      (m) => m.group(1)!,
-    );
-    body = body.replaceAllMapped(
-      RegExp(r'\$\{\d+\|([^,|]*)[^}]*\}'),
-      (m) => m.group(1)!,
-    );
-    out.add(body.replaceAll(r'$0', '').replaceAll(r'\$', r'$'));
-  }
-
-  return out;
+  return body.replaceAll(r'$0', '').replaceAll(r'\$', r'$');
 }
 
 /// The text with every run of whitespace removed, so that formatting cannot

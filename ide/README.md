@@ -1,6 +1,6 @@
 # Editor templates
 
-Nine templates for the boilerplate a scope needs: the class skeletons of every
+Twelve templates for the boilerplate a scope needs: the class skeletons of every
 family, the dependency container, and the accessor line.
 
 The skeletons write out the accessors as **statics of the scope**, so a
@@ -38,21 +38,26 @@ and pick `scopo-live-templates.xml`. The templates arrive in a group named
 
 | type this | and get |
 | --- | --- |
-| `scopo-scope` | a full `Scope`: widget, state and the five statics |
-| `scopo-deps` | a `ScopeDependencies` container with async initialization |
+| `scopo-scope` | a full `Scope`: widget, automatic dependencies, state, statics |
+| `scopo-autodeps` | a `ScopeAutoDependencies` tree that unwinds itself |
+| `scopo-deps` | a hand-written container, with a teardown a cancellation reaches |
 | `scopo-lite` | a `LiteScope` and its state |
 | `scopo-widget` | a `ScopeWidgetBase` |
 | `scopo-model` | a `ScopeModelBase` over a plain object |
 | `scopo-notifier` | a `ScopeNotifierBase` over a `Listenable` |
 | `scopo-async` | an `AsyncScopeBase` |
 | `scopo-data` | an `AsyncDataScopeBase` |
+| `scopo-controller` | an `AsyncControllerScopeBase` |
+| `scopo-controller-class` | the `ScopeController` it owns |
 | `scopo-access` | the accessor line, for a scope that prefers `ScopeAccess` |
 
 ## What is checked, and what is not
 
-Every skeleton these templates insert is compiled: they are expanded with their
-default names into `test/ide/snippet_skeletons.dart`, which `flutter analyze`
-covers like any other file of the package. A template that stops being valid
+Every skeleton these templates insert is compiled: each is expanded with its
+default names into its own file under `test/ide/`, which `flutter analyze`
+covers like any other file of the package. One file each, because several
+skeletons declare a class of the same default name — right in an editor,
+a conflict in one library. A template that stops being valid
 Dart fails the gate.
 
 **The live templates themselves are not verified by a run.** The XML is well

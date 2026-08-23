@@ -1,6 +1,6 @@
 # base
 
-> Перевод `doc/base.md` (blob `0a7b1e3cf6e59885d6ae3495cd1092bd1d1c8611`).
+> Перевод `doc/base.md` (blob `d7344d06575fbbb6bef1e66bc8ecbce0273ea5d9`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 Каждое семейство скоупов этого пакета — `ScopeWidgetBase`, `ScopeModel`,
@@ -253,8 +253,8 @@ final counter = App.access.select(context, (state) => state.counter);
 кода, который пишут нажатием. Оба едут с пакетом:
 `ide/scopo.code-snippets` для VS Code (а также Cursor, Windsurf, Antigravity) и
 `ide/scopo-live-templates.xml` для IntelliJ и Android Studio — оба в каталоге
-пакета, рядом с `lib/`. Девять шаблонов: по одному на семейство, один на
-контейнер зависимостей, один на строку аксессора:
+пакета, рядом с `lib/`. Двенадцать шаблонов: по одному на семейство, два на контейнер зависимостей
+(автоматический и рукописный), один на контроллер, один на строку аксессора:
 
 ```json
 "scopo: The accessor object": {
