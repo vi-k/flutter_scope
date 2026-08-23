@@ -40,7 +40,7 @@ and pick `scopo-live-templates.xml`. The templates arrive in a group named
 | --- | --- |
 | `scopo-scope` | a full `Scope`: widget, automatic dependencies, state, statics |
 | `scopo-autodeps` | a `ScopeAutoDependencies` tree that unwinds itself |
-| `scopo-deps` | a hand-written container, with a teardown a cancellation reaches |
+| `scopo-deps` | a hand-written container: immutable, with a teardown a cancellation reaches |
 | `scopo-lite` | a `LiteScope` and its state |
 | `scopo-widget` | a `ScopeWidgetBase` |
 | `scopo-model` | a `ScopeModelBase` over a plain object |

@@ -30,22 +30,25 @@ final class Session {
 }
 
 final class AppDependencies implements ScopeDependencies {
-  // Nullable rather than `late final`, and that is the whole trick: a step
-  // that never ran leaves `null`, so the teardown below can skip it with
-  // `?.`. Reading an unset `late final` throws — from inside a teardown,
-  // where the failure has nowhere to go.
-  Database? _database;
-  Session? _session;
+  // Final, and that is the reason to write a container by hand at all:
+  // `ScopeAutoDependencies` fills its fields as it walks the tree, so they
+  // cannot be. Here everything that changes lives inside [init], and what
+  // leaves it is assembled once and never edited again.
+  final Database database;
+  final Session session;
 
-  /// Read from below the ready branch, where both are there.
-  Database get database => _database!;
-
-  Session get session => _session!;
+  AppDependencies({required this.database, required this.session});
 
   static Stream<ScopeInitState<Object, AppDependencies>> init(
     BuildContext context,
   ) async* {
-    final deps = AppDependencies();
+    // Locals, not fields: until the container is assembled, these belong
+    // to this function, and it is this function that has to give them back
+    // if it does not get that far. Nullable so that a step which never ran
+    // can be skipped with `?.` below.
+    Database? database;
+    Session? session;
+
     // A cancellation raises nothing: it ends the generator at a yield, so a
     // `catch` never runs and only a `finally` sees it. The flag tells the
     // two endings apart — handed over, or abandoned half-built.
@@ -53,34 +56,27 @@ final class AppDependencies implements ScopeDependencies {
 
     try {
       yield ScopeProgress('opening the database');
-      deps._database = await Database.open();
+      database = await Database.open();
 
       yield ScopeProgress('connecting');
-      deps._session = await Session.connect();
+      session = await Session.connect();
 
-      yield ScopeReady(deps);
+      yield ScopeReady(
+        AppDependencies(database: database, session: session),
+      );
       handedOver = true;
     } finally {
       // Only if the scope never got it. Once it did, releasing is the
-      // scope's job and doing it here would release it twice.
+      // scope's job — through [dispose] below — and doing it here would
+      // release it twice.
+      //
+      // Reverse order of construction, and every step asks whether it was
+      // reached at all.
       if (!handedOver) {
-        await deps._release();
+        await session?.close();
+        await database?.close();
       }
     }
-  }
-
-  /// The one teardown, used by both endings — the cancellation above and
-  /// the ordinary [dispose] below.
-  ///
-  /// Reverse order of construction, and every step asks whether it was
-  /// reached at all. Clearing each field as it goes makes a second call
-  /// harmless.
-  Future<void> _release() async {
-    await _session?.close();
-    _session = null;
-
-    await _database?.close();
-    _database = null;
   }
 
   /// Drops what must stop reaching the dependencies at once. Runs once,
@@ -88,11 +84,17 @@ final class AppDependencies implements ScopeDependencies {
   @override
   void onUnmount() {}
 
+  /// Reached only for a container the scope took over, so both fields are
+  /// there — no question of whether a step ran.
   @override
-  Future<void> dispose() => _release();
+  Future<void> dispose() async {
+    await session.close();
+    await database.close();
+  }
 }
 
-// `ScopeAutoDependencies` does all of the above for you: register
-// `dep.dispose` as each step succeeds and the container unwinds itself in
-// reverse, cancelled or not. Write the container by hand when the order or
-// the conditions are yours rather than the tree's — see `scopo-autodeps`.
+// `ScopeAutoDependencies` does the unwinding for you: register
+// `dep.dispose` as each step succeeds and the tree comes apart in reverse,
+// cancelled or not. Write the container by hand for an immutable one, or
+// when the order or the conditions are yours rather than the tree's — see
+// `scopo-autodeps`.
