@@ -1,6 +1,6 @@
 # scopo
 
-> Перевод `README.md` (blob `9b6c5960cad03de9f0e531514ffbb5223c424a2f`).
+> Перевод `README.md` (blob `7e32db3f8a5474339c33dcbbae5326ebd8564ddc`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 [![pub version](https://img.shields.io/pub/v/scopo)](https://pub.dev/packages/scopo)
@@ -228,7 +228,7 @@ class HomeScreen extends StatelessWidget {
 }
 ```
 
-**Подробнее:** тема [Scope](https://github.com/vi-k/scopo/blob/main/doc/full_scope.md).
+**Подробнее:** тема [Scope](https://pub.dev/documentation/scopo/latest/topics/Scope-topic.html).
 
 ## Специализированные скоупы
 
@@ -260,7 +260,7 @@ final class ApiConfig extends ScopeWidgetBase<ApiConfig> {
 }
 ```
 
-**Подробнее:** тема [ScopeWidget](https://github.com/vi-k/scopo/blob/main/doc/scope_widget.md).
+**Подробнее:** тема [ScopeWidget](https://pub.dev/documentation/scopo/latest/topics/ScopeWidget-topic.html).
 
 ### ScopeModel
 
@@ -301,7 +301,7 @@ class UserView extends StatelessWidget {
 }
 ```
 
-**Подробнее:** тема [ScopeModel](https://github.com/vi-k/scopo/blob/main/doc/scope_model.md).
+**Подробнее:** тема [ScopeModel](https://pub.dev/documentation/scopo/latest/topics/ScopeModel-topic.html).
 
 ### ScopeNotifier
 
@@ -342,7 +342,7 @@ class CounterText extends StatelessWidget {
 }
 ```
 
-**Подробнее:** тема [ScopeNotifier](https://github.com/vi-k/scopo/blob/main/doc/scope_notifier.md).
+**Подробнее:** тема [ScopeNotifier](https://pub.dev/documentation/scopo/latest/topics/ScopeNotifier-topic.html).
 
 ### AsyncScope
 
@@ -371,7 +371,7 @@ class ConnectionGate extends StatelessWidget {
 }
 ```
 
-**Подробнее:** тема [AsyncScope](https://github.com/vi-k/scopo/blob/main/doc/async_scope.md).
+**Подробнее:** тема [AsyncScope](https://pub.dev/documentation/scopo/latest/topics/AsyncScope-topic.html).
 
 ### AsyncDataScope
 
@@ -398,7 +398,7 @@ class DatabaseGate extends StatelessWidget {
 }
 ```
 
-**Подробнее:** тема [AsyncDataScope](https://github.com/vi-k/scopo/blob/main/doc/async_data_scope.md).
+**Подробнее:** тема [AsyncDataScope](https://pub.dev/documentation/scopo/latest/topics/AsyncDataScope-topic.html).
 
 ### AsyncControllerScope
 
@@ -460,7 +460,7 @@ final class PlayerController extends ScopeController {
 `AsyncControllerScope<C>` — то же самое с колбэком `createController` вместо
 наследования.
 
-**Подробнее:** тема [AsyncControllerScope](https://github.com/vi-k/scopo/blob/main/doc/async_controller_scope.md).
+**Подробнее:** тема [AsyncControllerScope](https://pub.dev/documentation/scopo/latest/topics/AsyncControllerScope-topic.html).
 
 ### LiteScope
 
@@ -504,7 +504,7 @@ final class ScreenScopeState
 цикла, в приложении
 [scopo_demo](https://github.com/vi-k/scopo/tree/main/example/scopo_demo).
 
-**Подробнее:** тема [LiteScope](https://github.com/vi-k/scopo/blob/main/doc/lite_scope.md).
+**Подробнее:** тема [LiteScope](https://pub.dev/documentation/scopo/latest/topics/LiteScope-topic.html).
 
 ## scopeKey
 
@@ -646,20 +646,21 @@ IndexedStack(
 - [changelog](https://github.com/vi-k/scopo/blob/main/CHANGELOG.md)
 
 По теме на семейство; каждая рассказывает то, чего не может справочник API:
-порядок происходящего, разменные решения и ловушки. Ссылки ниже ведут в
-репозиторий, где эти страницы лежат как `doc/*.md`; те же страницы отрисованы
-на pub.dev как Topics — внутри справочника по API выше.
+порядок происходящего, разменные решения и ловушки. Ссылки ниже ведут в Topics
+справочника по API выше — там всегда последний релиз; те же страницы лежат в
+репозитории как `doc/*.md`, и читать их стоит оттуда, если у вас закреплена
+другая версия.
 
 | тема | начинать здесь ради |
 | --- | --- |
-| [base](https://github.com/vi-k/scopo/blob/main/doc/base.md) | `of`, `select`, `listen` и того, как скоуп вообще находят |
-| [ScopeWidget](https://github.com/vi-k/scopo/blob/main/doc/scope_widget.md) | пары «виджет — элемент», от которой наследуются все семейства |
-| [ScopeModel](https://github.com/vi-k/scopo/blob/main/doc/scope_model.md) | владения обычным объектом |
-| [ScopeNotifier](https://github.com/vi-k/scopo/blob/main/doc/scope_notifier.md) | владения `Listenable` |
-| [AsyncScope](https://github.com/vi-k/scopo/blob/main/doc/async_scope.md) | асинхронного жизненного цикла, `scopeKey`, координатора |
-| [AsyncDataScope](https://github.com/vi-k/scopo/blob/main/doc/async_data_scope.md) | того же, но с производимым значением |
-| [AsyncControllerScope](https://github.com/vi-k/scopo/blob/main/doc/async_controller_scope.md) | то же, где это значение — контроллер с собственным жизненным циклом |
-| [LiteScope](https://github.com/vi-k/scopo/blob/main/doc/lite_scope.md) | класса состояния с этим циклом и `close()` |
-| [Scope](https://github.com/vi-k/scopo/blob/main/doc/full_scope.md) | полного семейства: зависимости, состояние, четыре ветки |
-| [debug](https://github.com/vi-k/scopo/blob/main/doc/debug.md) | наблюдателя, таймаутов и настройки для тестов |
-| [utils](https://github.com/vi-k/scopo/blob/main/doc/utils.md) | хелперов, которые едут вместе с пакетом |
+| [base](https://pub.dev/documentation/scopo/latest/topics/base-topic.html) | `of`, `select`, `listen` и того, как скоуп вообще находят |
+| [ScopeWidget](https://pub.dev/documentation/scopo/latest/topics/ScopeWidget-topic.html) | пары «виджет — элемент», от которой наследуются все семейства |
+| [ScopeModel](https://pub.dev/documentation/scopo/latest/topics/ScopeModel-topic.html) | владения обычным объектом |
+| [ScopeNotifier](https://pub.dev/documentation/scopo/latest/topics/ScopeNotifier-topic.html) | владения `Listenable` |
+| [AsyncScope](https://pub.dev/documentation/scopo/latest/topics/AsyncScope-topic.html) | асинхронного жизненного цикла, `scopeKey`, координатора |
+| [AsyncDataScope](https://pub.dev/documentation/scopo/latest/topics/AsyncDataScope-topic.html) | того же, но с производимым значением |
+| [AsyncControllerScope](https://pub.dev/documentation/scopo/latest/topics/AsyncControllerScope-topic.html) | то же, где это значение — контроллер с собственным жизненным циклом |
+| [LiteScope](https://pub.dev/documentation/scopo/latest/topics/LiteScope-topic.html) | класса состояния с этим циклом и `close()` |
+| [Scope](https://pub.dev/documentation/scopo/latest/topics/Scope-topic.html) | полного семейства: зависимости, состояние, четыре ветки |
+| [debug](https://pub.dev/documentation/scopo/latest/topics/debug-topic.html) | наблюдателя, таймаутов и настройки для тестов |
+| [utils](https://pub.dev/documentation/scopo/latest/topics/utils-topic.html) | хелперов, которые едут вместе с пакетом |
