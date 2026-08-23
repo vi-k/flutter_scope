@@ -97,12 +97,6 @@ final class CounterScope
         listen: false,
       ).data;
 
-  static int countOf(BuildContext context) =>
-      AsyncDataScopeBase.select<CounterScope, CounterModel, int>(
-        context,
-        (context) => context.data.count,
-      );
-
   @override
   Stream<AsyncDataScopeInitState<Progress, CounterModel>> initData(
     BuildContext context,
