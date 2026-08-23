@@ -65,7 +65,7 @@ final class App extends Scope<App, AppDependencies, AppState> {
       select(context, (state) => state.counter);
 
   @override
-  Stream<ScopeInitState<Object, AppDependencies>> initDependencies(
+  ScopeAutoDependenciesStream<AppDependencies> initDependencies(
     BuildContext context,
   ) =>
       AppDependencies().init(context);
@@ -73,18 +73,40 @@ final class App extends Scope<App, AppDependencies, AppState> {
   @override
   AppState createState() => AppState();
 
+  /// The progress the container reports: the dependency that has just
+  /// finished, and how far along the tree is. `covariant` narrows the
+  /// `Object?` of the base to what this scope's stream actually carries —
+  /// without it the value arrives with nothing on it to read.
   @override
-  Widget buildOnProgress(BuildContext context, Object? progress) =>
-      const Center(child: CircularProgressIndicator());
+  Widget buildOnProgress(
+    BuildContext context,
+    covariant ScopeAutoDependenciesProgress? progress,
+  ) =>
+      Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Null until the first dependency reports: indeterminate
+            // until then, determinate from there on.
+            CircularProgressIndicator(value: progress?.value),
+            Text(progress?.name ?? ''),
+          ],
+        ),
+      );
 
+  /// The same progress value, at the step the initialization broke on.
   @override
   Widget buildOnError(
     BuildContext context,
     Object error,
     StackTrace stackTrace,
-    Object? progress,
+    covariant ScopeAutoDependenciesProgress? progress,
   ) =>
-      Center(child: Text('$error'));
+      Center(
+        child: Text(
+          progress == null ? '$error' : '${progress.name}: $error',
+        ),
+      );
 }
 
 final class AppDependencies
