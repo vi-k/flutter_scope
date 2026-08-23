@@ -1,6 +1,6 @@
 # Editor templates
 
-Twelve templates for the boilerplate a scope needs: the class skeletons of every
+Eleven templates for the boilerplate a scope needs: the class skeletons of every
 family, the dependency container, and the accessor line.
 
 The skeletons write out the accessors as **statics of the scope**, so a
@@ -47,8 +47,7 @@ and pick `scopo-live-templates.xml`. The templates arrive in a group named
 | `scopo-notifier` | a `ScopeNotifierBase` over a `Listenable` |
 | `scopo-async` | an `AsyncScopeBase` |
 | `scopo-data` | an `AsyncDataScopeBase` |
-| `scopo-controller` | an `AsyncControllerScopeBase` |
-| `scopo-controller-class` | the `ScopeController` it owns |
+| `scopo-controller` | an `AsyncControllerScopeBase` and the controller it owns |
 | `scopo-access` | the accessor line, for a scope that prefers `ScopeAccess` |
 
 ## What is checked, and what is not

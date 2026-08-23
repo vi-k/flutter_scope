@@ -1,9 +1,9 @@
 # Шаблоны для редакторов
 
-> Перевод `ide/README.md` (blob `d15c0ba5c2aaf1e01a5a76a9318f15bba55a01df`).
+> Перевод `ide/README.md` (blob `7cc9ff159fab96f2dd35ba11897519ec73988c6e`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
-Двенадцать шаблонов на тот код, который у скоупа приходится писать всегда:
+Одиннадцать шаблонов на тот код, который у скоупа приходится писать всегда:
 скелеты классов всех семейств, контейнер зависимостей и строка аксессора.
 
 Скелеты выписывают аксессоры **статическими методами самого скоупа**, так что
@@ -49,8 +49,7 @@ Snippets** из палитры команд, выберите Dart и встав
 | `scopo-notifier` | `ScopeNotifierBase` над `Listenable` |
 | `scopo-async` | `AsyncScopeBase` |
 | `scopo-data` | `AsyncDataScopeBase` |
-| `scopo-controller` | `AsyncControllerScopeBase` |
-| `scopo-controller-class` | контроллер `ScopeController`, которым он владеет |
+| `scopo-controller` | `AsyncControllerScopeBase` и контроллер, которым он владеет |
 | `scopo-access` | строку аксессора — для скоупа, которому милее `ScopeAccess` |
 
 ## Что проверено, а что нет

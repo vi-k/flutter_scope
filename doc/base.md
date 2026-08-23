@@ -252,8 +252,9 @@ site, with nothing to type, because the template typed them. The two are not
 rivals: one is for code written by hand, the other for code written by a key
 stroke. They ship with the package: `ide/scopo.code-snippets` for VS Code (and Cursor, Windsurf, Antigravity)
 and `ide/scopo-live-templates.xml` for IntelliJ and Android Studio, both in the
-package directory alongside `lib/`. Twelve templates — one per family, two for a dependency container (automatic
-and hand-written), one for a controller, one for the accessor line:
+package directory alongside `lib/`. Eleven templates — one per family, two for a dependency container (automatic
+and hand-written), one for the accessor line. Each writes out every class the
+shape needs, in one paste, for you to split across files as you like:
 
 ```json
 "scopo: The accessor object": {

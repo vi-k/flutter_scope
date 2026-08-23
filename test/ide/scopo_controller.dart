@@ -18,8 +18,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:scopo/scopo.dart';
 
-final class PlayerController extends ScopeController {}
-
 final class PlayerScope
     extends AsyncControllerScopeBase<PlayerScope, PlayerController> {
   const PlayerScope({super.key, required super.child});
@@ -69,4 +67,26 @@ final class PlayerScope
   @override
   Widget buildOnReady(BuildContext context, PlayerController controller) =>
       child;
+}
+
+final class PlayerController extends ScopeController {
+  Timer? _ticker;
+
+  @override
+  Future<void> init() async {
+    // `mounted` after every await: the scope may have gone while this was
+    // suspended, and what is taken afterwards has nobody to release it.
+    if (!mounted) return;
+  }
+
+  /// Drops what must stop reaching the controller at once. Synchronous, and
+  /// always runs before [dispose].
+  @override
+  void onUnmount() {
+    _ticker?.cancel();
+    _ticker = null;
+  }
+
+  @override
+  FutureOr<void> dispose() {}
 }

@@ -11,8 +11,9 @@
   and in the topic `base`.
 * Editor templates now ship with the package: `ide/scopo.code-snippets` for VS
   Code (and Cursor, Windsurf, Antigravity) and `ide/scopo-live-templates.xml`
-  for IntelliJ and Android Studio. Twelve templates — a class skeleton per
-  family, two containers, a controller, and the accessor line. The skeletons write
+  for IntelliJ and Android Studio. Eleven templates — a class skeleton per
+  family, two containers, and the accessor line; each writes every class its
+  shape needs in one paste. The skeletons write
   the accessors out as statics of the scope, which is the shape to prefer when
   something else is doing the typing; `ScopeAccess` is the shape to prefer when
   you are. Installation is in

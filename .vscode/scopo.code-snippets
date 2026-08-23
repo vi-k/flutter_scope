@@ -481,7 +481,7 @@
     ],
     "description": "AsyncDataScopeBase: the same, producing a value"
   },
-  "scopo: AsyncControllerScopeBase: owns a controller": {
+  "scopo: AsyncControllerScopeBase and the controller it owns": {
     "scope": "dart",
     "prefix": "scopo-controller",
     "body": [
@@ -537,16 +537,9 @@
       "  Widget buildOnReady(BuildContext context, ${2:PlayerController} controller) =>",
       "      child;",
       "}",
-      "$0"
-    ],
-    "description": "AsyncControllerScopeBase: owns a controller"
-  },
-  "scopo: ScopeController: init, onUnmount and dispose": {
-    "scope": "dart",
-    "prefix": "scopo-controller-class",
-    "body": [
-      "final class ${1:PlayerController} extends ScopeController {",
-      "  ${2:Timer}? _ticker;",
+      "",
+      "final class ${2:PlayerController} extends ScopeController {",
+      "  Timer? _ticker;",
       "",
       "  @override",
       "  Future<void> init() async {",
@@ -568,7 +561,7 @@
       "  FutureOr<void> dispose() {}",
       "}"
     ],
-    "description": "ScopeController: init, onUnmount and dispose"
+    "description": "AsyncControllerScopeBase and the controller it owns"
   },
   "scopo: The accessor object, for a scope that prefers it to wrappers": {
     "scope": "dart",
