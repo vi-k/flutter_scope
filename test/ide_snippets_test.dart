@@ -42,6 +42,29 @@ void main() {
     );
   });
 
+  // The copy in `.vscode/` is what this repository's own editor picks up, so it
+  // exists to be tried out on the spot rather than copied from pub-cache first.
+  // Two files with one content drift the moment one of them is edited, and
+  // nothing but a check keeps them together — `.vscode/` is not in the package
+  // archive, so no consumer ever sees the difference and no one else notices.
+  test('the copy in .vscode matches the one that ships', () {
+    final shipped = File('ide/scopo.code-snippets');
+    final local = File('.vscode/scopo.code-snippets');
+
+    expect(
+      local.existsSync(),
+      isTrue,
+      reason: 'the working copy of the snippets is missing; restore it with '
+          '`cp ide/scopo.code-snippets .vscode/`',
+    );
+    expect(
+      local.readAsStringSync(),
+      shipped.readAsStringSync(),
+      reason: 'the snippets were edited on one side only — copy '
+          '`ide/scopo.code-snippets` over `.vscode/scopo.code-snippets`',
+    );
+  });
+
   test('the live templates escape a literal dollar the IntelliJ way', () {
     final xml = templatesFile.readAsStringSync();
 
