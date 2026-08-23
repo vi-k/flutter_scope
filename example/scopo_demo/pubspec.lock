@@ -163,11 +163,10 @@ packages:
   navigation_node:
     dependency: "direct main"
     description:
-      path: "."
-      ref: HEAD
-      resolved-ref: "646246f644a1db16eeaf221580f3c3f26f9e5cd4"
-      url: "https://github.com/vi-k/navigation_node.git"
-    source: git
+      name: navigation_node
+      sha256: "36a140cade641dd431927e8c800f261692356895d1121a22fd32d2d5f6c7f0ca"
+      url: "https://pub.dev"
+    source: hosted
     version: "0.1.0"
   path:
     dependency: transitive
