@@ -29,24 +29,30 @@ final class DbScope extends AsyncDataScopeBase<DbScope, Database> {
 
   /// The value itself. Throws until there is one — read it from below
   /// [buildOnReady], where there always is.
-  static Database of(BuildContext context, {required bool listen}) =>
+  ///
+  /// `listen: false`, and not as a default worth revisiting: subscribing
+  /// here follows the *state* of the scope — waiting, progress, ready,
+  /// error — and the value is read from a subtree the ready state built.
+  /// Storing a value does not make it observable; a value the widgets have
+  /// to follow should be a `Listenable` with a `ScopeNotifier` under this
+  /// scope, or should expose a stream.
+  static Database of(BuildContext context) =>
       AsyncDataScopeBase.of<DbScope, Database>(
         context,
-        listen: listen,
+        listen: false,
       ).data;
 
+  /// Subscribes to the state of the scope, not to anything inside the
+  /// value: `hasData` and `isInitialized` change, the rows of a database
+  /// do not.
   static V select<V>(
     BuildContext context,
-    V Function(Database data) selector,
+    V Function(AsyncDataScopeContext<DbScope, Database> scope) selector,
   ) =>
       AsyncDataScopeBase.select<DbScope, Database, V>(
         context,
-        (scope) => selector(scope.data),
+        selector,
       );
-
-  /// One value of the data, subscribed to on its own.
-  static bool isOpenOf(BuildContext context) =>
-      select(context, (data) => data.isOpen);
 
   @override
   Stream<AsyncDataScopeInitState<Object, Database>> initData(

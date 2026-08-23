@@ -48,27 +48,31 @@ final class PlayerScope
 
   /// The controller itself, for calling methods on it. Throws until there
   /// is one — read it from below [buildOnReady], where there always is.
-  static PlayerController of(
-    BuildContext context, {
-    required bool listen,
-  }) =>
+  ///
+  /// `listen: false`, and not as a default worth revisiting: subscribing
+  /// here follows the *state* of the scope — waiting, ready, error — and
+  /// this family does not make the controller observable. A controller
+  /// whose values the widgets have to follow should be a `Listenable`
+  /// with a `ScopeNotifier` under this scope, or should expose a stream.
+  static PlayerController of(BuildContext context) =>
       AsyncControllerScopeBase.of<PlayerScope, PlayerController>(
         context,
-        listen: listen,
+        listen: false,
       ).controller;
 
+  /// Subscribes to the state of the scope, not to anything inside the
+  /// controller: `hasController` and `isInitialized` change, the position
+  /// of a player does not.
   static V select<V>(
     BuildContext context,
-    V Function(PlayerController controller) selector,
+    V Function(
+      AsyncControllerScopeContext<PlayerScope, PlayerController> scope,
+    ) selector,
   ) =>
       AsyncControllerScopeBase.select<PlayerScope, PlayerController, V>(
         context,
-        (scope) => selector(scope.controller),
+        selector,
       );
-
-  /// One value of the controller, subscribed to on its own.
-  static bool isPlayingOf(BuildContext context) =>
-      select(context, (controller) => controller.isPlaying);
 
   @override
   PlayerController createController(BuildContext context) => PlayerController();

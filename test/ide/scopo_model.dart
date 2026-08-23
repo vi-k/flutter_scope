@@ -59,6 +59,11 @@ final class UserScope extends ScopeModelBase<UserScope, UserModel> {
       );
 
   /// One value of the model, subscribed to on its own.
+  ///
+  /// The model is not observable: dependents are notified when this
+  /// widget is rebuilt, and the selector then filters out the values that
+  /// did not change. A model that changes on its own belongs in
+  /// `ScopeNotifierBase`, which subscribes to it.
   static String nameOf(BuildContext context) =>
       select(context, (scope) => scope.model.name);
 
