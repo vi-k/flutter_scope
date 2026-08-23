@@ -429,7 +429,14 @@ abstract base class LiteScopeCoreState<
   ///
   /// The [BuildContext] is gone by the time this runs on a removed scope, so
   /// it may only touch what the state holds in its own fields.
-  @mustCallSuper
+  ///
+  /// Calling `super.onUnmount()` is not required, and neither is it for
+  /// [disposeStateAsync] beside it: both are empty here and in every class
+  /// between here and the one you extend. They are the two halves of one
+  /// teardown — the synchronous half and the asynchronous one — and asking for
+  /// `super` in one of them and not the other was an inconsistency, not a
+  /// rule. On an *element* the same hook does carry work, and there
+  /// `@mustCallSuper` stays.
   void onUnmount() {}
 
   /// Disposes of the scope asynchronously.

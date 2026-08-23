@@ -9,6 +9,15 @@
   Nothing is deprecated by it — the statics stay, and a scope that wants
   accessors under its own names still writes them. New section in `README.md`
   and in the topic `base`.
+* `@mustCallSuper` removed from `onUnmount` of a scope state. It was empty
+  there and in every class between it and the one an application extends, so
+  `super.onUnmount()` did nothing and never had — while `disposeStateAsync`
+  beside it, the other half of the same teardown and just as empty, asked for
+  nothing. The two halves now read alike. On an *element* the hook does carry
+  work — `ScopeElementBase.onUnmount` disposes of the dependency container —
+  and there the annotation stays. Nothing to change on the consuming side: a
+  `super` call that is no longer required is still allowed.
+
 * Editor templates now ship with the package: `ide/scopo.code-snippets` for VS
   Code (and Cursor, Windsurf, Antigravity) and `ide/scopo-live-templates.xml`
   for IntelliJ and Android Studio. Eleven templates — a class skeleton per
@@ -18,8 +27,8 @@
   something else is doing the typing; `ScopeAccess` is the shape to prefer when
   you are. Installation is in
   `ide/README.md`. The skeletons they insert are expanded into
-  `test/ide/snippet_skeletons.dart` and compiled by the gate, so a template
-  that stops being valid Dart fails the build.
+  `test/ide/`, a file each, and compiled by the gate, so a template that stops
+  being valid Dart fails the build.
 
 ## 0.10.0
 

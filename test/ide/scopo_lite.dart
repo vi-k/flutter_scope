@@ -87,6 +87,12 @@ final class ScreenScopeState
   @override
   Future<void> initStateAsync() async {}
 
+  /// The synchronous half of the teardown: drop what must stop reaching
+  /// this state at once. The context is gone by now on a removed scope.
+  @override
+  void onUnmount() {}
+
+  /// The asynchronous half, after it.
   @override
   Future<void> disposeStateAsync() async {}
 
