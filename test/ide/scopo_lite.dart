@@ -76,6 +76,14 @@ final class ScreenScopeState
     extends LiteScopeState<ScreenScope, ScreenScopeState> {
   int counter = 0;
 
+  void incrementCounter() {
+    counter++;
+    // Wakes the descendants subscribed through `select`. It does not run
+    // this state's own `build` — that is what `setState` is for, and both
+    // are needed when both have to see the change.
+    notifyDependents();
+  }
+
   @override
   Future<void> initStateAsync() async {}
 
