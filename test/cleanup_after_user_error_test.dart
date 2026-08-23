@@ -755,6 +755,54 @@ void main() {
       );
     });
 
+    // The same limit, reached the other way. A state hangs its half of the
+    // teardown not only through a `disposeStateAsync` that never returns: the
+    // teardown waits for the state's own initialization before it may dispose
+    // of anything, so an `initStateAsync` that never finishes parks the same
+    // step one `await` earlier -- before there is anything to dispose of at
+    // all. That wait carries no limit of its own; the one that ends it is the
+    // limit around the step, and nothing reached it this way.
+    testWidgets('disposes of its dependencies after a state still initializing',
+        (tester) async {
+      final log = <String>[];
+      final hang = Completer<void>();
+      addTearDown(() {
+        if (!hang.isCompleted) {
+          hang.complete();
+        }
+      });
+
+      await tester.pumpWidget(
+        _wrap(
+          _PlainDepScope(
+            log: log,
+            stateInitGate: hang,
+            disposeScopeTimeout: const Duration(milliseconds: 50),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.pumpWidget(_wrap(const SizedBox.shrink()));
+      await settle(tester, until: () => log.contains('dispose deps'));
+
+      final exception = tester.takeException();
+      expect(exception, isA<TimeoutException>());
+      expect(
+        exception.toString(),
+        contains('its state to be disposed of'),
+        reason: 'the half given up on is the one belonging to the state, and '
+            'the message says which of the two it was',
+      );
+      expect(
+        log,
+        ['unmount deps', 'dispose deps'],
+        reason: 'a state that never finished initializing is no more a reason '
+            'to leave the dependencies holding what they took than a state '
+            'that never finished releasing',
+      );
+    });
+
     // `unmount` on a dependency is the one hook that runs synchronously, in
     // the middle of the element leaving the tree. A failure there used to stop
     // the walk over the siblings and skip the base teardown behind it, so
@@ -1364,6 +1412,14 @@ final class _PlainDepScope
   /// never finishes.
   final Completer<void>? stateDisposeGate;
 
+  /// Parks `initStateAsync` on this, so the first of the two teardown steps
+  /// never finishes for the other reason there is.
+  ///
+  /// The teardown of a state waits for its own initialization before it may
+  /// dispose of anything, so a state still initializing hangs the same step —
+  /// one `await` earlier, and without reaching `disposeStateAsync` at all.
+  final Completer<void>? stateInitGate;
+
   const _PlainDepScope({
     required this.log,
     this.failOnDepsUnmount = false,
@@ -1372,6 +1428,7 @@ final class _PlainDepScope
     this.failOnStateDispose = false,
     this.init,
     this.stateDisposeGate,
+    this.stateInitGate,
     super.disposeScopeTimeout,
   }) : super(child: const SizedBox.shrink());
 
@@ -1441,6 +1498,13 @@ final class _PlainDeps implements ScopeDependencies {
 
 final class _PlainDepScopeState
     extends ScopeState<_PlainDepScope, _PlainDeps, _PlainDepScopeState> {
+  @override
+  FutureOr<void> initStateAsync() {
+    if (params.stateInitGate case final gate?) {
+      return gate.future;
+    }
+  }
+
   @override
   void onUnmount() {
     super.onUnmount();

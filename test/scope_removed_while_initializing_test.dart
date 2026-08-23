@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:scopo/scopo.dart';
 
+import 'utils/observer.dart';
 import 'utils/settle.dart';
 
 /// A scope taken out of the tree while its dependencies are still being built.
@@ -297,6 +298,78 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
+    // Both tests above hand the gate over in the end, which is the case where
+    // the initialization comes back on its own. When it does not, the teardown
+    // has nothing to come back to: it parks on the completer the initialization
+    // settles, and that wait carries no limit of its own -- deliberately, since
+    // on the scope layer the package is what settles it. Here the user is, so
+    // what ends the wait is the limit around the step above it.
+    testWidgets('gives up on a state that never finishes initializing',
+        (tester) async {
+      final observer = RecordingObserver();
+      ScopeConfig.observer = observer;
+      addTearDown(() => ScopeConfig.observer = null);
+
+      final gate = Completer<void>();
+      addTearDown(() {
+        if (!gate.isCompleted) {
+          gate.complete();
+        }
+      });
+
+      // Grows only if `onInitialized` runs, which is the thing this scope
+      // never gets to. A modifiable list, so a day when it does run says so by
+      // failing the expectation rather than by raising out of the hook.
+      final initialized = <String>[];
+
+      await tester.pumpWidget(
+        _wrap(
+          _StateScope(
+            gate: gate,
+            initialized: initialized,
+            disposeScopeTimeout: const Duration(milliseconds: 50),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // What the mount reported is not what this test is about, and the
+      // teardown is what the list below has to read as.
+      observer.events.clear();
+
+      await tester.pumpWidget(_wrap(const SizedBox.shrink()));
+      await settle(
+        tester,
+        until: () => observer.events.contains('disposed _StateScope'),
+      );
+
+      expect(
+        observer.events,
+        [
+          'dispose _StateScope',
+          'timeout _StateScope its own teardown',
+          'disposed _StateScope',
+        ],
+        reason: 'a `LiteScope` has no second half below the state to protect, '
+            'so the limit sits around the whole step and the expiry is '
+            'reported as the teardown of the scope itself -- and the teardown '
+            'ends, which is the point: without it the scope would hold its '
+            'place with the parent for as long as the initialization runs',
+      );
+      expect(
+        tester.takeException(),
+        isA<TimeoutException>(),
+        reason: 'giving up is said out loud, not only to an observer',
+      );
+      expect(
+        initialized,
+        isEmpty,
+        reason: 'giving up on the wait is not the same as the wait coming '
+            'back: the initialization is still running, and the hook that '
+            'follows it has not been reached',
+      );
+    });
+
     // The other half of the same guard: while the scope is still there, the
     // hook does run, and on a state that is still on the tree.
     testWidgets('does call it on a state that is still there', (tester) async {
@@ -321,7 +394,11 @@ final class _StateScope extends LiteScope<_StateScope, _StateScopeState> {
   final Completer<void> gate;
   final List<String> initialized;
 
-  const _StateScope({required this.gate, required this.initialized});
+  const _StateScope({
+    required this.gate,
+    required this.initialized,
+    super.disposeScopeTimeout,
+  });
 
   @override
   Widget? buildOnWaiting(BuildContext context) => const SizedBox.shrink();
