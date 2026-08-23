@@ -1,6 +1,6 @@
 # example
 
-> Перевод `example/README.md` (blob `1a49ff2abe37c8cf9f8f7a48381c0ae7f83e724f`).
+> Перевод `example/README.md` (blob `f59dd4426173097fcb0d7247ab9b8ed0406ab5d2`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 Полный обзор scopo — в
@@ -142,7 +142,7 @@ final class App extends Scope<App, AppDependencies, AppState> {
 final class AppDependencies implements ScopeDependencies {
   final SharedPreferences sharedPreferences;
 
-  AppDependencies({required this.sharedPreferences});
+  const AppDependencies({required this.sharedPreferences});
 
   /// Инициализация зависимостей сделана через генератор потока. Это
   /// позволяет следить за её прогрессом и отменить её, если виджет уйдёт с

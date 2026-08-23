@@ -122,7 +122,7 @@ final class App extends Scope<App, AppDependencies, AppState> {
 final class AppDependencies implements ScopeDependencies {
   final SharedPreferences sharedPreferences;
 
-  AppDependencies({required this.sharedPreferences});
+  const AppDependencies({required this.sharedPreferences});
 
   /// Dependency initialization is implemented via a stream generator. This
   /// allows us to track the progress of initialization and cancel it when the
