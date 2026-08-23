@@ -244,3 +244,37 @@ final class _AsyncScopeElement<W extends AsyncScopeBase<W>>
           widget.buildOnError(this, error, stackTrace, progress),
       };
 }
+
+/// The three accessors of one [AsyncScopeBase], with its type argument named
+/// once.
+///
+/// ```dart
+/// final class ConnectionScope extends AsyncScopeBase<ConnectionScope> {
+///   static const access = AsyncScopeAccess<ConnectionScope>();
+///   …
+/// }
+/// ```
+///
+/// {@category AsyncScope}
+final class AsyncScopeAccess<W extends AsyncScopeBase<W>> {
+  /// Creates an accessor for the scope [W].
+  const AsyncScopeAccess();
+
+  /// Finds and returns the context of the scope, or throws.
+  AsyncScopeContext<W> of(BuildContext context, {required bool listen}) =>
+      AsyncScopeBase.of<W>(context, listen: listen);
+
+  /// Tries to find and return the context of the scope.
+  AsyncScopeContext<W>? maybeOf(
+    BuildContext context, {
+    required bool listen,
+  }) =>
+      AsyncScopeBase.maybeOf<W>(context, listen: listen);
+
+  /// Selects a value from the scope context and **subscribes** to it.
+  V select<V extends Object?>(
+    BuildContext context,
+    V Function(AsyncScopeContext<W> context) selector,
+  ) =>
+      AsyncScopeBase.select<W, V>(context, selector);
+}

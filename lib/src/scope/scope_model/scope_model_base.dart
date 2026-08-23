@@ -95,3 +95,39 @@ final class _ScopeModelElement<W extends ScopeModelBase<W, M>, M extends Object>
 
   Object? get tag => widget.tag;
 }
+
+/// The three accessors of one [ScopeModelBase], with its type arguments named
+/// once.
+///
+/// ```dart
+/// final class UserScope extends ScopeModelBase<UserScope, UserModel> {
+///   static const access = ScopeModelAccess<UserScope, UserModel>();
+///   …
+/// }
+///
+/// final name = UserScope.access.select(context, (c) => c.model.name);
+/// ```
+///
+/// {@category ScopeModel}
+final class ScopeModelAccess<W extends ScopeModelBase<W, M>, M extends Object> {
+  /// Creates an accessor for the scope [W].
+  const ScopeModelAccess();
+
+  /// Finds and returns the context of the scope, or throws.
+  ScopeModelContext<W, M> of(BuildContext context, {required bool listen}) =>
+      ScopeModelBase.of<W, M>(context, listen: listen);
+
+  /// Tries to find and return the context of the scope.
+  ScopeModelContext<W, M>? maybeOf(
+    BuildContext context, {
+    required bool listen,
+  }) =>
+      ScopeModelBase.maybeOf<W, M>(context, listen: listen);
+
+  /// Selects a value from the scope context and **subscribes** to it.
+  V select<V extends Object?>(
+    BuildContext context,
+    V Function(ScopeModelContext<W, M> context) selector,
+  ) =>
+      ScopeModelBase.select<W, M, V>(context, selector);
+}

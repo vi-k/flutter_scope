@@ -225,3 +225,43 @@ final class _AsyncControllerScopeElement<
           widget.buildOnError(this, error, stackTrace),
       };
 }
+
+/// The three accessors of one [AsyncControllerScopeBase], with its type
+/// arguments named once.
+///
+/// ```dart
+/// final class PlayerScope
+///     extends AsyncControllerScopeBase<PlayerScope, PlayerController> {
+///   static const access =
+///       AsyncControllerScopeAccess<PlayerScope, PlayerController>();
+///   …
+/// }
+/// ```
+///
+/// {@category AsyncControllerScope}
+final class AsyncControllerScopeAccess<W extends AsyncControllerScopeBase<W, C>,
+    C extends ScopeController> {
+  /// Creates an accessor for the scope [W].
+  const AsyncControllerScopeAccess();
+
+  /// Finds and returns the context of the scope, or throws.
+  AsyncControllerScopeContext<W, C> of(
+    BuildContext context, {
+    required bool listen,
+  }) =>
+      AsyncControllerScopeBase.of<W, C>(context, listen: listen);
+
+  /// Tries to find and return the context of the scope.
+  AsyncControllerScopeContext<W, C>? maybeOf(
+    BuildContext context, {
+    required bool listen,
+  }) =>
+      AsyncControllerScopeBase.maybeOf<W, C>(context, listen: listen);
+
+  /// Selects a value from the scope context and **subscribes** to it.
+  V select<V extends Object?>(
+    BuildContext context,
+    V Function(AsyncControllerScopeContext<W, C> context) selector,
+  ) =>
+      AsyncControllerScopeBase.select<W, C, V>(context, selector);
+}

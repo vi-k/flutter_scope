@@ -1,6 +1,6 @@
 # base
 
-> Перевод `doc/base.md` (blob `e90ba13b42e55710ea14abc76b5c0a5d8e1f84fd`).
+> Перевод `doc/base.md` (blob `445c11bba2246071fffd776e2367d368c866a517`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 Каждое семейство скоупов этого пакета — `ScopeWidgetBase`, `ScopeModel`,
@@ -222,6 +222,47 @@ Exception: The element of ScopeModel<Counter> is not ScopeModelContext<ScopeMode
 Виджет нашёлся, но его элемент — не тот тип контекста, который запросили. Это
 несовпадение параметров типов: аксессор одного семейства применили к скоупу
 другого.
+
+## Аксессоры и шаблоны для редакторов
+
+Каждое семейство находит свой скоуп статическими методами, которые берут
+типовые аргументы семейства: `Scope.select<App, AppDependencies, AppState, V>(context, selector)`
+и четыре его соседа. Если писать их обёртками на скоупе, тройка повторяется по
+пять раз на скоуп.
+
+У каждого семейства есть и объект-аксессор, который берёт эти аргументы один
+раз:
+
+```dart
+final class App extends Scope<App, AppDependencies, AppState> {
+  static const access = ScopeAccess<App, AppDependencies, AppState>();
+}
+
+final counter = App.access.select(context, (state) => state.counter);
+```
+
+Это переадресация и ничего больше — каждый метод есть статический метод того же
+имени, — так что одно заменяемо другим, а скоуп, которому нужны аксессоры под
+своими именами, по-прежнему пишет их сам. Таблица всех восьми — в `README`
+пакета.
+
+Остаётся набрать скелет класса, и он тоже едет с пакетом:
+`ide/scopo.code-snippets` для VS Code (а также Cursor, Windsurf, Antigravity) и
+`ide/scopo-live-templates.xml` для IntelliJ и Android Studio — оба в каталоге
+пакета, рядом с `lib/`. Девять шаблонов: по одному на семейство, один на
+контейнер зависимостей, один на строку аксессора:
+
+```json
+"scopo: The accessor object": {
+  "scope": "dart",
+  "prefix": "scopo-access",
+  "body": ["static const access = ScopeAccess<${1:Widget}>();$0"]
+}
+```
+
+Куда какой файл класть, написано в `ide/README.md`. Скелеты, которые эти
+шаблоны вставляют, компилируются гейтом пакета; сами live templates ничем не
+запускаются, так что доказывает их только импорт.
 
 ## Куда дальше
 

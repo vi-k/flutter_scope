@@ -351,3 +351,63 @@ abstract base class ScopeState<W extends Scope<W, D, S>,
   @override
   Future<void> close();
 }
+
+/// The five accessors of one [Scope], with its type arguments named once.
+///
+/// A scope hands its state and its parameters to descendants through five
+/// static methods of [Scope], and every one of them wants the whole triple —
+/// `Scope.select<App, AppDependencies, AppState, V>(context, selector)`. Written
+/// out as static members of the scope, as they were, that is five wrappers of
+/// three lines each, and the triple is repeated in every one of them.
+///
+/// This is the same five, with the triple given once:
+///
+/// ```dart
+/// final class App extends Scope<App, AppDependencies, AppState> {
+///   static const access = ScopeAccess<App, AppDependencies, AppState>();
+///   …
+/// }
+///
+/// // and from a descendant:
+/// final counter = App.access.select(context, (state) => state.counter);
+/// ```
+///
+/// It holds nothing and does nothing of its own: every method below is the
+/// static of the same name, called with the arguments this object carries. Use
+/// it or write the wrappers by hand — the two are the same thing, and a scope
+/// that wants accessors under different names still writes them.
+///
+/// {@category Scope}
+final class ScopeAccess<W extends Scope<W, D, S>, D extends ScopeDependencies,
+    S extends ScopeState<W, D, S>> {
+  /// Creates an accessor for the scope [W].
+  const ScopeAccess();
+
+  /// Finds and returns the state of the scope, or throws.
+  ///
+  /// See [Scope.of] for what it throws on.
+  S of(BuildContext context) => Scope.of<W, D, S>(context);
+
+  /// Tries to find and return the state of the scope.
+  ///
+  /// See [Scope.maybeOf] for the two conditions it answers `null` on.
+  S? maybeOf(BuildContext context) => Scope.maybeOf<W, D, S>(context);
+
+  /// Selects a value from the state and **subscribes** to it.
+  V select<V extends Object?>(
+    BuildContext context,
+    V Function(S state) selector,
+  ) =>
+      Scope.select<W, D, S, V>(context, selector);
+
+  /// Returns the parameters of the scope — the scope widget itself.
+  W paramsOf(BuildContext context, {required bool listen}) =>
+      Scope.paramsOf<W, D, S>(context, listen: listen);
+
+  /// Selects a single parameter of the scope and **subscribes** to it.
+  V selectParam<V extends Object?>(
+    BuildContext context,
+    V Function(W widget) selector,
+  ) =>
+      Scope.selectParam<W, D, S, V>(context, selector);
+}

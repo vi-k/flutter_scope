@@ -114,3 +114,38 @@ final class _ScopeNotifierElement<W extends ScopeNotifierBase<W, M>,
     }
   }
 }
+
+/// The three accessors of one [ScopeNotifierBase], with its type arguments
+/// named once.
+///
+/// ```dart
+/// final class CounterScope extends ScopeNotifierBase<CounterScope, Counter> {
+///   static const access = ScopeNotifierAccess<CounterScope, Counter>();
+///   …
+/// }
+/// ```
+///
+/// {@category ScopeNotifier}
+final class ScopeNotifierAccess<W extends ScopeNotifierBase<W, M>,
+    M extends Listenable> {
+  /// Creates an accessor for the scope [W].
+  const ScopeNotifierAccess();
+
+  /// Finds and returns the context of the scope, or throws.
+  ScopeModelContext<W, M> of(BuildContext context, {required bool listen}) =>
+      ScopeNotifierBase.of<W, M>(context, listen: listen);
+
+  /// Tries to find and return the context of the scope.
+  ScopeModelContext<W, M>? maybeOf(
+    BuildContext context, {
+    required bool listen,
+  }) =>
+      ScopeNotifierBase.maybeOf<W, M>(context, listen: listen);
+
+  /// Selects a value from the scope context and **subscribes** to it.
+  V select<V extends Object?>(
+    BuildContext context,
+    V Function(ScopeModelContext<W, M> context) selector,
+  ) =>
+      ScopeNotifierBase.select<W, M, V>(context, selector);
+}

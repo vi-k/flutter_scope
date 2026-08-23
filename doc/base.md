@@ -224,6 +224,46 @@ The widget was found, but its element is not the context type the call asked
 for. This is a mismatch of type arguments — a family's accessor used against a
 scope of a different family.
 
+## Accessors and editor templates
+
+Every family finds its scope through statics that take the family's type
+arguments — `Scope.select<App, AppDependencies, AppState, V>(context, selector)`
+and its four neighbours. Written out as wrappers on the scope, that is the
+triple repeated five times per scope.
+
+Each family also ships an accessor object that takes those arguments once:
+
+```dart
+final class App extends Scope<App, AppDependencies, AppState> {
+  static const access = ScopeAccess<App, AppDependencies, AppState>();
+}
+
+final counter = App.access.select(context, (state) => state.counter);
+```
+
+It is a forwarder and nothing more — every method is the static of the same
+name — so the two are interchangeable, and a scope that wants accessors under
+its own names still writes them. The `README` of the package has the table of
+all eight.
+
+What is left to type is the class skeleton, and that comes with the package
+too: `ide/scopo.code-snippets` for VS Code (and Cursor, Windsurf, Antigravity)
+and `ide/scopo-live-templates.xml` for IntelliJ and Android Studio, both in the
+package directory alongside `lib/`. Nine templates — one per family, one for a
+dependency container, one for the accessor line:
+
+```json
+"scopo: The accessor object": {
+  "scope": "dart",
+  "prefix": "scopo-access",
+  "body": ["static const access = ScopeAccess<${1:Widget}>();$0"]
+}
+```
+
+`ide/README.md` says where each file goes. The skeletons they insert are
+compiled by the package's own gate; the live templates are not run by anything,
+so an import is what proves them.
+
 ## Where to go next
 
 | topic | what it covers |

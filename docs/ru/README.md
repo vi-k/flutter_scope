@@ -1,6 +1,6 @@
 # scopo
 
-> Перевод `README.md` (blob `422d2812ed5ddad5d23bd0a87f42fb5c05ca49c0`).
+> Перевод `README.md` (blob `83133e2fbf328503d3c7caf826f7a86fa74a582d`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 [![pub version](https://img.shields.io/pub/v/scopo)](https://pub.dev/packages/scopo)
@@ -557,6 +557,60 @@ class HomeScreen extends StatelessWidget {
 ```
 
 **Подробнее:** тема [Scope](https://pub.dev/documentation/scopo/latest/topics/Scope-topic.html).
+
+## Аксессоры: типовые аргументы, один раз
+
+В разделе выше у `App` пять статических обёрток, и каждая заново называет одни
+и те же три типа:
+
+```dart
+static V select<V>(BuildContext context, V Function(AppState state) selector) =>
+    Scope.select<App, AppDependencies, AppState, V>(context, selector);
+```
+
+Это пятнадцать строк на скоуп, а скоупов в приложении десятки. Тройку не
+вывести — в Dart нет способа прочитать типовые аргументы супертипа на месте
+вызова, — так что записать её где-то придётся. Вопрос только в том, сколько раз.
+
+Один:
+
+```dart
+final class App extends Scope<App, AppDependencies, AppState> {
+  static const access = ScopeAccess<App, AppDependencies, AppState>();
+  …
+}
+
+// и у потомка:
+final counter = App.access.select(context, (state) => state.counter);
+final title = App.access.selectParam(context, (widget) => widget.title);
+App.access.of(context).increment();
+```
+
+Аксессор ничего не хранит и ничего не решает: каждый его метод — статический
+метод того же имени с уже подставленными аргументами. Он есть у каждого
+семейства и берёт те же типовые аргументы, что и семейство:
+
+| семейство | аксессор |
+| --- | --- |
+| `ScopeWidgetBase` | `ScopeWidgetAccess<W>` |
+| `ScopeModelBase` | `ScopeModelAccess<W, M>` |
+| `ScopeNotifierBase` | `ScopeNotifierAccess<W, M>` |
+| `AsyncScopeBase` | `AsyncScopeAccess<W>` |
+| `AsyncDataScopeBase` | `AsyncDataScopeAccess<W, T>` |
+| `AsyncControllerScopeBase` | `AsyncControllerScopeAccess<W, C>` |
+| `LiteScope` | `LiteScopeAccess<W, S>` |
+| `Scope` | `ScopeAccess<W, D, S>` |
+
+**Чего это стоит**: одного лишнего звена на каждом вызове —
+`App.access.select(…)` вместо `App.select(…)`. Больше не меняется ничего, и
+статические методы остаются на месте: скоуп, которому нужны аксессоры под
+своими именами или только два из пяти, по-прежнему пишет их руками. Аксессор —
+самый короткий способ иметь их все, а не единственный способ иметь хоть один.
+
+**Шаблоны для редакторов.** Скелеты классов и строка аксессора едут вместе с
+пакетом — сниппетами для VS Code и live templates для IntelliJ; смотрите
+`ide/README.md` в каталоге пакета или тему
+[base](https://pub.dev/documentation/scopo/latest/topics/base-topic.html).
 
 ## scopeKey
 

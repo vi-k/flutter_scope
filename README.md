@@ -544,6 +544,61 @@ class HomeScreen extends StatelessWidget {
 
 **In depth:** the topic [Scope](https://pub.dev/documentation/scopo/latest/topics/Scope-topic.html).
 
+## Accessors: the type arguments, once
+
+The section above gives `App` five static wrappers, and every one of them names
+the same three types again:
+
+```dart
+static V select<V>(BuildContext context, V Function(AppState state) selector) =>
+    Scope.select<App, AppDependencies, AppState, V>(context, selector);
+```
+
+That is fifteen lines per scope, and a scope is something an application has
+dozens of. The triple cannot be inferred — Dart has no way to read the type
+arguments of a supertype at the call site — so it has to be written down
+somewhere. The only question is how many times.
+
+Once:
+
+```dart
+final class App extends Scope<App, AppDependencies, AppState> {
+  static const access = ScopeAccess<App, AppDependencies, AppState>();
+  …
+}
+
+// and from a descendant:
+final counter = App.access.select(context, (state) => state.counter);
+final title = App.access.selectParam(context, (widget) => widget.title);
+App.access.of(context).increment();
+```
+
+The accessor holds nothing and decides nothing: each of its methods is the
+static of the same name with the arguments already filled in. Every family has
+one, and takes the type arguments that family takes:
+
+| family | accessor |
+| --- | --- |
+| `ScopeWidgetBase` | `ScopeWidgetAccess<W>` |
+| `ScopeModelBase` | `ScopeModelAccess<W, M>` |
+| `ScopeNotifierBase` | `ScopeNotifierAccess<W, M>` |
+| `AsyncScopeBase` | `AsyncScopeAccess<W>` |
+| `AsyncDataScopeBase` | `AsyncDataScopeAccess<W, T>` |
+| `AsyncControllerScopeBase` | `AsyncControllerScopeAccess<W, C>` |
+| `LiteScope` | `LiteScopeAccess<W, S>` |
+| `Scope` | `ScopeAccess<W, D, S>` |
+
+**What it costs**: one more step at every call site — `App.access.select(…)`
+rather than `App.select(…)`. Nothing else changes, and the statics stay exactly
+where they were: a scope that wants its accessors under names of its own, or
+one that exposes only two of the five, still writes them by hand. The accessor
+is the shortest way to have all of them, not the only way to have any.
+
+**Editor templates.** The class skeletons and the accessor line come with the
+package as VS Code snippets and IntelliJ live templates — see `ide/README.md`
+in the package directory, or the topic
+[base](https://pub.dev/documentation/scopo/latest/topics/base-topic.html).
+
 ## scopeKey
 
 `scopeKey` serializes scopes that must not overlap: a new scope with the same

@@ -12,7 +12,8 @@ set -eu
 cd "$(dirname "$0")/../.."
 
 for translation in docs/ru/README.md docs/ru/doc/*.md \
-                   docs/ru/example/README.md docs/ru/example/*/README.md; do
+                   docs/ru/example/README.md docs/ru/example/*/README.md \
+                   docs/ru/ide/README.md; do
   [ -e "$translation" ] || continue
 
   source=$(sed -n 's/^> Перевод `\([^`]*\)`.*/\1/p' "$translation" | head -1)

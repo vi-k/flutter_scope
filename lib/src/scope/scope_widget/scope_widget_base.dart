@@ -55,3 +55,36 @@ final class _ScopeWidgetElement<W extends ScopeWidgetBase<W>>
   @override
   Widget buildChild() => widget.build(this);
 }
+
+/// The three accessors of one [ScopeWidgetBase], with its type argument named
+/// once.
+///
+/// ```dart
+/// final class ApiConfig extends ScopeWidgetBase<ApiConfig> {
+///   static const access = ScopeWidgetAccess<ApiConfig>();
+///   …
+/// }
+///
+/// final key = ApiConfig.access.select(context, (widget) => widget.apiKey);
+/// ```
+///
+/// {@category ScopeWidget}
+final class ScopeWidgetAccess<W extends ScopeWidgetBase<W>> {
+  /// Creates an accessor for the widget scope [W].
+  const ScopeWidgetAccess();
+
+  /// Finds and returns the scope widget, or throws.
+  W of(BuildContext context, {required bool listen}) =>
+      ScopeWidgetBase.of<W>(context, listen: listen);
+
+  /// Tries to find and return the scope widget.
+  W? maybeOf(BuildContext context, {required bool listen}) =>
+      ScopeWidgetBase.maybeOf<W>(context, listen: listen);
+
+  /// Selects a single parameter of the scope and **subscribes** to it.
+  V select<V extends Object?>(
+    BuildContext context,
+    V Function(W widget) selector,
+  ) =>
+      ScopeWidgetBase.select<W, V>(context, selector);
+}

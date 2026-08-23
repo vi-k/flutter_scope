@@ -1,0 +1,58 @@
+# Шаблоны для редакторов
+
+> Перевод `ide/README.md` (blob `1aeef95e809051d6ada2a0de524b001960ed1308`).
+> Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
+
+Девять шаблонов на тот код, который у скоупа приходится писать всегда:
+скелеты классов всех семейств, контейнер зависимостей и строка аксессора.
+
+Два файла, один набор. Их поддерживают парой вручную, и тест
+(`test/ide_snippets_test.dart`) краснеет, если шаблон появился в одном формате
+и не появился в другом.
+
+## VS Code
+
+А также Cursor, Windsurf и Antigravity — формат у них общий.
+
+Файл едет вместе с пакетом, то есть уже лежит на вашей машине. Найдите его и
+скопируйте в проект:
+
+```sh
+mkdir -p .vscode
+cp "$(find ~/.pub-cache/hosted/pub.dev -maxdepth 1 -name 'scopo-*' | sort | tail -1)"/ide/scopo.code-snippets .vscode/
+```
+
+Чтобы поставить их сразу для всех проектов, выполните **Snippets: Configure
+Snippets** из палитры команд, выберите Dart и вставьте содержимое туда.
+
+## IntelliJ IDEA и Android Studio
+
+**Settings → Editor → Live Templates → шестерёнка → Import Live Templates**,
+выбрать `scopo-live-templates.xml`. Шаблоны приедут группой `scopo`.
+
+## Сами шаблоны
+
+| набрать | получить |
+| --- | --- |
+| `scopo-scope` | полный `Scope`: виджет, состояние и аксессор |
+| `scopo-deps` | контейнер `ScopeDependencies` с асинхронной инициализацией |
+| `scopo-lite` | `LiteScope` и его состояние |
+| `scopo-widget` | `ScopeWidgetBase` |
+| `scopo-model` | `ScopeModelBase` над обычным объектом |
+| `scopo-notifier` | `ScopeNotifierBase` над `Listenable` |
+| `scopo-async` | `AsyncScopeBase` |
+| `scopo-data` | `AsyncDataScopeBase` |
+| `scopo-access` | одну строку аксессора |
+
+## Что проверено, а что нет
+
+Каждый скелет, который эти шаблоны вставляют, компилируется: их разворачивают с
+именами по умолчанию в `test/ide/snippet_skeletons.dart`, а его `flutter
+analyze` проверяет наравне с остальными файлами пакета. Шаблон, переставший
+быть валидным Dart, роняет гейт.
+
+**Сами live templates запуском не проверены.** XML корректен и следует формату
+собственных шаблонов плагина Dart — контекстов там ровно два, `DART` и
+`DART_STATEMENT`, и здесь взят `DART`, потому что шаблоны объявляют классы и
+члены, а не операторы, — но принял ли файл IntelliJ, показывает только импорт.
+Если он какой-то отверг, об этом стоит сообщить.

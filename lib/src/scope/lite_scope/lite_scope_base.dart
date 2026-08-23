@@ -364,3 +364,47 @@ abstract base class LiteScopeState<W extends LiteScope<W, S>,
   @override
   Future<void> close();
 }
+
+/// The five accessors of one [LiteScope], with its type arguments named once.
+///
+/// The same idea as `ScopeAccess`, for the family without a dependency
+/// container: `LiteScope.select<ScreenScope, ScreenScopeState, V>(…)` becomes
+/// `ScreenScope.access.select(…)`, and the pair is given once.
+///
+/// ```dart
+/// final class ScreenScope extends LiteScope<ScreenScope, ScreenScopeState> {
+///   static const access = LiteScopeAccess<ScreenScope, ScreenScopeState>();
+///   …
+/// }
+/// ```
+///
+/// {@category LiteScope}
+final class LiteScopeAccess<W extends LiteScope<W, S>,
+    S extends LiteScopeState<W, S>> {
+  /// Creates an accessor for the scope [W].
+  const LiteScopeAccess();
+
+  /// Finds and returns the state of the scope, or throws.
+  S of(BuildContext context) => LiteScope.of<W, S>(context);
+
+  /// Tries to find and return the state of the scope.
+  S? maybeOf(BuildContext context) => LiteScope.maybeOf<W, S>(context);
+
+  /// Selects a value from the state and **subscribes** to it.
+  V select<V extends Object?>(
+    BuildContext context,
+    V Function(S state) selector,
+  ) =>
+      LiteScope.select<W, S, V>(context, selector);
+
+  /// Returns the parameters of the scope — the scope widget itself.
+  W paramsOf(BuildContext context, {required bool listen}) =>
+      LiteScope.paramsOf<W, S>(context, listen: listen);
+
+  /// Selects a single parameter of the scope and **subscribes** to it.
+  V selectParam<V extends Object?>(
+    BuildContext context,
+    V Function(W widget) selector,
+  ) =>
+      LiteScope.selectParam<W, S, V>(context, selector);
+}

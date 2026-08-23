@@ -1,3 +1,22 @@
+## 0.11.0
+
+* Added an accessor object per family — `ScopeAccess`, `LiteScopeAccess`,
+  `ScopeWidgetAccess`, `ScopeModelAccess`, `ScopeNotifierAccess`,
+  `AsyncScopeAccess`, `AsyncDataScopeAccess`, `AsyncControllerScopeAccess`.
+  Each takes the type arguments of its family once and forwards to the statics
+  of the same names, so the five wrappers a scope used to declare become one
+  line: `static const access = ScopeAccess<App, AppDependencies, AppState>();`.
+  Nothing is deprecated by it — the statics stay, and a scope that wants
+  accessors under its own names still writes them. New section in `README.md`
+  and in the topic `base`.
+* Editor templates now ship with the package: `ide/scopo.code-snippets` for VS
+  Code (and Cursor, Windsurf, Antigravity) and `ide/scopo-live-templates.xml`
+  for IntelliJ and Android Studio. Nine templates — a class skeleton per
+  family, a dependency container, and the accessor line. Installation is in
+  `ide/README.md`. The skeletons they insert are expanded into
+  `test/ide/snippet_skeletons.dart` and compiled by the gate, so a template
+  that stops being valid Dart fails the build.
+
 ## 0.10.0
 
 * Fix `ScopeModel.create(context)` running before the element was mounted: the

@@ -241,3 +241,41 @@ final class _AsyncDataScopeElement<W extends AsyncDataScopeBase<W, T>,
           widget.buildOnError(this, error, stackTrace, progress),
       };
 }
+
+/// The three accessors of one [AsyncDataScopeBase], with its type arguments
+/// named once.
+///
+/// ```dart
+/// final class DbScope extends AsyncDataScopeBase<DbScope, Database> {
+///   static const access = AsyncDataScopeAccess<DbScope, Database>();
+///   …
+/// }
+/// ```
+///
+/// {@category AsyncDataScope}
+final class AsyncDataScopeAccess<W extends AsyncDataScopeBase<W, T>,
+    T extends Object?> {
+  /// Creates an accessor for the scope [W].
+  const AsyncDataScopeAccess();
+
+  /// Finds and returns the context of the scope, or throws.
+  AsyncDataScopeContext<W, T> of(
+    BuildContext context, {
+    required bool listen,
+  }) =>
+      AsyncDataScopeBase.of<W, T>(context, listen: listen);
+
+  /// Tries to find and return the context of the scope.
+  AsyncDataScopeContext<W, T>? maybeOf(
+    BuildContext context, {
+    required bool listen,
+  }) =>
+      AsyncDataScopeBase.maybeOf<W, T>(context, listen: listen);
+
+  /// Selects a value from the scope context and **subscribes** to it.
+  V select<V extends Object?>(
+    BuildContext context,
+    V Function(AsyncDataScopeContext<W, T> context) selector,
+  ) =>
+      AsyncDataScopeBase.select<W, T, V>(context, selector);
+}

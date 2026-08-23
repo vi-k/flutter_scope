@@ -19,7 +19,8 @@ checked=0
 # его не покрывает, а это страница вкладки Example на pub.dev. Пока её здесь не
 # было, оригинал разъехался с кодом и гейт молчал.
 for translation in docs/ru/README.md docs/ru/doc/*.md \
-                   docs/ru/example/README.md docs/ru/example/*/README.md; do
+                   docs/ru/example/README.md docs/ru/example/*/README.md \
+                   docs/ru/ide/README.md; do
   [ -e "$translation" ] || continue
 
   source=$(sed -n 's/^> Перевод `\([^`]*\)`.*/\1/p' "$translation" | head -1)
@@ -50,7 +51,8 @@ for translation in docs/ru/README.md docs/ru/doc/*.md \
 done
 
 # 2. У каждого оригинала — зеркало.
-for source in README.md doc/*.md example/README.md example/*/README.md; do
+for source in README.md doc/*.md example/README.md example/*/README.md \
+              ide/README.md; do
   translation="docs/ru/$source"
   if [ ! -e "$translation" ]; then
     echo "НЕТ ПЕРЕВОДА: $source (ждали $translation)"
