@@ -37,7 +37,14 @@ final class AppDependencies implements ScopeDependencies {
   final Database database;
   final Session session;
 
-  AppDependencies({required this.database, required this.session});
+  // `const` because it can be: every field is final, and a const
+  // constructor does not ask its arguments to be constants — it only
+  // lets them be. Nothing here ever will be, so this buys no canonical
+  // instances; it says outright that the object does not change.
+  const AppDependencies({
+    required this.database,
+    required this.session,
+  });
 
   static Stream<ScopeInitState<Object, AppDependencies>> init(
     BuildContext context,
