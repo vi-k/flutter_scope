@@ -72,10 +72,14 @@ a conflict in one library. A template that stops being valid
 Dart fails the gate.
 
 **The live templates are checked in part.** The suite holds them to the same set
-as the snippets, to the IntelliJ way of escaping a literal dollar, and to the
-context each one belongs in — but what an editor makes of the file is something
-only an import shows. Android Studio took it in August 2026; if a version
-refuses one, that is a bug worth reporting.
+as the snippets, to the two rules of XML a hand-edited file breaks, to the
+IntelliJ way of escaping a literal dollar, to the list a tab stop offers, and to
+the context each one belongs in — but what an editor makes of the file is
+something only an import shows. Android Studio took it in August 2026; if a
+version refuses one, that is a bug worth reporting.
+
+A file an editor refuses is not a file with one broken template in it: the whole
+group simply does not appear, and nothing says why.
 
 Three contexts are in play, and only two of them belong to the Dart plugin.
 `DART` is its generic one and offers a template everywhere in a Dart file, a

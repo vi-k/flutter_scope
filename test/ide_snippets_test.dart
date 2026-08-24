@@ -41,6 +41,35 @@ void main() {
     );
   });
 
+  // A file an editor refuses is not a file with a broken template in it: the
+  // whole group simply does not appear, without a word. It happened here — a
+  // rewritten header comment carried `--`, which XML does not allow inside one,
+  // and the gate had nothing that would notice, because everything else reads
+  // this file as text. These are the two rules a hand-edited XML actually
+  // breaks; a full parse would want a package, and this is not one.
+  test('the live templates file is XML a parser will accept', () {
+    final xml = templatesFile.readAsStringSync();
+
+    for (final comment in RegExp(r'<!--([\s\S]*?)-->').allMatches(xml)) {
+      expect(
+        comment.group(1),
+        isNot(contains('--')),
+        reason: 'XML forbids `--` inside a comment, and an editor that meets '
+            'one drops the whole file',
+      );
+    }
+
+    final ampersands = RegExp('&').allMatches(xml).length;
+    final entities =
+        RegExp(r'&(#\d+|#x[0-9a-fA-F]+|amp|lt|gt|quot|apos);').allMatches(xml);
+    expect(
+      ampersands - entities.length,
+      0,
+      reason: 'a bare `&` is not XML either; every one of them has to open an '
+          'entity',
+    );
+  });
+
   // A live template is offered where its context says, and `DART` — the generic
   // context of the Dart plugin — says everywhere in a Dart file, a method body
   // included. A class skeleton pasted there is broken code, so the ten that
@@ -116,6 +145,48 @@ void main() {
       contains(r'$$error'),
       reason: 'the interpolation of the error branch survives as a literal '
           'dollar rather than becoming a template variable',
+    );
+  });
+
+  // A tab stop that offers a list is the one place where the two formats say
+  // the same thing differently: VS Code writes `${1|A,B,C|}` inline, IntelliJ
+  // writes `expression="enum(&quot;A&quot;,…)"` on the variable. Nothing but a
+  // check keeps them together, and the one that went missing left the stop
+  // empty — the reader had to know the eight names by heart.
+  test('a choice in the snippets is a choice in the live templates too', () {
+    final xml = templatesFile.readAsStringSync();
+    final choice = RegExp(r'\$\{\d+\|([^|]*)\|\}');
+
+    var checked = 0;
+    for (final entry in snippets.values) {
+      final snippet = entry as Map;
+      final prefix = snippet['prefix'] as String;
+      final body = (snippet['body'] as List).cast<String>().join('\n');
+
+      for (final match in choice.allMatches(body)) {
+        final options = match.group(1)!.split(',');
+        final wanted =
+            'enum(${options.map((o) => '&quot;$o&quot;').join(',')})';
+        final block = RegExp('<template name="$prefix"[\\s\\S]*?</template>')
+            .firstMatch(xml)!
+            .group(0)!;
+
+        expect(
+          block,
+          contains(wanted),
+          reason: '`$prefix` offers a list in VS Code and nothing in IntelliJ; '
+              'the same list belongs there as $wanted',
+        );
+        checked++;
+      }
+    }
+
+    expect(
+      checked,
+      1,
+      reason: 'one stop offers a list today — the accessor class of '
+          '`scopo-access`; a test that found none would pass for the wrong '
+          'reason',
     );
   });
 
