@@ -1,6 +1,6 @@
 # scopo
 
-> Перевод `README.md` (blob `dbc3c03b716981998be4efeca55dadca99b5c0af`).
+> Перевод `README.md` (blob `e616f6742d50db3b41633d69ed00b0cbbfab2c39`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 [![pub version](https://img.shields.io/pub/v/scopo)](https://pub.dev/packages/scopo)
@@ -324,6 +324,12 @@ final class PlayerController extends ScopeController {
 
 `AsyncControllerScope<C>` — то же самое с колбэком `createController` вместо
 наследования.
+
+Тот же `PlayerController` без изменений годится и внутрь дерева
+зависимостей — `controller('player', () => player =
+PlayerController(api: apiClient))`, рядом с `dep`, в разделе «Зависимости»
+ниже, когда экрану нужна не своя область, а одна ветка более крупного
+дерева.
 
 **Подробнее:** тема [AsyncControllerScope](https://pub.dev/documentation/scopo/latest/topics/AsyncControllerScope-topic.html).
 

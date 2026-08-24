@@ -1,6 +1,6 @@
 # Scope
 
-> Перевод `doc/full_scope.md` (blob `31b4c81f49247df02d2e036f6c63865c4ff2f1bb`).
+> Перевод `doc/full_scope.md` (blob `87b188a54ee84772e5b55cc2850f0a1dc7c708b7`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 `Scope` — основной строительный блок пакета: виджет, который владеет контейнером
@@ -121,13 +121,19 @@ final class HomeDependencies
 }
 ```
 
-Дерево описывают три билдера, и все они возвращают `ScopeDependency`:
+Дерево описывают четыре билдера, и все они возвращают `ScopeDependency`:
 
 - `dep(name, init)` — одна зависимость. `ScopeDependencyHandle`, который передают в `init`, —
   это место, где регистрируют обратные операции: `dep.unmount` выполняется
   синхронно до того, как что-либо освобождается, `dep.dispose` дожидаются при
   утилизации. Не задать ни того ни другого нормально — зависимости, которая
   ничем не владеет, разбирать нечего. Имя не может быть пустым.
+- `controller(name, create)` — одна зависимость на основе `ScopeController`:
+  `create` строит его, а `performUnmount`/`performDispose` подключаются к
+  хендлу до того, как дождутся `performInit`, — так что обычные обещания
+  разбора `dep` держатся и для него. Тот же класс контроллера, что владеет
+  `AsyncControllerScope`, годится сюда без изменений — см. тему
+  [AsyncControllerScope](https://pub.dev/documentation/scopo/latest/topics/AsyncControllerScope-topic.html).
 - `sequential(name, [...])` — `ScopeDependencyGroup`, дети которой
   инициализируются один за другим, а разбираются в обратном порядке — и
   `dep.unmount`, и `dep.dispose`.

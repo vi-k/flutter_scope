@@ -1,3 +1,11 @@
+## 0.12.0
+
+* Added `controller(name, create)`, a fourth `ScopeAutoDependencies` builder
+  next to `dep`/`sequential`/`concurrent`: a single dependency backed by a
+  `ScopeController`, wired to `performInit`/`performUnmount`/`performDispose`.
+  The same controller class an `AsyncControllerScope` owns now fits, unchanged,
+  as one branch of a dependency tree.
+
 ## 0.11.0
 
 * **Breaking:** `NavigationNode`, `NodeNavigatorState` and

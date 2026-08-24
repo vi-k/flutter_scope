@@ -316,6 +316,11 @@ final class PlayerController extends ScopeController {
 `AsyncControllerScope<C>` is the same thing with a `createController` callback
 instead of a subclass.
 
+The same `PlayerController` also fits inside a dependency tree unchanged —
+`controller('player', () => player = PlayerController(api: apiClient))`
+next to `dep` in the Dependencies section below, when what a screen needs is
+one branch of a larger tree rather than a scope of its own.
+
 **In depth:** the topic [AsyncControllerScope](https://pub.dev/documentation/scopo/latest/topics/AsyncControllerScope-topic.html).
 
 ### LiteScope

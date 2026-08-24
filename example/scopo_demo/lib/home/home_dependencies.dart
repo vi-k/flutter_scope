@@ -12,7 +12,7 @@ final class HomeDependencies
     extends ScopeAutoDependencies<HomeDependencies, void> {
   late final FakeUserHttpClient httpClient;
   late final FakeBloc bloc;
-  late final FakeController controller;
+  late final FakeController fakeController;
 
   HomeDependencies();
 
@@ -44,9 +44,9 @@ final class HomeDependencies
             dep.dispose = bloc.close;
           }),
           dep('controller', (dep) async {
-            controller = FakeController();
-            await controller.init();
-            dep.dispose = controller.dispose;
+            fakeController = FakeController();
+            await fakeController.init();
+            dep.dispose = fakeController.dispose;
           }),
         ]),
       ]);

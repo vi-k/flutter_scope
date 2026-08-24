@@ -354,6 +354,26 @@ abstract base class ScopeAutoDependencies<T extends ScopeAutoDependencies<T, C>,
   ) =>
       ScopeDependency(name, init);
 
+  /// A single dependency backed by a [ScopeController].
+  ///
+  /// The three lifecycle hooks are wired to the handle in the order the
+  /// "acquire, register, then carry on" rule above asks of a hand-written
+  /// [dep]: nothing between creating the controller and registering its
+  /// teardown can throw or suspend, because creating it does neither.
+  /// [create] is where the caller stores the controller, the same way a
+  /// [dep] initializer stores what it built.
+  ScopeDependency controller<S extends ScopeController>(
+    String name,
+    S Function() create,
+  ) =>
+      dep(name, (handle) async {
+        final controller = create();
+        handle
+          ..unmount = controller.performUnmount
+          ..dispose = controller.performDispose;
+        await controller.performInit();
+      });
+
   /// A group whose children are initialized one after another.
   ///
   /// They are unmounted and disposed of in reverse order — both halves of the

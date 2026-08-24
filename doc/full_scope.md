@@ -119,13 +119,19 @@ final class HomeDependencies
 }
 ```
 
-Three builders describe the tree, and all of them return a `ScopeDependency`:
+Four builders describe the tree, and all of them return a `ScopeDependency`:
 
 - `dep(name, init)` — a single dependency. The `ScopeDependencyHandle` handed to `init` is
   where the reverse operations are registered: `dep.unmount` runs synchronously
   before anything is released, `dep.dispose` is awaited during the disposal.
   Setting neither is fine — a dependency that owns nothing needs no teardown.
   The name must not be empty.
+- `controller(name, create)` — a single dependency backed by a
+  `ScopeController`: `create` builds it, and its `performUnmount` /
+  `performDispose` are wired to the handle before `performInit` is awaited,
+  so the usual `dep` teardown promises hold for it too. The same controller
+  class that owns an `AsyncControllerScope` fits here unchanged — see
+  [AsyncControllerScope](https://pub.dev/documentation/scopo/latest/topics/AsyncControllerScope-topic.html).
 - `sequential(name, [...])` — a `ScopeDependencyGroup` whose children are
   initialized one after another, and torn down in reverse order — both
   `dep.unmount` and `dep.dispose`.

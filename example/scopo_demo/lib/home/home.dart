@@ -205,7 +205,7 @@ final class HomeState extends ScopeState<Home, HomeDependencies, HomeState> {
 
     // Пример использования
     // ignore: unused_local_variable
-    final controller = dependencies.controller;
+    final controller = dependencies.fakeController;
   }
 
   void increment() {

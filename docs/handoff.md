@@ -177,7 +177,40 @@
 1.0.0, потому что на pub.dev была 0.10.0, а у `0.x` минорный бамп и есть слот
 ломающих.
 
-**Последняя законченная работа — воркэраунд codesign-бага macOS-сборки
+**Последняя законченная работа — `controller()`, четвёртый билдер
+`ScopeAutoDependencies`** (2026-08-24). Владелец спросил, можно ли добавить,
+наряду с `dep()`, что-то для автоматической инициализации контроллеров
+`AsyncControllerScope` (`ScopeController`). У `ScopeController` уже была
+ровно та форма, которую ждёт `ScopeDependencyHandle` — `performInit`/
+`performUnmount`/`performDispose`, публичные и рассчитанные на вызов извне
+(«driven by hand», дартдок самого класса) — только моста между двумя
+семействами не было: `ScopeAutoDependencies` и `AsyncControllerScope` не
+ссылались друг на друга ни в одну сторону.
+
+Дизайн одобрен владельцем без правок — `docs/records/2026-08-24[5]-controller-dependency-design.md`.
+`controller<S extends ScopeController>(name, create)` — тонкая обёртка вокруг
+`dep()`: создаёт контроллер, регистрирует `handle.unmount`/`handle.dispose`
+на `performUnmount`/`performDispose` **до** `await controller.performInit()`,
+так что «acquire, register, then carry on» держится по построению — оба
+`performX` идемпотентны и безопасны, даже если `performInit` не был вызван
+вовсе. Разошлось с дизайном одно: `flutter analyze` корня поймал конфликт
+имён `controller` (метод) ↔ `controller` (поле `FakeController` в
+`example/scopo_demo/lib/home/home_dependencies.dart`) — `FakeController` даже
+не `ScopeController`, совпадение имён случайное. Владелец решил переименовать
+поле демки в `fakeController`, а не метод.
+
+Тесты сначала (`AGENTS.md` §8): падающий тест на порядок вызовов, зелёный
+после правки; второй тест на путь отказа (`init` контроллера бросает,
+`autoDisposeOnError` всё равно освобождает) проверен нагруженным — временно
+переставленный порядок регистрации/`await` уронил его, возвращён обратно.
+Тестов 421 → 423. Документация: `doc/full_scope.md` (четвёртый билдер в
+списке), README (предложение в разделе `AsyncControllerScope` про переиспользование
+контроллера в дереве зависимостей), зеркала `docs/ru/` тем же смыслом,
+`sh docs/ru/stamp.sh`, `CHANGELOG.md` — новый раздел `## 0.12.0` (правка
+аддитивная, не ломающая, минорный бамп при следующей публикации). Гейт §6
+пройден целиком, включая обе сьюты примеров.
+
+**Перед ней — воркэраунд codesign-бага macOS-сборки
 демки** (2026-08-24). Демка не запускалась: `flutter build macos` падал на
 `CodeSign failed`, `In subcomponent: .../Contents/Frameworks/native_assets.json`.
 Причина — баг тулинга Flutter 3.27.0 (закреплённый пол, `.fvmrc`), не код
