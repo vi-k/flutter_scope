@@ -62,11 +62,20 @@ Where the values come from is the parent's business. When the parent rebuilds
 rebuilt and the ones that selected `baseUrl` are not — the filtering is
 described in the `base` topic.
 
-One trap is worth naming: the `context` handed to `build` is the scope's own
-element. A lookup from it finds this very scope, so `ApiConfig.apiKeyOf(context)`
-inside `build` subscribes the scope to itself, and a self-notification rebuilds
-the whole subtree rather than a dependent. Read the parameters directly —
-`apiKey` is a field, and `build` is a method of the same object.
+The `context` handed to `build` is the scope's own element, so a lookup from it
+finds this very scope: `ApiConfig.apiKeyOf(context)` inside `build` subscribes
+the scope to itself. That is supported, not refused. `InheritedElement` does not
+let an element depend on itself, so the scope keeps such subscriptions of its
+own and honours them — filtered by their selector, like anybody else's. What it
+costs is the notify-only rebuild: when the dependent woken by a change is the
+scope, its whole subtree is rebuilt, where the same notification aimed at a leaf
+would have left that subtree standing.
+
+In `ScopeWidgetBase` there is nothing to gain from it. What this family
+publishes are the scope's own parameters, and inside `build` they are already in
+hand — `apiKey` is a field, and `build` is a method of the same object. A
+subscription would pay a subtree rebuild for a value that was never out of
+reach; read the field.
 
 ## The pair behind every family
 
