@@ -27,7 +27,10 @@ final class Database {
 final class App extends Scope<App, AppDependencies, AppState> {
   final String title;
 
-  const App({super.key, required this.title, required super.child});
+  /// The subtree of this scope.
+  final Widget Function(BuildContext context) builder;
+
+  const App({super.key, required this.title, required this.builder});
 
   static App paramsOf(BuildContext context, {required bool listen}) =>
       Scope.paramsOf<App, AppDependencies, AppState>(
@@ -146,5 +149,5 @@ final class AppState extends ScopeState<App, AppDependencies, AppState> {
   Future<void> disposeStateAsync() async {}
 
   @override
-  Widget build(BuildContext context) => params.child;
+  Widget build(BuildContext context) => params.builder(context);
 }

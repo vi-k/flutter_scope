@@ -44,7 +44,11 @@ final class PlayerController extends ScopeController {
 
 final class PlayerScope
     extends AsyncControllerScopeBase<PlayerScope, PlayerController> {
-  const PlayerScope({super.key, required super.child});
+  /// Built once the controller is ready, and receives it.
+  final Widget Function(BuildContext context, PlayerController controller)
+      builder;
+
+  const PlayerScope({super.key, required this.builder});
 
   /// The controller itself, for calling methods on it. Throws until there
   /// is one — read it from below [buildOnReady], where there always is.
@@ -88,5 +92,5 @@ final class PlayerScope
 
   @override
   Widget buildOnReady(BuildContext context, PlayerController controller) =>
-      child;
+      builder(context, controller);
 }

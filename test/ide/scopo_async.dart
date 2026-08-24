@@ -19,7 +19,10 @@ import 'package:flutter/material.dart';
 import 'package:scopo/scopo.dart';
 
 final class ConnectionScope extends AsyncScopeBase<ConnectionScope> {
-  const ConnectionScope({super.key, required super.child});
+  /// Built once the scope is ready.
+  final Widget Function(BuildContext context) builder;
+
+  const ConnectionScope({super.key, required this.builder});
 
   /// The state of the scope: `state`, `isInitialized`, `hasError`.
   ///
@@ -81,5 +84,5 @@ final class ConnectionScope extends AsyncScopeBase<ConnectionScope> {
       Center(child: Text(progress == null ? '$error' : '$progress: $error'));
 
   @override
-  Widget buildOnReady(BuildContext context) => child;
+  Widget buildOnReady(BuildContext context) => builder(context);
 }

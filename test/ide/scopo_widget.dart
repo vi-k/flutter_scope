@@ -21,10 +21,13 @@ import 'package:scopo/scopo.dart';
 final class ApiConfig extends ScopeWidgetBase<ApiConfig> {
   final String apiKey;
 
+  /// The subtree of this scope.
+  final Widget Function(BuildContext context) builder;
+
   const ApiConfig({
     super.key,
     required this.apiKey,
-    required super.child,
+    required this.builder,
   });
 
   static ApiConfig of(BuildContext context, {required bool listen}) =>
@@ -41,5 +44,5 @@ final class ApiConfig extends ScopeWidgetBase<ApiConfig> {
       select(context, (widget) => widget.apiKey);
 
   @override
-  Widget build(BuildContext context) => child;
+  Widget build(BuildContext context) => builder(context);
 }

@@ -21,10 +21,13 @@ import 'package:scopo/scopo.dart';
 final class ScreenScope extends LiteScope<ScreenScope, ScreenScopeState> {
   final String title;
 
+  /// The subtree of this scope.
+  final Widget Function(BuildContext context) builder;
+
   const ScreenScope({
     super.key,
     required this.title,
-    required super.child,
+    required this.builder,
   });
 
   static ScreenScope paramsOf(
@@ -97,5 +100,5 @@ final class ScreenScopeState
   Future<void> disposeStateAsync() async {}
 
   @override
-  Widget build(BuildContext context) => params.child;
+  Widget build(BuildContext context) => params.builder(context);
 }

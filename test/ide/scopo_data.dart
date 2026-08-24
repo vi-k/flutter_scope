@@ -25,7 +25,10 @@ final class Database {
 }
 
 final class DbScope extends AsyncDataScopeBase<DbScope, Database> {
-  const DbScope({super.key, required super.child});
+  /// Built once the value is there, and receives it.
+  final Widget Function(BuildContext context, Database data) builder;
+
+  const DbScope({super.key, required this.builder});
 
   /// The value itself. Throws until there is one — read it from below
   /// [buildOnReady], where there always is.
@@ -73,5 +76,6 @@ final class DbScope extends AsyncDataScopeBase<DbScope, Database> {
       Center(child: Text('$error'));
 
   @override
-  Widget buildOnReady(BuildContext context, Database data) => child;
+  Widget buildOnReady(BuildContext context, Database data) =>
+      builder(context, data);
 }
