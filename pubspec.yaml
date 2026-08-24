@@ -1,7 +1,7 @@
 name: scopo
 description: "A Flutter package for managing scopes and dependency injection
   within the widget tree"
-version: 0.11.0
+version: 0.12.0
 homepage: https://github.com/vi-k/scopo
 repository: https://github.com/vi-k/scopo
 issue_tracker: https://github.com/vi-k/scopo/issues
