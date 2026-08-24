@@ -356,12 +356,17 @@ abstract base class ScopeAutoDependencies<T extends ScopeAutoDependencies<T, C>,
 
   /// A single dependency backed by a [ScopeController].
   ///
-  /// The three lifecycle hooks are wired to the handle in the order the
-  /// "acquire, register, then carry on" rule above asks of a hand-written
-  /// [dep]: nothing between creating the controller and registering its
-  /// teardown can throw or suspend, because creating it does neither.
-  /// [create] is where the caller stores the controller, the same way a
-  /// [dep] initializer stores what it built.
+  /// The teardown is registered before the initialization is awaited —
+  /// "acquire, register, then carry on", the rule a hand-written [dep] follows
+  /// by hand. Nothing sits between creating the controller and registering it,
+  /// so there is no window in which a controller is up and nothing knows how
+  /// to release it; [ScopeController.performUnmount] and
+  /// [ScopeController.performDispose] are no-ops until
+  /// [ScopeController.performInit] has run, so registering them early costs
+  /// nothing.
+  ///
+  /// [create] is where the caller stores the controller, the same way a [dep]
+  /// initializer stores what it built.
   ScopeDependency controllerDep<S extends ScopeController>(
     String name,
     S Function() create,

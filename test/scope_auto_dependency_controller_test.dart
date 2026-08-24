@@ -58,6 +58,42 @@ final class _FailingController extends ScopeController {
   Future<void> dispose() async => calls.add('dispose');
 }
 
+/// Its `init` suspends, so the walk can be cancelled while `performInit` is
+/// still in flight -- the path a scope takes when it leaves the tree before
+/// its dependencies are up.
+final class _SlowController extends ScopeController {
+  static const step = Duration(milliseconds: 200);
+
+  final List<String> calls;
+
+  _SlowController(this.calls);
+
+  @override
+  Future<void> init() async {
+    calls.add('init');
+    await Future<void>.delayed(step);
+    calls.add('init finished');
+  }
+
+  @override
+  void onUnmount() => calls.add('onUnmount');
+
+  @override
+  Future<void> dispose() async => calls.add('dispose');
+}
+
+final class _SlowDeps extends ScopeAutoDependencies<_SlowDeps, void> {
+  final List<String> calls;
+  late final _SlowController player;
+
+  _SlowDeps(this.calls);
+
+  @override
+  ScopeDependency buildDependencies(void context) => sequential('', [
+        controllerDep('player', () => player = _SlowController(calls)),
+      ]);
+}
+
 final class _FailingDeps extends ScopeAutoDependencies<_FailingDeps, void> {
   final List<String> calls;
   late final _FailingController player;
@@ -104,5 +140,39 @@ void main() {
             'controller even though `init` never returned',
       );
     });
+
+    test(
+      'releases the controller when the walk is cancelled mid-init',
+      () async {
+        final calls = <String>[];
+        final deps = _SlowDeps(calls);
+
+        final subscription = deps.init(null).listen(null);
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+
+        expect(
+          calls,
+          ['init'],
+          reason: 'the walk is parked inside `performInit` -- this is the '
+              'window the whole registration order is about',
+        );
+
+        await subscription.cancel();
+
+        expect(
+          calls,
+          ['init', 'init finished', 'onUnmount', 'dispose'],
+          reason: 'cancelling the walk does not abandon the initializer that '
+              'is already running: `cancel()` waits for it, and only then '
+              'does the `finally` of the generator unmount and dispose of '
+              'what was registered. So a controller half-way through `init` '
+              'is never left holding what it took -- it finishes, then it is '
+              'released',
+        );
+        expect(deps.player.mounted, isFalse);
+      },
+      // A hang, not a failure, is what a lost cancellation looks like here.
+      timeout: const Timeout(Duration(seconds: 10)),
+    );
   });
 }
