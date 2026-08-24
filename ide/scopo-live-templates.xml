@@ -1,10 +1,20 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Live templates for scopo. Import: Settings | Editor | Live Templates |
-     the gear icon | Import Live Templates, and pick this file. -->
+<!-- Live templates for scopo. Install: copy this file into the configuration
+     directory of the IDE as templates/scopo.xml -- the file name has to match
+     the group below -- and restart. On macOS that directory is
+     ~/Library/Application Support/Google/AndroidStudio<version>/ for Android
+     Studio, ~/Library/Application Support/JetBrains/<product>/ for IntelliJ
+     IDEA. Recent versions no longer offer Import Live Templates on the Live
+     Templates settings page.
+
+     The contexts below: DART_TOPLEVEL is contributed by the Flutter plugin and
+     is where a class skeleton belongs; DART_STATEMENT is the Dart plugin's own.
+     Neither is DART, the generic context -- that one offers a template inside
+     method bodies too. -->
 <templateSet group="scopo">
   <template name="scopo-scope" value="final class $V1$ extends Scope&lt;$V1$, $V2$, $V3$&gt; {&#10;  final String $V4$;&#10;&#10;  const $V1$({super.key, required this.$V4$, required super.child});&#10;&#10;  static $V1$ paramsOf(BuildContext context, {required bool listen}) =&gt;&#10;      Scope.paramsOf&lt;$V1$, $V2$, $V3$&gt;(&#10;        context,&#10;        listen: listen,&#10;      );&#10;&#10;  static V selectParam&lt;V&gt;(&#10;    BuildContext context,&#10;    V Function($V1$ widget) selector,&#10;  ) =&gt;&#10;      Scope.selectParam&lt;$V1$, $V2$, $V3$, V&gt;(&#10;        context,&#10;        selector,&#10;      );&#10;&#10;  /// One parameter, subscribed to on its own.&#10;  static String $V4$Of(BuildContext context) =&gt;&#10;      selectParam(context, (widget) =&gt; widget.$V4$);&#10;&#10;  static $V3$ of(BuildContext context) =&gt;&#10;      Scope.of&lt;$V1$, $V2$, $V3$&gt;(context);&#10;&#10;  static V select&lt;V&gt;(&#10;    BuildContext context,&#10;    V Function($V3$ state) selector,&#10;  ) =&gt;&#10;      Scope.select&lt;$V1$, $V2$, $V3$, V&gt;(&#10;        context,&#10;        selector,&#10;      );&#10;&#10;  /// One value of the state, subscribed to on its own.&#10;  static int counterOf(BuildContext context) =&gt;&#10;      select(context, (state) =&gt; state.counter);&#10;&#10;  @override&#10;  ScopeAutoDependenciesStream&lt;$V2$&gt; initDependencies(&#10;    BuildContext context,&#10;  ) =&gt;&#10;      $V2$().init(context);&#10;&#10;  @override&#10;  $V3$ createState() =&gt; $V3$();&#10;&#10;  /// The progress the container reports: the dependency that has just&#10;  /// finished, and how far along the tree is. `covariant` narrows the&#10;  /// `Object?` of the base to what this scope&#x27;s stream actually carries —&#10;  /// without it the value arrives with nothing on it to read.&#10;  @override&#10;  Widget buildOnProgress(&#10;    BuildContext context,&#10;    covariant ScopeAutoDependenciesProgress? progress,&#10;  ) =&gt;&#10;      Center(&#10;        child: Column(&#10;          mainAxisSize: MainAxisSize.min,&#10;          children: [&#10;            // Null until the first dependency reports: indeterminate&#10;            // until then, determinate from there on.&#10;            CircularProgressIndicator(value: progress?.value),&#10;            Text(progress?.name ?? &#x27;&#x27;),&#10;          ],&#10;        ),&#10;      );&#10;&#10;  /// The same progress value, at the step the initialization broke on.&#10;  @override&#10;  Widget buildOnError(&#10;    BuildContext context,&#10;    Object error,&#10;    StackTrace stackTrace,&#10;    covariant ScopeAutoDependenciesProgress? progress,&#10;  ) =&gt;&#10;      Center(&#10;        child: Text(&#10;          progress == null ? &#x27;$$error&#x27; : &#x27;$${progress.name}: $$error&#x27;,&#10;        ),&#10;      );&#10;}&#10;&#10;final class $V2$&#10;    extends ScopeAutoDependencies&lt;$V2$, BuildContext&gt; {&#10;  late final $V5$ $V6$;&#10;&#10;  @override&#10;  ScopeDependency buildDependencies(BuildContext context) =&gt; sequential(&#x27;&#x27;, [&#10;        dep(&#x27;$V6$&#x27;, (dep) async {&#10;          $V6$ = await $V5$.open();&#10;          dep.dispose = $V6$.close;&#10;        }),&#10;      ]);&#10;}&#10;&#10;final class $V3$&#10;    extends ScopeState&lt;$V1$, $V2$, $V3$&gt; {&#10;  int counter = 0;&#10;&#10;  void incrementCounter() {&#10;    counter++;&#10;    // Wakes the descendants subscribed through `select`. It does not run&#10;    // this state&#x27;s own `build` — that is what `setState` is for, and both&#10;    // are needed when both have to see the change.&#10;    notifyDependents();&#10;  }&#10;&#10;  @override&#10;  Future&lt;void&gt; initStateAsync() async {}&#10;&#10;  /// The synchronous half of the teardown: drop what must stop reaching&#10;  /// this state at once. The context is gone by now on a removed scope.&#10;  @override&#10;  void onUnmount() {}&#10;&#10;  /// The asynchronous half, after it.&#10;  @override&#10;  Future&lt;void&gt; disposeStateAsync() async {}&#10;&#10;  @override&#10;  Widget build(BuildContext context) =&gt; params.child;&#10;}&#10;$END$"
             description="Full Scope: widget, automatic dependencies and state"
-            toReformat="true" toShortenFQNames="true">
+            toReformat="false" toShortenFQNames="true">
     <variable name="V1" expression="" defaultValue="&quot;App&quot;" alwaysStopAt="true"/>
     <variable name="V2" expression="" defaultValue="&quot;AppDependencies&quot;" alwaysStopAt="true"/>
     <variable name="V3" expression="" defaultValue="&quot;AppState&quot;" alwaysStopAt="true"/>
@@ -12,22 +22,22 @@
     <variable name="V5" expression="" defaultValue="&quot;Database&quot;" alwaysStopAt="true"/>
     <variable name="V6" expression="" defaultValue="&quot;database&quot;" alwaysStopAt="true"/>
     <context>
-      <option name="DART" value="true"/>
+      <option name="DART_TOPLEVEL" value="true"/>
     </context>
   </template>
   <template name="scopo-autodeps" value="final class $V1$&#10;    extends ScopeAutoDependencies&lt;$V1$, BuildContext&gt; {&#10;  late final $V2$ $V3$;&#10;&#10;  @override&#10;  ScopeDependency buildDependencies(BuildContext context) =&gt; sequential(&#x27;&#x27;, [&#10;        dep(&#x27;$V3$&#x27;, (dep) async {&#10;          $V3$ = await $V2$.open();&#10;          // Registered before the next await: whatever this step took is&#10;          // given back even if a later one fails or is cancelled.&#10;          dep.dispose = $V3$.close;&#10;        }),&#10;        $END$&#10;      ]);&#10;}"
             description="ScopeAutoDependencies: a dependency tree that unwinds itself"
-            toReformat="true" toShortenFQNames="true">
+            toReformat="false" toShortenFQNames="true">
     <variable name="V1" expression="" defaultValue="&quot;AppDependencies&quot;" alwaysStopAt="true"/>
     <variable name="V2" expression="" defaultValue="&quot;Database&quot;" alwaysStopAt="true"/>
     <variable name="V3" expression="" defaultValue="&quot;database&quot;" alwaysStopAt="true"/>
     <context>
-      <option name="DART" value="true"/>
+      <option name="DART_TOPLEVEL" value="true"/>
     </context>
   </template>
   <template name="scopo-deps" value="final class $V1$ implements ScopeDependencies {&#10;  // Final, and that is the reason to write a container by hand at all:&#10;  // `ScopeAutoDependencies` fills its fields as it walks the tree, so they&#10;  // cannot be. Here everything that changes lives inside [init], and what&#10;  // leaves it is assembled once and never edited again.&#10;  final $V2$ $V3$;&#10;  final $V4$ $V5$;&#10;&#10;  const $V1$({&#10;    required this.$V3$,&#10;    required this.$V5$,&#10;  });&#10;&#10;  static Stream&lt;ScopeInitState&lt;Object, $V1$&gt;&gt; init(&#10;    BuildContext context,&#10;  ) async* {&#10;    // Locals, not fields: until the container is assembled, these belong&#10;    // to this function, and it is this function that has to give them back&#10;    // if it does not get that far. Nullable so that a step which never ran&#10;    // can be skipped with `?.` below.&#10;    $V2$? $V3$;&#10;    $V4$? $V5$;&#10;&#10;    // A cancellation raises nothing: it ends the generator at a yield, so a&#10;    // `catch` never runs and only a `finally` sees it. The flag tells the&#10;    // two endings apart — handed over, or abandoned half-built.&#10;    var handedOver = false;&#10;&#10;    try {&#10;      yield ScopeProgress(&#x27;$V6$&#x27;);&#10;      $V3$ = await $V2$.open();&#10;&#10;      yield ScopeProgress(&#x27;$V7$&#x27;);&#10;      $V5$ = await $V4$.connect();&#10;      $END$&#10;      yield ScopeReady(&#10;        $V1$($V3$: $V3$, $V5$: $V5$),&#10;      );&#10;      handedOver = true;&#10;    } finally {&#10;      // Only if the scope never got it. Once it did, releasing is the&#10;      // scope&#x27;s job — through [dispose] below — and doing it here would&#10;      // release it twice.&#10;      //&#10;      // Reverse order of construction, and every step asks whether it was&#10;      // reached at all.&#10;      if (!handedOver) {&#10;        await $V5$?.close();&#10;        await $V3$?.close();&#10;      }&#10;    }&#10;  }&#10;&#10;  /// Drops what must stop reaching the dependencies at once. Runs once,&#10;  /// always before [dispose].&#10;  @override&#10;  void onUnmount() {}&#10;&#10;  /// Reached only for a container the scope took over, so both fields are&#10;  /// there — no question of whether a step ran.&#10;  @override&#10;  Future&lt;void&gt; dispose() async {&#10;    await $V5$.close();&#10;    await $V3$.close();&#10;  }&#10;}&#10;&#10;// `ScopeAutoDependencies` does the unwinding for you: register&#10;// `dep.dispose` as each step succeeds and the tree comes apart in reverse,&#10;// cancelled or not. Write the container by hand for an immutable one, or&#10;// when the order or the conditions are yours rather than the tree&#x27;s — see&#10;// `scopo-autodeps`."
             description="ScopeDependencies by hand: immutable, built as it goes"
-            toReformat="true" toShortenFQNames="true">
+            toReformat="false" toShortenFQNames="true">
     <variable name="V1" expression="" defaultValue="&quot;AppDependencies&quot;" alwaysStopAt="true"/>
     <variable name="V2" expression="" defaultValue="&quot;Database&quot;" alwaysStopAt="true"/>
     <variable name="V3" expression="" defaultValue="&quot;database&quot;" alwaysStopAt="true"/>
@@ -36,83 +46,83 @@
     <variable name="V6" expression="" defaultValue="&quot;opening the database&quot;" alwaysStopAt="true"/>
     <variable name="V7" expression="" defaultValue="&quot;connecting&quot;" alwaysStopAt="true"/>
     <context>
-      <option name="DART" value="true"/>
+      <option name="DART_TOPLEVEL" value="true"/>
     </context>
   </template>
   <template name="scopo-lite" value="final class $V1$ extends LiteScope&lt;$V1$, $V2$&gt; {&#10;  final String $V3$;&#10;&#10;  const $V1$({&#10;    super.key,&#10;    required this.$V3$,&#10;    required super.child,&#10;  });&#10;&#10;  static $V1$ paramsOf(&#10;    BuildContext context, {&#10;    required bool listen,&#10;  }) =&gt;&#10;      LiteScope.paramsOf&lt;$V1$, $V2$&gt;(&#10;        context,&#10;        listen: listen,&#10;      );&#10;&#10;  static V selectParam&lt;V&gt;(&#10;    BuildContext context,&#10;    V Function($V1$ widget) selector,&#10;  ) =&gt;&#10;      LiteScope.selectParam&lt;$V1$, $V2$, V&gt;(&#10;        context,&#10;        selector,&#10;      );&#10;&#10;  /// One parameter, subscribed to on its own.&#10;  static String $V3$Of(BuildContext context) =&gt;&#10;      selectParam(context, (widget) =&gt; widget.$V3$);&#10;&#10;  static $V2$ of(BuildContext context) =&gt;&#10;      LiteScope.of&lt;$V1$, $V2$&gt;(context);&#10;&#10;  static V select&lt;V&gt;(&#10;    BuildContext context,&#10;    V Function($V2$ state) selector,&#10;  ) =&gt;&#10;      LiteScope.select&lt;$V1$, $V2$, V&gt;(&#10;        context,&#10;        selector,&#10;      );&#10;&#10;  /// One value of the state, subscribed to on its own.&#10;  static int counterOf(BuildContext context) =&gt;&#10;      select(context, (state) =&gt; state.counter);&#10;&#10;  @override&#10;  Widget? buildOnWaiting(BuildContext context) =&gt; const SizedBox.shrink();&#10;&#10;  @override&#10;  $V2$ createState() =&gt; $V2$();&#10;}&#10;&#10;final class $V2$&#10;    extends LiteScopeState&lt;$V1$, $V2$&gt; {&#10;  int counter = 0;&#10;&#10;  void incrementCounter() {&#10;    counter++;&#10;    // Wakes the descendants subscribed through `select`. It does not run&#10;    // this state&#x27;s own `build` — that is what `setState` is for, and both&#10;    // are needed when both have to see the change.&#10;    notifyDependents();&#10;  }&#10;&#10;  @override&#10;  Future&lt;void&gt; initStateAsync() async {}&#10;&#10;  /// The synchronous half of the teardown: drop what must stop reaching&#10;  /// this state at once. The context is gone by now on a removed scope.&#10;  @override&#10;  void onUnmount() {}&#10;&#10;  /// The asynchronous half, after it.&#10;  @override&#10;  Future&lt;void&gt; disposeStateAsync() async {}&#10;&#10;  @override&#10;  Widget build(BuildContext context) =&gt; params.child;&#10;}&#10;$END$"
             description="LiteScope: a state with the full lifecycle, no container"
-            toReformat="true" toShortenFQNames="true">
+            toReformat="false" toShortenFQNames="true">
     <variable name="V1" expression="" defaultValue="&quot;ScreenScope&quot;" alwaysStopAt="true"/>
     <variable name="V2" expression="" defaultValue="&quot;ScreenScopeState&quot;" alwaysStopAt="true"/>
     <variable name="V3" expression="" defaultValue="&quot;title&quot;" alwaysStopAt="true"/>
     <context>
-      <option name="DART" value="true"/>
+      <option name="DART_TOPLEVEL" value="true"/>
     </context>
   </template>
   <template name="scopo-widget" value="final class $V1$ extends ScopeWidgetBase&lt;$V1$&gt; {&#10;  final $V2$ $V3$;&#10;&#10;  const $V1$({&#10;    super.key,&#10;    required this.$V3$,&#10;    required super.child,&#10;  });&#10;&#10;  static $V1$ of(BuildContext context, {required bool listen}) =&gt;&#10;      ScopeWidgetBase.of&lt;$V1$&gt;(context, listen: listen);&#10;&#10;  static V select&lt;V&gt;(&#10;    BuildContext context,&#10;    V Function($V1$ widget) selector,&#10;  ) =&gt;&#10;      ScopeWidgetBase.select&lt;$V1$, V&gt;(context, selector);&#10;&#10;  /// One parameter, subscribed to on its own.&#10;  static $V2$ $V3$Of(BuildContext context) =&gt;&#10;      select(context, (widget) =&gt; widget.$V3$);&#10;&#10;  @override&#10;  Widget build(BuildContext context) =&gt; child;&#10;}&#10;$END$"
             description="ScopeWidgetBase: passes its own parameters down"
-            toReformat="true" toShortenFQNames="true">
+            toReformat="false" toShortenFQNames="true">
     <variable name="V1" expression="" defaultValue="&quot;ApiConfig&quot;" alwaysStopAt="true"/>
     <variable name="V2" expression="" defaultValue="&quot;String&quot;" alwaysStopAt="true"/>
     <variable name="V3" expression="" defaultValue="&quot;apiKey&quot;" alwaysStopAt="true"/>
     <context>
-      <option name="DART" value="true"/>
+      <option name="DART_TOPLEVEL" value="true"/>
     </context>
   </template>
   <template name="scopo-model" value="final class $V1$ extends ScopeModelBase&lt;$V1$, $V2$&gt; {&#10;  final Widget Function(BuildContext context) builder;&#10;&#10;  $V1$({super.key, required this.builder})&#10;      : super(&#10;          create: (context) =&gt; $V2$(),&#10;          dispose: (model) =&gt; model.dispose(),&#10;        );&#10;&#10;  /// Over a model somebody else owns. Delete whichever of the two this&#10;  /// scope does not need.&#10;  const $V1$.value({&#10;    super.key,&#10;    required $V2$ model,&#10;    required this.builder,&#10;  }) : super.value(value: model);&#10;&#10;  static ScopeModelContext&lt;$V1$, $V2$&gt; of(&#10;    BuildContext context, {&#10;    required bool listen,&#10;  }) =&gt;&#10;      ScopeModelBase.of&lt;$V1$, $V2$&gt;(&#10;        context,&#10;        listen: listen,&#10;      );&#10;&#10;  static V select&lt;V&gt;(&#10;    BuildContext context,&#10;    V Function(ScopeModelContext&lt;$V1$, $V2$&gt; context)&#10;        selector,&#10;  ) =&gt;&#10;      ScopeModelBase.select&lt;$V1$, $V2$, V&gt;(&#10;        context,&#10;        selector,&#10;      );&#10;&#10;  /// One value of the model, subscribed to on its own.&#10;  ///&#10;  /// The model is not observable: dependents are notified when this&#10;  /// widget is rebuilt, and the selector then filters out the values that&#10;  /// did not change. A model that changes on its own belongs in&#10;  /// `ScopeNotifierBase`, which subscribes to it.&#10;  static String $V3$Of(BuildContext context) =&gt;&#10;      select(context, (scope) =&gt; scope.model.$V3$);&#10;&#10;  @override&#10;  Widget build(BuildContext context) =&gt; builder(context);&#10;}&#10;$END$"
             description="ScopeModelBase: owns a plain object"
-            toReformat="true" toShortenFQNames="true">
+            toReformat="false" toShortenFQNames="true">
     <variable name="V1" expression="" defaultValue="&quot;UserScope&quot;" alwaysStopAt="true"/>
     <variable name="V2" expression="" defaultValue="&quot;UserModel&quot;" alwaysStopAt="true"/>
     <variable name="V3" expression="" defaultValue="&quot;name&quot;" alwaysStopAt="true"/>
     <context>
-      <option name="DART" value="true"/>
+      <option name="DART_TOPLEVEL" value="true"/>
     </context>
   </template>
   <template name="scopo-notifier" value="final class $V1$ extends ScopeNotifierBase&lt;$V1$, $V2$&gt; {&#10;  final Widget Function(BuildContext context) builder;&#10;&#10;  $V1$({super.key, required this.builder})&#10;      : super(&#10;          create: (context) =&gt; $V2$(),&#10;          dispose: (model) =&gt; model.dispose(),&#10;        );&#10;&#10;  /// Over a notifier somebody else owns. Delete whichever of the two this&#10;  /// scope does not need.&#10;  const $V1$.value({&#10;    super.key,&#10;    required $V2$ model,&#10;    required this.builder,&#10;  }) : super.value(value: model);&#10;&#10;  static ScopeModelContext&lt;$V1$, $V2$&gt; of(&#10;    BuildContext context, {&#10;    required bool listen,&#10;  }) =&gt;&#10;      ScopeNotifierBase.of&lt;$V1$, $V2$&gt;(&#10;        context,&#10;        listen: listen,&#10;      );&#10;&#10;  static V select&lt;V&gt;(&#10;    BuildContext context,&#10;    V Function(ScopeModelContext&lt;$V1$, $V2$&gt; context)&#10;        selector,&#10;  ) =&gt;&#10;      ScopeNotifierBase.select&lt;$V1$, $V2$, V&gt;(&#10;        context,&#10;        selector,&#10;      );&#10;&#10;  /// One value of the model, subscribed to on its own.&#10;  static int $V3$Of(BuildContext context) =&gt;&#10;      select(context, (scope) =&gt; scope.model.$V3$);&#10;&#10;  @override&#10;  Widget build(BuildContext context) =&gt; builder(context);&#10;}&#10;$END$"
             description="ScopeNotifierBase: owns a Listenable"
-            toReformat="true" toShortenFQNames="true">
+            toReformat="false" toShortenFQNames="true">
     <variable name="V1" expression="" defaultValue="&quot;CounterScope&quot;" alwaysStopAt="true"/>
     <variable name="V2" expression="" defaultValue="&quot;Counter&quot;" alwaysStopAt="true"/>
     <variable name="V3" expression="" defaultValue="&quot;value&quot;" alwaysStopAt="true"/>
     <context>
-      <option name="DART" value="true"/>
+      <option name="DART_TOPLEVEL" value="true"/>
     </context>
   </template>
   <template name="scopo-async" value="final class $V1$ extends AsyncScopeBase&lt;$V1$&gt; {&#10;  const $V1$({super.key, required super.child});&#10;&#10;  /// The state of the scope: `state`, `isInitialized`, `hasError`.&#10;  ///&#10;  /// `listen` is a real choice here, unlike in the data and controller&#10;  /// families: what comes back is the state, and the state changes —&#10;  /// waiting, progress, ready, error. Reading one field through [select]&#10;  /// is the usual way in, since it subscribes to that field alone; take&#10;  /// the whole context with `listen: false` when one read is enough.&#10;  static AsyncScopeContext&lt;$V1$&gt; of(&#10;    BuildContext context, {&#10;    required bool listen,&#10;  }) =&gt;&#10;      AsyncScopeBase.of&lt;$V1$&gt;(context, listen: listen);&#10;&#10;  static V select&lt;V&gt;(&#10;    BuildContext context,&#10;    V Function(AsyncScopeContext&lt;$V1$&gt; context) selector,&#10;  ) =&gt;&#10;      AsyncScopeBase.select&lt;$V1$, V&gt;(context, selector);&#10;&#10;  /// One value of the scope, subscribed to on its own.&#10;  static bool isReadyOf(BuildContext context) =&gt;&#10;      select(context, (scope) =&gt; scope.isInitialized);&#10;&#10;  @override&#10;  Stream&lt;AsyncScopeInitState&gt; initScope(BuildContext context) async* {&#10;    yield AsyncScopeProgress(&#x27;$V2$&#x27;);&#10;    $END$&#10;    yield AsyncScopeReady();&#10;  }&#10;&#10;  @override&#10;  Future&lt;void&gt; disposeScope() async {}&#10;&#10;  /// Whatever [initScope] reported — here the caption it yields, and&#10;  /// `null` until it yields anything. This family keeps the progress&#10;  /// untyped on purpose: it is a caption rather than something the scope&#10;  /// carries, and a `ProgressIterator` puts its `Progress` here when the&#10;  /// steps are counted.&#10;  @override&#10;  Widget buildOnProgress(BuildContext context, Object? progress) =&gt; Center(&#10;        child: Column(&#10;          mainAxisSize: MainAxisSize.min,&#10;          children: [&#10;            const CircularProgressIndicator(),&#10;            Text(progress?.toString() ?? &#x27;&#x27;),&#10;          ],&#10;        ),&#10;      );&#10;&#10;  /// The last progress before the failure, `null` if it failed before any.&#10;  @override&#10;  Widget buildOnError(&#10;    BuildContext context,&#10;    Object error,&#10;    StackTrace stackTrace,&#10;    Object? progress,&#10;  ) =&gt;&#10;      Center(child: Text(progress == null ? &#x27;$$error&#x27; : &#x27;$$progress: $$error&#x27;));&#10;&#10;  @override&#10;  Widget buildOnReady(BuildContext context) =&gt; child;&#10;}"
             description="AsyncScopeBase: async lifecycle without a container"
-            toReformat="true" toShortenFQNames="true">
+            toReformat="false" toShortenFQNames="true">
     <variable name="V1" expression="" defaultValue="&quot;ConnectionScope&quot;" alwaysStopAt="true"/>
     <variable name="V2" expression="" defaultValue="&quot;connecting&quot;" alwaysStopAt="true"/>
     <context>
-      <option name="DART" value="true"/>
+      <option name="DART_TOPLEVEL" value="true"/>
     </context>
   </template>
   <template name="scopo-data" value="final class $V1$ extends AsyncDataScopeBase&lt;$V1$, $V2$&gt; {&#10;  const $V1$({super.key, required super.child});&#10;&#10;  /// The value itself. Throws until there is one — read it from below&#10;  /// [buildOnReady], where there always is.&#10;  ///&#10;  /// `listen: false`, and not as a default worth revisiting: subscribing&#10;  /// here follows the *state* of the scope — waiting, progress, ready,&#10;  /// error — and the value is read from a subtree the ready state built.&#10;  /// Storing a value does not make it observable; a value the widgets have&#10;  /// to follow should be a `Listenable` with a `ScopeNotifier` under this&#10;  /// scope, or should expose a stream.&#10;  static $V2$ of(BuildContext context) =&gt;&#10;      AsyncDataScopeBase.of&lt;$V1$, $V2$&gt;(&#10;        context,&#10;        listen: false,&#10;      ).data;&#10;&#10;  // No `select` here on purpose. It would subscribe to the state of the&#10;  // scope — `hasData`, `isInitialized` — and a widget under the ready&#10;  // branch is past all of those. To follow something *inside* the value,&#10;  // make the value a `Listenable` and wrap the widget in a&#10;  // `ListenableSelector`, or put a `ScopeNotifier` under this scope.&#10;  // `AsyncDataScopeBase.select` is there if the state is what you need.&#10;&#10;  @override&#10;  Stream&lt;AsyncDataScopeInitState&lt;Object, $V2$&gt;&gt; initData(&#10;    BuildContext context,&#10;  ) async* {&#10;    yield AsyncDataScopeReady(await $V2$.open());&#10;  }&#10;&#10;  @override&#10;  FutureOr&lt;void&gt; disposeData($V2$ data) =&gt; data.close();&#10;&#10;  @override&#10;  Widget buildOnProgress(BuildContext context, Object? progress) =&gt;&#10;      const Center(child: CircularProgressIndicator());&#10;&#10;  @override&#10;  Widget buildOnError(&#10;    BuildContext context,&#10;    Object error,&#10;    StackTrace stackTrace,&#10;    Object? progress,&#10;  ) =&gt;&#10;      Center(child: Text(&#x27;$$error&#x27;));&#10;&#10;  @override&#10;  Widget buildOnReady(BuildContext context, $V2$ data) =&gt; child;&#10;}&#10;$END$"
             description="AsyncDataScopeBase: the same, producing a value"
-            toReformat="true" toShortenFQNames="true">
+            toReformat="false" toShortenFQNames="true">
     <variable name="V1" expression="" defaultValue="&quot;DbScope&quot;" alwaysStopAt="true"/>
     <variable name="V2" expression="" defaultValue="&quot;Database&quot;" alwaysStopAt="true"/>
     <context>
-      <option name="DART" value="true"/>
+      <option name="DART_TOPLEVEL" value="true"/>
     </context>
   </template>
   <template name="scopo-controller" value="final class $V1$ extends ScopeController {&#10;  Timer? _ticker;&#10;&#10;  bool $V3$ = false;&#10;&#10;  @override&#10;  Future&lt;void&gt; init() async {&#10;    $END$&#10;    // `mounted` after every await: the scope may have gone while this was&#10;    // suspended, and what is taken afterwards has nobody to release it.&#10;    if (!mounted) return;&#10;  }&#10;&#10;  /// Drops what must stop reaching the controller at once. Synchronous, and&#10;  /// always runs before [dispose].&#10;  @override&#10;  void onUnmount() {&#10;    _ticker?.cancel();&#10;    _ticker = null;&#10;  }&#10;&#10;  @override&#10;  FutureOr&lt;void&gt; dispose() {}&#10;}&#10;&#10;final class $V2$&#10;    extends AsyncControllerScopeBase&lt;$V2$, $V1$&gt; {&#10;  const $V2$({super.key, required super.child});&#10;&#10;  /// The controller itself, for calling methods on it. Throws until there&#10;  /// is one — read it from below [buildOnReady], where there always is.&#10;  ///&#10;  /// `listen: false`, and not as a default worth revisiting: subscribing&#10;  /// here follows the *state* of the scope — waiting, ready, error — and&#10;  /// this family does not make the controller observable. A controller&#10;  /// whose values the widgets have to follow should be a `Listenable`&#10;  /// with a `ScopeNotifier` under this scope, or should expose a stream.&#10;  static $V1$ of(BuildContext context) =&gt;&#10;      AsyncControllerScopeBase.of&lt;$V2$, $V1$&gt;(&#10;        context,&#10;        listen: false,&#10;      ).controller;&#10;&#10;  // No `select` here on purpose. It would subscribe to the state of the&#10;  // scope — `hasController`, `isInitialized` — and a widget under the&#10;  // ready branch is past all of those. To follow something *inside* the&#10;  // controller, make it a `Listenable` and wrap the widget in a&#10;  // `ListenableSelector`, or put a `ScopeNotifier` under this scope.&#10;  // `AsyncControllerScopeBase.select` is there if the state is what you&#10;  // need.&#10;&#10;  @override&#10;  $V1$ createController(BuildContext context) =&gt;&#10;      $V1$();&#10;&#10;  /// No progress argument here, unlike the other async families: this&#10;  /// scope&#x27;s initialization is `createController()` plus the controller&#x27;s&#10;  /// own `init()`, and neither reports steps.&#10;  @override&#10;  Widget buildOnProgress(BuildContext context) =&gt;&#10;      const Center(child: CircularProgressIndicator());&#10;&#10;  @override&#10;  Widget buildOnError(&#10;    BuildContext context,&#10;    Object error,&#10;    StackTrace stackTrace,&#10;  ) =&gt;&#10;      Center(child: Text(&#x27;$$error&#x27;));&#10;&#10;  @override&#10;  Widget buildOnReady(BuildContext context, $V1$ controller) =&gt;&#10;      child;&#10;}&#10;$END$"
             description="AsyncControllerScopeBase and the controller it owns"
-            toReformat="true" toShortenFQNames="true">
+            toReformat="false" toShortenFQNames="true">
     <variable name="V1" expression="" defaultValue="&quot;PlayerController&quot;" alwaysStopAt="true"/>
     <variable name="V3" expression="" defaultValue="&quot;isPlaying&quot;" alwaysStopAt="true"/>
     <variable name="V2" expression="" defaultValue="&quot;PlayerScope&quot;" alwaysStopAt="true"/>
     <context>
-      <option name="DART" value="true"/>
+      <option name="DART_TOPLEVEL" value="true"/>
     </context>
   </template>
   <template name="scopo-access" value="static const access = $V1$&lt;$V2$&gt;();$END$"
             description="The accessor object, for a scope that prefers it to wrappers"
-            toReformat="true" toShortenFQNames="true">
+            toReformat="false" toShortenFQNames="true">
     <variable name="V2" expression="" defaultValue="&quot;Widget&quot;" alwaysStopAt="true"/>
     <context>
-      <option name="DART" value="true"/>
+      <option name="DART_STATEMENT" value="true"/>
     </context>
   </template>
 </templateSet>

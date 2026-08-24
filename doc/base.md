@@ -265,8 +265,9 @@ shape needs, in one paste, for you to split across files as you like:
 ```
 
 `ide/README.md` says where each file goes. The skeletons they insert are
-compiled by the package's own gate; the live templates are not run by anything,
-so an import is what proves them.
+compiled by the package's own gate, and the suite holds each live template to
+the context it belongs in; what an editor makes of the file is still something
+only an import shows, and Android Studio took it.
 
 ## Where to go next
 

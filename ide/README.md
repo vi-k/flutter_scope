@@ -30,9 +30,21 @@ command palette, pick Dart, and paste the contents in.
 
 ## IntelliJ IDEA and Android Studio
 
-**Settings → Editor → Live Templates → the gear icon → Import Live Templates**,
-and pick `scopo-live-templates.xml`. The templates arrive in a group named
-`scopo`.
+Recent versions no longer offer an import button on the Live Templates page.
+Copy the file into the configuration directory of the IDE instead, under
+`templates/`, named after the group it declares:
+
+```sh
+# Android Studio on macOS; for IntelliJ IDEA the directory is
+# ~/Library/Application Support/JetBrains/<product>/
+DIR=~/Library/Application\ Support/Google/AndroidStudio<version>/templates
+mkdir -p "$DIR"
+cp "$(find ~/.pub-cache/hosted/pub.dev -maxdepth 1 -name 'scopo-*' | sort | tail -1)"/ide/scopo-live-templates.xml "$DIR/scopo.xml"
+```
+
+The file name has to match the group: the XML declares `scopo`, so the file is
+`scopo.xml`. Restart the IDE, and the templates appear under
+**Settings → Editor → Live Templates** in a group named `scopo`.
 
 ## The templates
 
@@ -59,9 +71,21 @@ skeletons declare a class of the same default name — right in an editor,
 a conflict in one library. A template that stops being valid
 Dart fails the gate.
 
-**The live templates themselves are not verified by a run.** The XML is well
-formed and follows the format of the Dart plugin's own templates — two
-contexts exist, `DART` and `DART_STATEMENT`, and these use `DART` because they
-declare classes and members rather than statements — but whether IntelliJ
-accepts the file is something only an import shows. If it refuses one, that is a
-bug worth reporting.
+**The live templates are checked in part.** The suite holds them to the same set
+as the snippets, to the IntelliJ way of escaping a literal dollar, and to the
+context each one belongs in — but what an editor makes of the file is something
+only an import shows. Android Studio took it in August 2026; if a version
+refuses one, that is a bug worth reporting.
+
+Three contexts are in play, and only two of them belong to the Dart plugin.
+`DART` is its generic one and offers a template everywhere in a Dart file, a
+method body included, so a class skeleton pasted there is broken code;
+`DART_STATEMENT` is the other. The third, `DART_TOPLEVEL`, is contributed by the
+**Flutter** plugin, and it is what the ten class skeletons declare — the same
+context Flutter's own `stless` and `stful` use. The accessor line writes a
+member, so it declares `DART_STATEMENT`. Without the Flutter plugin installed
+the class skeletons are not offered at all.
+
+The skeletons are also inserted as written rather than reformatted by the IDE
+(`toReformat="false"`): they are already shaped by `dart format`, which the gate
+checks, and the IDE's own Dart formatter is not that one.

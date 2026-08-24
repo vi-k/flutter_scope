@@ -41,6 +41,44 @@ void main() {
     );
   });
 
+  // A live template is offered where its context says, and `DART` — the generic
+  // context of the Dart plugin — says everywhere in a Dart file, a method body
+  // included. A class skeleton pasted there is broken code, so the ten that
+  // declare classes belong in `DART_TOPLEVEL` and the one that writes a member
+  // belongs in `DART_STATEMENT`. `DART_TOPLEVEL` is contributed by the *Flutter*
+  // plugin rather than the Dart one, which is why reading the Dart plugin's
+  // `plugin.xml` alone showed only two contexts; Flutter's own `stless` and
+  // `stful` declare exactly this.
+  test('every live template declares the context it belongs in', () {
+    final xml = templatesFile.readAsStringSync();
+
+    const statementTemplates = {'scopo-access'};
+
+    final blocks =
+        RegExp(r'<template name="([^"]+)"[\s\S]*?</template>').allMatches(xml);
+
+    expect(blocks.length, 11, reason: 'eleven templates, one context each');
+
+    for (final block in blocks) {
+      final name = block.group(1)!;
+      final contexts = RegExp('<option name="(DART[A-Z_]*)"')
+          .allMatches(block.group(0)!)
+          .map((m) => m.group(1)!)
+          .toList();
+
+      final expected = statementTemplates.contains(name)
+          ? 'DART_STATEMENT'
+          : 'DART_TOPLEVEL';
+
+      expect(
+        contexts,
+        [expected],
+        reason: '`$name` is offered in the wrong place; `DART` on its own '
+            'offers it inside method bodies too',
+      );
+    }
+  });
+
   // The copy in `.vscode/` is what this repository's own editor picks up, so it
   // exists to be tried out on the spot rather than copied from pub-cache first.
   // Two files with one content drift the moment one of them is edited, and
