@@ -82,13 +82,18 @@ A file an editor refuses is not a file with one broken template in it: the whole
 group simply does not appear, and nothing says why.
 
 Three contexts are in play, and only two of them belong to the Dart plugin.
-`DART` is its generic one and offers a template everywhere in a Dart file, a
-method body included, so a class skeleton pasted there is broken code;
-`DART_STATEMENT` is the other. The third, `DART_TOPLEVEL`, is contributed by the
-**Flutter** plugin, and it is what the ten class skeletons declare — the same
-context Flutter's own `stless` and `stful` use. The accessor line writes a
-member, so it declares `DART_STATEMENT`. Without the Flutter plugin installed
-the class skeletons are not offered at all.
+`DART` is its generic one, offering a template everywhere in a Dart file;
+`DART_STATEMENT` narrows that to statement positions, which means inside a
+function. The third, `DART_TOPLEVEL`, is contributed by the **Flutter** plugin,
+and it is what the ten class skeletons declare — the same context Flutter's own
+`stless` and `stful` use. Without that plugin installed they are not offered at
+all.
+
+The accessor line takes `DART`, and the narrower context is the wrong one for
+it: it goes into a class body, and a class body is not a statement position, so
+`DART_STATEMENT` never offers it there. `DART` is too broad for a class
+skeleton — that would turn up inside method bodies — and exactly right for a
+member.
 
 The skeletons are also inserted as written rather than reformatted by the IDE
 (`toReformat="false"`): they are already shaped by `dart format`, which the gate

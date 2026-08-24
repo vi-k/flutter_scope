@@ -70,18 +70,22 @@ void main() {
     );
   });
 
-  // A live template is offered where its context says, and `DART` — the generic
-  // context of the Dart plugin — says everywhere in a Dart file, a method body
-  // included. A class skeleton pasted there is broken code, so the ten that
-  // declare classes belong in `DART_TOPLEVEL` and the one that writes a member
-  // belongs in `DART_STATEMENT`. `DART_TOPLEVEL` is contributed by the *Flutter*
-  // plugin rather than the Dart one, which is why reading the Dart plugin's
-  // `plugin.xml` alone showed only two contexts; Flutter's own `stless` and
-  // `stful` declare exactly this.
+  // A live template is offered where its context says. The ten that declare
+  // classes take `DART_TOPLEVEL`, contributed by the *Flutter* plugin rather
+  // than the Dart one — which is why reading the Dart plugin's `plugin.xml`
+  // alone showed only two contexts — and it is what Flutter's own `stless` and
+  // `stful` declare.
+  //
+  // The accessor line goes into a class body, and that is neither of the two
+  // narrow contexts: `DART_STATEMENT` covers statement positions, which means
+  // inside a function, and a class body is not one. `DART`, the generic
+  // context, is the only one that reaches it. Too broad for a class skeleton —
+  // it offers one inside a method body, where it pastes as broken code — and
+  // exactly right here. Both halves were settled by an import, not by reading.
   test('every live template declares the context it belongs in', () {
     final xml = templatesFile.readAsStringSync();
 
-    const statementTemplates = {'scopo-access'};
+    const genericTemplates = {'scopo-access'};
 
     final blocks =
         RegExp(r'<template name="([^"]+)"[\s\S]*?</template>').allMatches(xml);
@@ -95,15 +99,15 @@ void main() {
           .map((m) => m.group(1)!)
           .toList();
 
-      final expected = statementTemplates.contains(name)
-          ? 'DART_STATEMENT'
-          : 'DART_TOPLEVEL';
+      final expected =
+          genericTemplates.contains(name) ? 'DART' : 'DART_TOPLEVEL';
 
       expect(
         contexts,
         [expected],
-        reason: '`$name` is offered in the wrong place; `DART` on its own '
-            'offers it inside method bodies too',
+        reason: '`$name` is offered in the wrong place: a class skeleton on '
+            '`DART` turns up inside method bodies, and the accessor line on '
+            'anything narrower does not turn up in a class body at all',
       );
     }
   });
