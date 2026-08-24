@@ -1,6 +1,6 @@
 # scopo
 
-> Перевод `README.md` (blob `98a4feeab5db18cc23dffcf988ad6e3a102c7f62`).
+> Перевод `README.md` (blob `dbc3c03b716981998be4efeca55dadca99b5c0af`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 [![pub version](https://img.shields.io/pub/v/scopo)](https://pub.dev/packages/scopo)
@@ -747,8 +747,10 @@ tearDown(() {
 
 [navigation_node](https://pub.dev/packages/navigation_node) — вложенный
 `Navigator`, который ставят **под** скоуп вместо этого. `Navigator.push` и
-`showModalBottomSheet` уже берут ближайший навигатор по умолчанию, а
-`showDialog(useRootNavigator: false)` просит его явно — в обоих случаях маршрут
+`showModalBottomSheet` уже берут ближайший навигатор по умолчанию, так что для
+пуша или шторки через узел ничего дописывать не нужно. **У `showDialog`
+умолчание другое — корневой навигатор, а не ближайший** — передайте
+`useRootNavigator: false`, и он тоже дойдёт до узла. В обоих случаях маршрут
 теперь строится внутри поддерева скоупа, а не рядом с ним: диалог, шторка или
 открытый экран из-под узла читают тот же скоуп, что и экран, с которого их
 открыли.

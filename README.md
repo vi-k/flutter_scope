@@ -735,11 +735,12 @@ dialog opened from inside one, or a screen pushed from one, cannot read it.
 
 [navigation_node](https://pub.dev/packages/navigation_node) is a nested
 `Navigator` put **under** the scope instead. `Navigator.push` and
-`showModalBottomSheet` already default to the nearest navigator, and
-`showDialog(useRootNavigator: false)` asks for it — either way the route is now
-built inside the scope's subtree rather than beside it, and a dialog, a bottom
-sheet or a pushed screen opened from under the node reads the same scope the
-screen that opened it does.
+`showModalBottomSheet` already default to the nearest navigator, so pushing or
+opening a sheet through the node needs nothing extra. **`showDialog` defaults to
+the root navigator, not the nearest one** — pass `useRootNavigator: false` and
+it reaches the node too. Either way the route is now built inside the scope's
+subtree rather than beside it, and a dialog, a bottom sheet or a pushed screen
+opened from under the node reads the same scope the screen that opened it does.
 
 It shipped inside scopo up to 0.10.0; it depends on nothing but Flutter, which
 is why it left. Add the package, change one import, and the pair works exactly
