@@ -30,7 +30,7 @@ final class _Deps extends ScopeAutoDependencies<_Deps, void> {
 
   @override
   ScopeDependency buildDependencies(void context) => sequential('', [
-        controller('player', () => player = _TestController(calls)),
+        controllerDep('player', () => player = _TestController(calls)),
       ]);
 }
 
@@ -66,12 +66,12 @@ final class _FailingDeps extends ScopeAutoDependencies<_FailingDeps, void> {
 
   @override
   ScopeDependency buildDependencies(void context) => sequential('', [
-        controller('player', () => player = _FailingController(calls)),
+        controllerDep('player', () => player = _FailingController(calls)),
       ]);
 }
 
 void main() {
-  group('ScopeAutoDependencies.controller', () {
+  group('ScopeAutoDependencies.controllerDep', () {
     test('runs create, performInit, performUnmount and performDispose',
         () async {
       final calls = <String>[];

@@ -177,7 +177,7 @@
 1.0.0, потому что на pub.dev была 0.10.0, а у `0.x` минорный бамп и есть слот
 ломающих.
 
-**Последняя законченная работа — `controller()`, четвёртый билдер
+**Последняя законченная работа — `controllerDep()`, четвёртый билдер
 `ScopeAutoDependencies`** (2026-08-24). Владелец спросил, можно ли добавить,
 наряду с `dep()`, что-то для автоматической инициализации контроллеров
 `AsyncControllerScope` (`ScopeController`). У `ScopeController` уже была
@@ -187,17 +187,22 @@
 семействами не было: `ScopeAutoDependencies` и `AsyncControllerScope` не
 ссылались друг на друга ни в одну сторону.
 
-Дизайн одобрен владельцем без правок — `docs/records/2026-08-24[5]-controller-dependency-design.md`.
-`controller<S extends ScopeController>(name, create)` — тонкая обёртка вокруг
-`dep()`: создаёт контроллер, регистрирует `handle.unmount`/`handle.dispose`
-на `performUnmount`/`performDispose` **до** `await controller.performInit()`,
+Дизайн одобрен владельцем без правок — `docs/records/2026-08-24[5]-controller-dependency-design.md`
+(там метод назван по первоначальному имени, см. ниже). `controllerDep<S
+extends ScopeController>(name, create)` — тонкая обёртка вокруг `dep()`:
+создаёт контроллер, регистрирует `handle.unmount`/`handle.dispose` на
+`performUnmount`/`performDispose` **до** `await controller.performInit()`,
 так что «acquire, register, then carry on» держится по построению — оба
 `performX` идемпотентны и безопасны, даже если `performInit` не был вызван
-вовсе. Разошлось с дизайном одно: `flutter analyze` корня поймал конфликт
-имён `controller` (метод) ↔ `controller` (поле `FakeController` в
-`example/scopo_demo/lib/home/home_dependencies.dart`) — `FakeController` даже
-не `ScopeController`, совпадение имён случайное. Владелец решил переименовать
-поле демки в `fakeController`, а не метод.
+вовсе. Два расхождения с дизайном, оба решения владельца после первого
+коммита: `flutter analyze` корня поймал конфликт имён метода `controller` с
+полем `controller` (`FakeController` в
+`example/scopo_demo/lib/home/home_dependencies.dart` — не `ScopeController`,
+совпадение случайное) — владелец переименовал поле демки в `fakeController`,
+а не метод; тем же вечером владелец передумал сам метод и попросил
+`controllerDep` вместо `controller` — вторым коммитом переименовано во всех
+местах (`lib/`, `test/`, `doc/full_scope.md`, README, зеркала `docs/ru/`,
+`CHANGELOG.md`).
 
 Тесты сначала (`AGENTS.md` §8): падающий тест на порядок вызовов, зелёный
 после правки; второй тест на путь отказа (`init` контроллера бросает,

@@ -317,7 +317,7 @@ final class PlayerController extends ScopeController {
 instead of a subclass.
 
 The same `PlayerController` also fits inside a dependency tree unchanged —
-`controller('player', () => player = PlayerController(api: apiClient))`
+`controllerDep('player', () => player = PlayerController(api: apiClient))`
 next to `dep` in the Dependencies section below, when what a screen needs is
 one branch of a larger tree rather than a scope of its own.
 

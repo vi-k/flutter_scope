@@ -362,7 +362,7 @@ abstract base class ScopeAutoDependencies<T extends ScopeAutoDependencies<T, C>,
   /// teardown can throw or suspend, because creating it does neither.
   /// [create] is where the caller stores the controller, the same way a
   /// [dep] initializer stores what it built.
-  ScopeDependency controller<S extends ScopeController>(
+  ScopeDependency controllerDep<S extends ScopeController>(
     String name,
     S Function() create,
   ) =>

@@ -1,6 +1,6 @@
 # scopo
 
-> Перевод `README.md` (blob `e616f6742d50db3b41633d69ed00b0cbbfab2c39`).
+> Перевод `README.md` (blob `63920e56a44a56ff5508e936c275c8a3e212beba`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 [![pub version](https://img.shields.io/pub/v/scopo)](https://pub.dev/packages/scopo)
@@ -326,7 +326,7 @@ final class PlayerController extends ScopeController {
 наследования.
 
 Тот же `PlayerController` без изменений годится и внутрь дерева
-зависимостей — `controller('player', () => player =
+зависимостей — `controllerDep('player', () => player =
 PlayerController(api: apiClient))`, рядом с `dep`, в разделе «Зависимости»
 ниже, когда экрану нужна не своя область, а одна ветка более крупного
 дерева.

@@ -126,7 +126,7 @@ Four builders describe the tree, and all of them return a `ScopeDependency`:
   before anything is released, `dep.dispose` is awaited during the disposal.
   Setting neither is fine — a dependency that owns nothing needs no teardown.
   The name must not be empty.
-- `controller(name, create)` — a single dependency backed by a
+- `controllerDep(name, create)` — a single dependency backed by a
   `ScopeController`: `create` builds it, and its `performUnmount` /
   `performDispose` are wired to the handle before `performInit` is awaited,
   so the usual `dep` teardown promises hold for it too. The same controller
