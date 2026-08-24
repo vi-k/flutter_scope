@@ -1,6 +1,6 @@
 # scopo
 
-> Перевод `README.md` (blob `658a8e62a6fc239f36010c8fea5989180cc00d66`).
+> Перевод `README.md` (blob `ffb0712e96008af5589ba892305a8c703b5fec72`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 [![pub version](https://img.shields.io/pub/v/scopo)](https://pub.dev/packages/scopo)
@@ -610,8 +610,35 @@ App.access.of(context).increment();
 **Либо пусть обёртки напишет шаблон.** Шаблоны редакторов, которые едут с
 пакетом, идут другим путём: их скелеты выписывают все пять статик целиком, так
 что потомок читает `App.select(context, …)`, а набирать не пришлось ничего.
-Аксессор — когда скоуп пишут руками, шаблон — когда нет; смотрите
-`ide/README.md` в каталоге пакета или тему
+Аксессор — когда скоуп пишут руками, шаблон — когда нет.
+
+**Как их поставить.** Они едут вместе с пакетом, то есть уже лежат на вашей
+машине. Для VS Code — а также Cursor, Windsurf и Antigravity, у них общий
+формат, — скопируйте сниппеты в проект:
+
+```sh
+mkdir -p .vscode
+cp "$(find ~/.pub-cache/hosted/pub.dev -maxdepth 1 -name 'scopo-*' | sort | tail -1)"/ide/scopo.code-snippets .vscode/
+```
+
+Для IntelliJ IDEA и Android Studio кнопки импорта на странице Live Templates
+больше нет. Файл кладут в каталог настроек IDE, в подпапку `templates/`, под
+именем группы, которую он объявляет: XML объявляет `scopo`, значит файл —
+`scopo.xml`. После этого IDE перезапускают:
+
+```sh
+# Android Studio на macOS; для IntelliJ IDEA каталог —
+# ~/Library/Application Support/JetBrains/<продукт>/
+DIR=~/Library/Application\ Support/Google/AndroidStudio<версия>/templates
+mkdir -p "$DIR"
+cp "$(find ~/.pub-cache/hosted/pub.dev -maxdepth 1 -name 'scopo-*' | sort | tail -1)"/ide/scopo-live-templates.xml "$DIR/scopo.xml"
+```
+
+Группа появится в **Settings → Editor → Live Templates**.
+
+Все одиннадцать перечислены в
+[`ide/README.md`](https://github.com/vi-k/scopo/blob/main/ide/README.md), а как
+шаблоны соотносятся с аксессорами, говорит тема
 [base](https://pub.dev/documentation/scopo/latest/topics/base-topic.html).
 
 ## scopeKey

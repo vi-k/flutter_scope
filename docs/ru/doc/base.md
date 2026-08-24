@@ -1,6 +1,6 @@
 # base
 
-> Перевод `doc/base.md` (blob `438743e853c76bcafd290e7d38b702995b535da3`).
+> Перевод `doc/base.md` (blob `83820fd688107e5646f121e59cc9f5897f314cb7`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 Каждое семейство скоупов этого пакета — `ScopeWidgetBase`, `ScopeModel`,
@@ -265,10 +265,36 @@ final counter = App.access.select(context, (state) => state.counter);
 }
 ```
 
-Куда какой файл класть, написано в `ide/README.md`. Скелеты, которые эти
+**Как их поставить.** Они едут вместе с пакетом, то есть уже лежат на вашей
+машине. Для VS Code — а также Cursor, Windsurf и Antigravity, у них общий
+формат, — скопируйте сниппеты в проект:
+
+```sh
+mkdir -p .vscode
+cp "$(find ~/.pub-cache/hosted/pub.dev -maxdepth 1 -name 'scopo-*' | sort | tail -1)"/ide/scopo.code-snippets .vscode/
+```
+
+Для IntelliJ IDEA и Android Studio кнопки импорта на странице Live Templates
+больше нет. Файл кладут в каталог настроек IDE, в подпапку `templates/`, под
+именем группы, которую он объявляет: XML объявляет `scopo`, значит файл —
+`scopo.xml`. После этого IDE перезапускают:
+
+```sh
+# Android Studio на macOS; для IntelliJ IDEA каталог —
+# ~/Library/Application Support/JetBrains/<продукт>/
+DIR=~/Library/Application\ Support/Google/AndroidStudio<версия>/templates
+mkdir -p "$DIR"
+cp "$(find ~/.pub-cache/hosted/pub.dev -maxdepth 1 -name 'scopo-*' | sort | tail -1)"/ide/scopo-live-templates.xml "$DIR/scopo.xml"
+```
+
+Группа появится в **Settings → Editor → Live Templates**.
+
+Остальное — в
+[`ide/README.md`](https://github.com/vi-k/scopo/blob/main/ide/README.md):
+таблица всех одиннадцати и то, что о них проверяется. Скелеты, которые эти
 шаблоны вставляют, компилируются гейтом пакета, а сьюта держит каждый live
-template на его контексте; что сделает с файлом редактор, по-прежнему показывает
-только импорт — Android Studio его приняла.
+template на его контексте; что сделает с файлом редактор, по-прежнему
+показывает только импорт — Android Studio его приняла.
 
 ## Куда дальше
 

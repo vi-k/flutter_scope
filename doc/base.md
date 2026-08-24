@@ -264,10 +264,36 @@ shape needs, in one paste, for you to split across files as you like:
 }
 ```
 
-`ide/README.md` says where each file goes. The skeletons they insert are
-compiled by the package's own gate, and the suite holds each live template to
-the context it belongs in; what an editor makes of the file is still something
-only an import shows, and Android Studio took it.
+**Installing them.** They ship with the package, so they are already on the
+machine. For VS Code — and Cursor, Windsurf and Antigravity, which share the
+format — copy the snippets into the project:
+
+```sh
+mkdir -p .vscode
+cp "$(find ~/.pub-cache/hosted/pub.dev -maxdepth 1 -name 'scopo-*' | sort | tail -1)"/ide/scopo.code-snippets .vscode/
+```
+
+For IntelliJ IDEA and Android Studio there is no import button on the Live
+Templates page any more. The file goes into the configuration directory of the
+IDE, under `templates/`, named after the group it declares — the XML says
+`scopo`, so the file is `scopo.xml` — and the IDE is restarted:
+
+```sh
+# Android Studio on macOS; for IntelliJ IDEA the directory is
+# ~/Library/Application Support/JetBrains/<product>/
+DIR=~/Library/Application\ Support/Google/AndroidStudio<version>/templates
+mkdir -p "$DIR"
+cp "$(find ~/.pub-cache/hosted/pub.dev -maxdepth 1 -name 'scopo-*' | sort | tail -1)"/ide/scopo-live-templates.xml "$DIR/scopo.xml"
+```
+
+The group then appears under **Settings → Editor → Live Templates**.
+
+The rest is in
+[`ide/README.md`](https://github.com/vi-k/scopo/blob/main/ide/README.md):
+the table of all eleven and what is checked about them. The skeletons they
+insert are compiled by the package's own gate, and the suite holds each live
+template to the context it belongs in; what an editor makes of the file is
+still something only an import shows, and Android Studio took it.
 
 ## Where to go next
 

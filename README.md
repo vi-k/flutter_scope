@@ -598,8 +598,37 @@ is the shortest way to have all of them, not the only way to have any.
 the package take the other route: their skeletons write the five statics out in
 full, so a descendant reads `App.select(context, …)` and nothing had to be
 typed. Use the accessor when you write the scope by hand, a template when you
-do not — see `ide/README.md` in the package directory, or the topic
-[base](https://pub.dev/documentation/scopo/latest/topics/base-topic.html).
+do not.
+
+**Installing them.** They ship with the package, so they are already on the
+machine. For VS Code — and Cursor, Windsurf and Antigravity, which share the
+format — copy the snippets into the project:
+
+```sh
+mkdir -p .vscode
+cp "$(find ~/.pub-cache/hosted/pub.dev -maxdepth 1 -name 'scopo-*' | sort | tail -1)"/ide/scopo.code-snippets .vscode/
+```
+
+For IntelliJ IDEA and Android Studio there is no import button on the Live
+Templates page any more. The file goes into the configuration directory of the
+IDE, under `templates/`, named after the group it declares — the XML says
+`scopo`, so the file is `scopo.xml` — and the IDE is restarted:
+
+```sh
+# Android Studio on macOS; for IntelliJ IDEA the directory is
+# ~/Library/Application Support/JetBrains/<product>/
+DIR=~/Library/Application\ Support/Google/AndroidStudio<version>/templates
+mkdir -p "$DIR"
+cp "$(find ~/.pub-cache/hosted/pub.dev -maxdepth 1 -name 'scopo-*' | sort | tail -1)"/ide/scopo-live-templates.xml "$DIR/scopo.xml"
+```
+
+The group then appears under **Settings → Editor → Live Templates**.
+
+All eleven are listed in
+[`ide/README.md`](https://github.com/vi-k/scopo/blob/main/ide/README.md), and
+the topic
+[base](https://pub.dev/documentation/scopo/latest/topics/base-topic.html) says
+how templates and accessors relate.
 
 ## scopeKey
 
