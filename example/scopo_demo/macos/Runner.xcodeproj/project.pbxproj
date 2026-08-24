@@ -241,6 +241,7 @@
 				33CC110E2044A8840003C045 /* Bundle Framework */,
 				3399D490228B24CF009A79C7 /* ShellScript */,
 				D83C826AA913F603186B9525 /* [CP] Embed Pods Frameworks */,
+				F22C67F28C18751C73DC4E43 /* Strip stray native_assets.json before signing */,
 			);
 			buildRules = (
 			);
@@ -420,6 +421,26 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-Runner/Pods-Runner-frameworks.sh\"\n";
+			showEnvVarsInLog = 0;
+		};
+		F22C67F28C18751C73DC4E43 /* Strip stray native_assets.json before signing */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Strip stray native_assets.json before signing";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "rm -f \"${TARGET_BUILD_DIR}/${WRAPPER_NAME}/Contents/Frameworks/native_assets.json\"\n";
 			showEnvVarsInLog = 0;
 		};
 /* End PBXShellScriptBuildPhase section */
