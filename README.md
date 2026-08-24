@@ -724,6 +724,30 @@ Three things worth knowing before the first test:
 
 **In depth:** the topic [debug](https://pub.dev/documentation/scopo/latest/topics/debug-topic.html).
 
+## Nested navigation
+
+Every route in a Flutter app is normally built by the one `Navigator` at the top
+of it, and that `Navigator` sits **above** every scope in the tree — so
+`Navigator.push`, `showDialog` and `showModalBottomSheet` all build the new
+route beside the screen that opened it, not under it. Nothing the screen put
+above its own content is among that route's ancestors, a scope included: a
+dialog opened from inside one, or a screen pushed from one, cannot read it.
+
+[navigation_node](https://pub.dev/packages/navigation_node) is a nested
+`Navigator` put **under** the scope instead. `Navigator.push` and
+`showModalBottomSheet` already default to the nearest navigator, and
+`showDialog(useRootNavigator: false)` asks for it — either way the route is now
+built inside the scope's subtree rather than beside it, and a dialog, a bottom
+sheet or a pushed screen opened from under the node reads the same scope the
+screen that opened it does.
+
+It shipped inside scopo up to 0.10.0; it depends on nothing but Flutter, which
+is why it left. Add the package, change one import, and the pair works exactly
+as it did — the `navigation_node` tab of
+[scopo_demo](https://github.com/vi-k/scopo/tree/main/example/scopo_demo) opens
+the same dialog, sheet and screen from a scope with and without a node, side by
+side.
+
 ## Also in the box
 
 - `ProgressIterator` — step counting (`1/3`, `2/3`, …) for initialization
@@ -735,13 +759,6 @@ Three things worth knowing before the first test:
   with nothing in the picture's place — waiting for the screenshot is how the
   scope waits to let go of what that subtree holds, so leaving it standing
   would defeat the wait.
-
-**Nested navigation moved out.** `NavigationNode` shipped here up to 0.10.0 and
-is now the [navigation_node](https://pub.dev/packages/navigation_node) package
-— a nested `Navigator` that keeps dialogs, bottom sheets and pushed screens
-under the scope that opened them. It depends on nothing but Flutter, which is
-why it left; the pair works exactly as it did. Add the package and change one
-import.
 
 ## Examples
 
