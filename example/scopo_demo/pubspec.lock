@@ -164,10 +164,10 @@ packages:
     dependency: "direct main"
     description:
       name: navigation_node
-      sha256: "16c540d0cf60f290bbdacc6b5dd48e318a87b693d8035d6375de107d1a305a49"
+      sha256: "801ec07d62e360bd609bd937417337c261d543ae3f741e1f2bd726e8d146744f"
       url: "https://pub.dev"
     source: hosted
-    version: "0.2.0"
+    version: "0.3.0"
   path:
     dependency: transitive
     description:
