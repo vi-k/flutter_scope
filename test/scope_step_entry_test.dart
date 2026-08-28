@@ -109,12 +109,19 @@ void main() {
         throwsA(isA<ScopeDependencyException>()),
       );
 
-      expect(observer.events, contains('step _Failing boom'));
-      expect(
-        observer.events.where((event) => event.startsWith('progress ')),
-        isEmpty,
-        reason: 'the step was entered and never came back',
-      );
+      // The whole list, not a `contains`: the point of the pair is that
+      // nothing follows the entry, and only a full list says so. There is no
+      // `onError` among them, and there is not meant to be — the container
+      // hands the failure to its caller, which is what `throwsA` above reads,
+      // and the scope that owns a container is what reports `onError` with
+      // `ScopePhase.initialization`. A container held by hand has no scope.
+      expect(observer.events, [
+        'init _Failing',
+        'step _Failing boom',
+        'cancelled _Failing',
+        'dispose _Failing',
+        'disposed _Failing',
+      ]);
     });
 
     // A dependency of the caller's own making is not a `ScopeDependencyMixin`
@@ -191,6 +198,85 @@ void main() {
         observer.events.where((event) => event.startsWith('progress ')),
         isEmpty,
         reason: 'a disposal reports nothing through onProgress any more',
+      );
+    });
+  });
+
+  group('the pairs under strain', () {
+    // A release that throws is the one case where a disposal entry is meant
+    // to stand alone -- which is exactly what a reader takes for a release
+    // that hung, so it had better be the truth and not an accident of the
+    // walk giving up early on its siblings.
+    test(
+        'a release that throws leaves its entry unmatched and the rest of '
+        'the walk running', () async {
+      final dependencies = _FailingDisposer();
+
+      await dependencies.init(null).drain<void>();
+      observer.events.clear();
+      await dependencies.dispose();
+
+      expect(observer.events, [
+        'dispose _FailingDisposer',
+        'disposal step _FailingDisposer storage/cache',
+        'disposal step _FailingDisposer storage/db',
+        'disposal progress _FailingDisposer storage/db',
+        'error _FailingDisposer disposal storage/cache: Bad state: boom',
+        'disposed _FailingDisposer',
+      ]);
+      // Three things at once, and the order is the point of writing the whole
+      // list. `storage/cache` was entered and never came back, which is the
+      // shape of a release that did not finish. `storage/db` was released all
+      // the same -- one dependency that cannot let go is no reason to walk
+      // away from the ones below it. And the failure arrives after the walk,
+      // not where it happened: both groups collect what their children threw
+      // and carry the first one out at the end.
+    });
+
+    // The wiring is put on the root by `init`, and `_prepareDependencies` may
+    // hand back a tree that was built afresh. A second run has to report as
+    // fully as the first.
+    test('a second tree reports as fully as the first', () async {
+      final dependencies = _Disposing();
+
+      await dependencies.init(null).drain<void>();
+      await dependencies.dispose();
+      final first = List.of(observer.events);
+
+      observer.events.clear();
+      await dependencies.init(null).drain<void>();
+      await dependencies.dispose();
+
+      expect(
+        observer.events,
+        first,
+        reason: 'the tree is built anew, and the entry marks come with it',
+      );
+      expect(
+        observer.events.where((event) => event.startsWith('step ')),
+        isNotEmpty,
+        reason: 'a comparison of two empty recordings would pass for nothing',
+      );
+    });
+
+    test('a dependency of the caller own making still reports its release',
+        () async {
+      final dependencies = _Foreign();
+
+      await dependencies.init(null).drain<void>();
+      observer.events.clear();
+      await dependencies.dispose();
+
+      expect(
+        observer.events,
+        [
+          'dispose _Foreign',
+          'disposal progress _Foreign foreign',
+          'disposed _Foreign',
+        ],
+        reason: 'the release arrives, the entry does not: a dependency that '
+            'is not a ScopeDependencyMixin has nowhere to take the callback '
+            'from, and the release travels the public stream instead',
       );
     });
   });
@@ -299,6 +385,19 @@ final class _UnmountOnly extends ScopeAutoDependencies<_UnmountOnly, void> {
       });
 }
 
+final class _FailingDisposer
+    extends ScopeAutoDependencies<_FailingDisposer, void> {
+  @override
+  ScopeDependency buildDependencies(void context) => sequential('storage', [
+        dep('db', (handle) async {
+          handle.dispose = () async {};
+        }),
+        dep('cache', (handle) async {
+          handle.dispose = () async => throw StateError('boom');
+        }),
+      ]);
+}
+
 final class _Foreign extends ScopeAutoDependencies<_Foreign, void> {
   @override
   ScopeDependency buildDependencies(void context) => _ForeignDependency();
@@ -317,7 +416,9 @@ final class _ForeignDependency implements ScopeDependency {
   ScopeDependencyState _state = const ScopeDependencyInitial();
 
   @override
-  bool get disposalRequired => false;
+  bool get disposalRequired =>
+      !_disposalDone && _state is ScopeDependencyInitialized;
+  bool _disposalDone = false;
 
   @override
   Stream<String> init() async* {
@@ -329,7 +430,11 @@ final class _ForeignDependency implements ScopeDependency {
   void onUnmount() {}
 
   @override
-  Stream<String> dispose() async* {}
+  Stream<String> dispose() async* {
+    _disposalDone = true;
+    _state = const ScopeDependencyDisposed();
+    yield name;
+  }
 
   @override
   String get wrappedName => '"$name"';

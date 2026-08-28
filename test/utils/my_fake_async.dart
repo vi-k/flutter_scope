@@ -59,6 +59,26 @@ final class MyFakeTimer {
       : nextCall = fakeAsync.elapsed + duration;
 }
 
+/// The [Timer] handed to the code under test, so that a cancellation is seen.
+final class _MyFakeTimerHandle implements Timer {
+  final Timer _timer;
+  final void Function() _onCancel;
+
+  _MyFakeTimerHandle(this._timer, this._onCancel);
+
+  @override
+  void cancel() {
+    _onCancel();
+    _timer.cancel();
+  }
+
+  @override
+  bool get isActive => _timer.isActive;
+
+  @override
+  int get tick => _timer.tick;
+}
+
 final class MyFakeAsync {
   final FakeAsync _fakeAsync;
   final List<MyFakeTimer> _pendingTimers = [];
@@ -93,10 +113,23 @@ final class MyFakeAsync {
               final myFakeTimer = MyFakeTimer(fakeAsync, duration);
               _pendingTimers.add(myFakeTimer);
 
-              return parent.createTimer(zone, duration, () {
+              final timer = parent.createTimer(zone, duration, () {
                 _pendingTimers.remove(myFakeTimer);
                 f();
               });
+
+              // Wrapped, because a timer leaves the bookkeeping two ways and
+              // only one of them passes through the callback above. A
+              // `cancel()` goes straight to the timer the parent zone made,
+              // so the record stayed behind for good: `nonPeriodicTimerCount`
+              // then over-counted, and `waitFuture` went on elapsing to a
+              // timer that would never fire again instead of saying there was
+              // no more work. Nothing in the suite cancels a timer under this
+              // helper today; a bounded wait that wins its race is what would.
+              return _MyFakeTimerHandle(
+                timer,
+                () => _pendingTimers.remove(myFakeTimer),
+              );
             },
           ),
         ),

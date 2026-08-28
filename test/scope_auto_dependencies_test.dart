@@ -8,6 +8,23 @@ import 'package:test/test.dart';
 import 'utils/my_fake_async.dart';
 import 'utils/observer.dart';
 
+/// Waits out a disposal and asserts it did not fail.
+///
+/// `waitFuture` puts a failure in a field instead of throwing it, so a result
+/// nobody reads is a failure nobody hears. Every test below compares the
+/// lists of what was released and the states the tree ends in -- and a
+/// regression where `dispose()` completes with an error *after* releasing
+/// everything leaves both of those correct. It would have gone green here.
+void expectDisposed(MyFakeAsync async, Future<void> disposal) {
+  final result = async.waitFuture(disposal);
+
+  expect(
+    result.isFailed,
+    isFalse,
+    reason: 'the disposal completed with ${result.resultOrError}',
+  );
+}
+
 final class TestDependencies
     extends ScopeAutoDependencies<TestDependencies, void> {
   static const step = Duration(milliseconds: 100);
@@ -363,9 +380,8 @@ void main() {
     test('a dependency that had nothing to release says so', () {
       myFakeAsync((fakeAsync) {
         final dependencies = TestDependencies();
-        fakeAsync
-          ..waitFuture(handleInit(dependencies))
-          ..waitFuture(dependencies.dispose());
+        fakeAsync.waitFuture(handleInit(dependencies));
+        expectDisposed(fakeAsync, dependencies.dispose());
 
         ScopeDependency named(String name) => dependencies
             .flattenDependencies()
@@ -429,7 +445,7 @@ void main() {
         expect(dependencies.root.isCancelled, false);
         expect(dependencies.root.isDisposed, false);
 
-        fakeAsync.waitFuture(dependencies.dispose());
+        expectDisposed(fakeAsync, dependencies.dispose());
         expect(states(dependencies), [
           '[group] disposed',
           '  "dep1" disposed',
@@ -524,7 +540,7 @@ void main() {
           expect(dependencies.root.isCancelled, false);
           expect(dependencies.root.isDisposed, false);
 
-          fakeAsync.waitFuture(dependencies.dispose());
+          expectDisposed(fakeAsync, dependencies.dispose());
           expect(states(dependencies), [
             '[group] failed: dep1',
             '  "dep1" failed: Exception: dep1 failed',
@@ -585,7 +601,7 @@ void main() {
           expect(dependencies.root.isCancelled, false);
           expect(dependencies.root.isDisposed, false);
 
-          fakeAsync.waitFuture(dependencies.dispose());
+          expectDisposed(fakeAsync, dependencies.dispose());
           expect(states(dependencies), [
             '[group] failed: concurrent1/dep2',
             '  "dep1" disposed',
@@ -647,7 +663,7 @@ void main() {
           expect(dependencies.root.isCancelled, false);
           expect(dependencies.root.isDisposed, false);
 
-          fakeAsync.waitFuture(dependencies.dispose());
+          expectDisposed(fakeAsync, dependencies.dispose());
           expect(states(dependencies), [
             '[group] failed: concurrent1/sequential1/dep3',
             '  "dep1" disposed',
@@ -710,7 +726,7 @@ void main() {
           expect(dependencies.root.isCancelled, false);
           expect(dependencies.root.isDisposed, false);
 
-          fakeAsync.waitFuture(dependencies.dispose());
+          expectDisposed(fakeAsync, dependencies.dispose());
           expect(states(dependencies), [
             '[group] failed: concurrent1/dep4',
             '  "dep1" disposed',
@@ -774,7 +790,7 @@ void main() {
           expect(dependencies.root.isCancelled, false);
           expect(dependencies.root.isDisposed, false);
 
-          fakeAsync.waitFuture(dependencies.dispose());
+          expectDisposed(fakeAsync, dependencies.dispose());
           expect(states(dependencies), [
             '[group] failed: concurrent1/sequential1/concurrent2/dep5',
             '  "dep1" disposed',
@@ -839,7 +855,7 @@ void main() {
           expect(dependencies.root.isCancelled, false);
           expect(dependencies.root.isDisposed, false);
 
-          fakeAsync.waitFuture(dependencies.dispose());
+          expectDisposed(fakeAsync, dependencies.dispose());
           expect(states(dependencies), [
             '[group] failed: concurrent1/sequential1/concurrent2/dep6',
             '  "dep1" disposed',
@@ -905,7 +921,7 @@ void main() {
           expect(dependencies.root.isCancelled, false);
           expect(dependencies.root.isDisposed, false);
 
-          fakeAsync.waitFuture(dependencies.dispose());
+          expectDisposed(fakeAsync, dependencies.dispose());
           expect(states(dependencies), [
             '[group] failed: concurrent1/sequential1/concurrent2/sequential2/dep7',
             '  "dep1" disposed',
@@ -972,7 +988,7 @@ void main() {
           expect(dependencies.root.isCancelled, false);
           expect(dependencies.root.isDisposed, false);
 
-          fakeAsync.waitFuture(dependencies.dispose());
+          expectDisposed(fakeAsync, dependencies.dispose());
           expect(states(dependencies), [
             '[group] failed: concurrent1/sequential1/concurrent2/sequential2/dep8',
             '  "dep1" disposed',
@@ -1040,7 +1056,7 @@ void main() {
           expect(dependencies.root.isCancelled, false);
           expect(dependencies.root.isDisposed, false);
 
-          fakeAsync.waitFuture(dependencies.dispose());
+          expectDisposed(fakeAsync, dependencies.dispose());
           expect(states(dependencies), [
             '[group] failed: concurrent1/sequential1/dep9',
             '  "dep1" disposed',
@@ -1109,7 +1125,7 @@ void main() {
           expect(dependencies.root.isCancelled, false);
           expect(dependencies.root.isDisposed, false);
 
-          fakeAsync.waitFuture(dependencies.dispose());
+          expectDisposed(fakeAsync, dependencies.dispose());
           expect(states(dependencies), [
             '[group] failed: dep10',
             '  "dep1" disposed',
@@ -1174,7 +1190,7 @@ void main() {
           expect(dependencies.root.isCancelled, false);
           expect(dependencies.root.isDisposed, false);
 
-          fakeAsync.waitFuture(dependencies.dispose());
+          expectDisposed(fakeAsync, dependencies.dispose());
           expect(states(dependencies), [
             '[group] failed: concurrent1/sequential1/dep3',
             '  "dep1" disposed',
@@ -1238,7 +1254,7 @@ void main() {
           expect(dependencies.root.isCancelled, false);
           expect(dependencies.root.isDisposed, false);
 
-          fakeAsync.waitFuture(dependencies.dispose());
+          expectDisposed(fakeAsync, dependencies.dispose());
           expect(states(dependencies), [
             '[group] failed: concurrent1/dep4',
             '  "dep1" disposed',
@@ -1305,7 +1321,7 @@ void main() {
           expect(dependencies.root.isCancelled, false);
           expect(dependencies.root.isDisposed, false);
 
-          fakeAsync.waitFuture(dependencies.dispose());
+          expectDisposed(fakeAsync, dependencies.dispose());
           expect(states(dependencies), [
             '[group] failed: concurrent1/dep4',
             '  "dep1" disposed',
@@ -1370,7 +1386,7 @@ void main() {
           expect(dependencies.root.isCancelled, false);
           expect(dependencies.root.isDisposed, false);
 
-          fakeAsync.waitFuture(dependencies.dispose());
+          expectDisposed(fakeAsync, dependencies.dispose());
           expect(states(dependencies), [
             '[group] failed: concurrent1/sequential1/concurrent2/dep5',
             '  "dep1" disposed',
@@ -1438,7 +1454,7 @@ void main() {
           expect(dependencies.root.isCancelled, false);
           expect(dependencies.root.isDisposed, false);
 
-          fakeAsync.waitFuture(dependencies.dispose());
+          expectDisposed(fakeAsync, dependencies.dispose());
           expect(states(dependencies), [
             '[group] failed: concurrent1/sequential1/concurrent2/dep5',
             '  "dep1" disposed',
@@ -1592,7 +1608,7 @@ void main() {
         handleInitFor(dependencies, async);
         final firstRoot = dependencies.root;
 
-        async.waitFuture(dependencies.dispose());
+        expectDisposed(async, dependencies.dispose());
         expect(dependencies.disposed, ['depB', 'depA']);
         expect(dependencies.root.isDisposed, isTrue);
 
@@ -1711,7 +1727,7 @@ void main() {
       myFakeAsync((async) {
         final dependencies = TestAutoDisposeDependencies();
         handleInitFor(dependencies, async);
-        async.waitFuture(dependencies.dispose());
+        expectDisposed(async, dependencies.dispose());
 
         expect(dependencies.root.stateToString(), 'disposed');
         expect(dependencies.root.state, isA<ScopeDependencyDisposed>());
@@ -1759,7 +1775,7 @@ void main() {
         handleInitFor(dependencies, async);
         expect(dependencies.disposed, ['depA']);
 
-        async.waitFuture(dependencies.dispose());
+        expectDisposed(async, dependencies.dispose());
 
         expect(dependencies.disposed, ['depA']);
         expect(dependencies.root.stateToString(), 'failed: depB');

@@ -61,17 +61,23 @@ final class _FailingController extends ScopeController {
 /// Its `init` suspends, so the walk can be cancelled while `performInit` is
 /// still in flight -- the path a scope takes when it leaves the tree before
 /// its dependencies are up.
+///
+/// It parks on a gate the test opens rather than on a delay it waits out.
+/// A real timer made the window a matter of wall-clock -- the assertion
+/// between the two halves was true only while the continuation had not been
+/// held up longer than the delay, which on a loaded machine is not a promise
+/// -- and cost a fifth of a second of every run for a window that is opened
+/// and closed by the test anyway.
 final class _SlowController extends ScopeController {
-  static const step = Duration(milliseconds: 200);
-
   final List<String> calls;
+  final Completer<void> gate;
 
-  _SlowController(this.calls);
+  _SlowController(this.calls, this.gate);
 
   @override
   Future<void> init() async {
     calls.add('init');
-    await Future<void>.delayed(step);
+    await gate.future;
     calls.add('init finished');
   }
 
@@ -86,11 +92,13 @@ final class _SlowDeps extends ScopeAutoDependencies<_SlowDeps, void> {
   final List<String> calls;
   late final _SlowController player;
 
-  _SlowDeps(this.calls);
+  _SlowDeps(this.calls, this.gate);
+
+  final Completer<void> gate;
 
   @override
   ScopeDependency buildDependencies(void context) => sequential('', [
-        controllerDep('player', () => player = _SlowController(calls)),
+        controllerDep('player', () => player = _SlowController(calls, gate)),
       ]);
 }
 
@@ -145,10 +153,11 @@ void main() {
       'releases the controller when the walk is cancelled mid-init',
       () async {
         final calls = <String>[];
-        final deps = _SlowDeps(calls);
+        final gate = Completer<void>();
+        final deps = _SlowDeps(calls, gate);
 
         final subscription = deps.init(null).listen(null);
-        await Future<void>.delayed(const Duration(milliseconds: 20));
+        await pumpEventQueue();
 
         expect(
           calls,
@@ -157,7 +166,12 @@ void main() {
               'window the whole registration order is about',
         );
 
-        await subscription.cancel();
+        // Asked for, then let through: cancelling a stream does not interrupt
+        // the `await` a generator is parked on, so the cancellation finishes
+        // only once `init` does.
+        final cancelled = subscription.cancel();
+        gate.complete();
+        await cancelled;
 
         expect(
           calls,

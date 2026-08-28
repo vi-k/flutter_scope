@@ -9,9 +9,11 @@ import 'package:test/test.dart';
 /// of one thing, kept side by side by hand — so the first thing worth checking
 /// is that they still describe the same set. The second is that the skeletons
 /// they insert are valid Dart, and that is checked by `flutter analyze` rather
-/// than here: `test/ide/snippet_skeletons.dart` holds every skeleton with its
-/// tab stops resolved, and the test below fails when it no longer matches the
-/// snippets it was generated from.
+/// than here: `test/ide/` holds one file per snippet prefix — several
+/// skeletons declare a class of the same default name, which is right in an
+/// editor and a conflict in one library — each with its tab stops resolved,
+/// and the test below fails when a file no longer matches the snippet it was
+/// generated from.
 void main() {
   final snippetsFile = File('ide/scopo.code-snippets');
   final templatesFile = File('ide/scopo-live-templates.xml');
@@ -207,6 +209,13 @@ void main() {
     for (final entry in snippets.values) {
       final snippet = entry as Map;
       final prefix = snippet['prefix'] as String;
+      // `scopo-access` has no skeleton to compile, and cannot have one: its
+      // first tab stop is a choice of eight accessor types, and they do not
+      // share a shape -- `ScopeAccess` takes three type arguments where
+      // `ScopeWidgetAccess` takes one, so the `<Widget>` the snippet offers
+      // is a placeholder the writer replaces rather than code that compiles.
+      // Checked below instead, by the one thing that could go wrong silently:
+      // a name in that list no longer being a class in the package.
       if (prefix == 'scopo-access') continue;
 
       final file = File('test/ide/${prefix.replaceAll('-', '_')}.dart');
@@ -221,6 +230,46 @@ void main() {
         contains(_squeezed(_skeletonOf(snippet))),
         reason: 'the snippet `$prefix` was changed without regenerating '
             '${file.path}, so nothing compiles what the editor now pastes',
+      );
+    }
+  });
+
+  // The one snippet with no skeleton to compile, and the one way it can go
+  // wrong without a word: `scopo-access` offers a choice of eight accessor
+  // types, and nothing tied that list to the library. Renaming one of them
+  // left the snippet offering a name that no longer exists, and every other
+  // check here passed -- the set of prefixes was unchanged, the XML was
+  // valid, and this snippet is skipped by the skeleton comparison above.
+  test('every type the access snippet offers is a class in the package', () {
+    final snippet = snippets.values
+        .cast<Map<dynamic, dynamic>>()
+        .firstWhere((s) => s['prefix'] == 'scopo-access');
+    final body = (snippet['body'] as List).cast<String>().join('\n');
+    final choice = RegExp(r'\$\{\d+\|([^}|]*)\|\}').firstMatch(body);
+
+    expect(
+      choice,
+      isNotNull,
+      reason: 'the snippet no longer offers a choice of types; if that is '
+          'deliberate, this test is what has to change with it',
+    );
+
+    final offered = choice!.group(1)!.split(',');
+    expect(offered, hasLength(8));
+
+    final sources = Directory('lib')
+        .listSync(recursive: true)
+        .whereType<File>()
+        .where((file) => file.path.endsWith('.dart'))
+        .map((file) => file.readAsStringSync())
+        .join('\n');
+
+    for (final name in offered) {
+      expect(
+        sources,
+        contains(RegExp('class $name<')),
+        reason: 'the access snippet offers `$name`, and the package has no '
+            'such class any more',
       );
     }
   });
