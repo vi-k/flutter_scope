@@ -143,6 +143,24 @@ mixin ScopeDependencyMixin implements ScopeDependency, ScopeObservable {
   /// way.
   @override
   Stream<String> dispose() async* {
+    // Whether the walk got to its end, however it got there.
+    //
+    // The state cannot answer this, and used to be asked: anything other than
+    // [ScopeDependencyInitialized] was read as "the walk finished". That holds
+    // for a walk that finished -- the line after the `yield*` has just put
+    // [ScopeDependencyDisposed] there -- and it is wrong for every cancelled
+    // walk that started from somewhere else. A tree in
+    // [ScopeDependencyFailed] or [ScopeDependencyCancelled] is one a caller
+    // leads by hand after an initialization went wrong, and
+    // [ScopeDependencyDisposalCancelled] is the second cancellation of the
+    // second `dispose()` this class promises to allow. Stopped halfway, each
+    // of those said it was done: [ScopeDependencyGroup.disposalRequired] then
+    // answered `false`, the children the walk never reached went on holding
+    // what they took, and `_prepareDependencies` built a new tree over the
+    // top of them without a word. Only the first of the four -- the one that
+    // started from `Initialized` -- was ever accounted for.
+    var walkEnded = false;
+
     try {
       yield* runStreamGuarded(
         _runDispose,
@@ -150,21 +168,36 @@ mixin ScopeDependencyMixin implements ScopeDependency, ScopeObservable {
         debugName: name,
         observable: this,
       ).handleError(_handleDisposalError);
+      walkEnded = true;
       _state = switch (_state) {
         final _ScopeDependencyWithErrors state when state.hasErrors => state,
+        // A node that never ran goes on saying so.
+        // [ScopeDependencyMixin._markNothingToDispose] keeps
+        // [ScopeDependencyInitial] on a child for exactly this reason, and
+        // says why: "not initialized" is the true thing to say about it. The
+        // node the walk passes through itself was saying the opposite --
+        // [ScopeDependencyDisposed] -- so a dump of a tree that was built and
+        // then let go of without ever being initialized had a root claiming a
+        // teardown over children that had never started.
+        ScopeDependencyInitial() => _state,
         _ => const ScopeDependencyDisposed(),
       };
+      // ignore: avoid_catching_errors
+    } on Object {
+      // A walk that ended by reporting a failure ended all the same, and is
+      // done. Both groups collect what their children threw and carry the
+      // first one out after the walk is over, and a leaf whose disposer threw
+      // has no second step to take. Left out of the count, a disposal that
+      // failed would go on asking to be disposed of for ever, and the
+      // container it belongs to could never be initialized again.
+      walkEnded = true;
+      rethrow;
     } finally {
       // Catch the cancellation.
-      if (_state is ScopeDependencyInitialized) {
-        _state = ScopeDependencyDisposalCancelled();
-      } else {
-        // Only a walk that reached its end is done. Marked done either way, a
-        // disposal a caller stopped halfway made the tree stop saying it
-        // needed disposing of -- and the next `init()` then replaced it, so
-        // everything the walk never reached was left holding what it took
-        // with nobody able to reach it.
+      if (walkEnded) {
         _isDisposalDone = true;
+      } else if (_state is ScopeDependencyInitialized) {
+        _state = ScopeDependencyDisposalCancelled();
       }
     }
   }

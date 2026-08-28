@@ -305,4 +305,90 @@ void _diagnosticsGroup() {
       );
     });
   });
+
+  // `ScopeDependency` and its `dispose()` are public, and leading a tree by
+  // hand is what they are for. A walk the caller stops halfway leaves whatever
+  // it never reached still holding what it took, so the tree has to go on
+  // saying it needs disposing of -- which is what the `finally` of
+  // `ScopeDependencyMixin.dispose` is written to say.
+  group('a disposal walk the caller stopped halfway', () {
+    test('is still due when the tree is not in Initialized', () async {
+      final released = <String>[];
+      final parked = Completer<void>();
+
+      // The initialization fails, so the group lands in `Failed` rather than
+      // `Initialized` -- one of the four states its `disposalRequired`
+      // covers. Both children register a disposer before anything goes
+      // wrong: "acquire, register, then carry on".
+      final tree = ScopeDependency.sequential('', [
+        ScopeDependency('a', (handle) {
+          handle.dispose = () async => released.add('a');
+        }),
+        ScopeDependency('b', (handle) {
+          handle.dispose = () async {
+            released.add('b');
+            await parked.future;
+          };
+          throw StateError('boom');
+        }),
+      ]);
+
+      try {
+        await tree.init().drain<void>();
+      } on Object {
+        // The failure is the fixture; the disposal is what is tested.
+      }
+      expect(tree.state, isA<ScopeDependencyFailed>());
+
+      // Reverse order, so `b` goes first and parks. The walk never reaches
+      // `a`.
+      final walk = tree.dispose().listen(null);
+      await pumpEventQueue();
+      expect(released, ['b'], reason: 'parked inside the disposer of b');
+
+      // Asked for, then let go of: cancelling a stream does not interrupt
+      // the `await` a generator is parked on, so the cancellation itself
+      // only finishes once the disposer of `b` does.
+      final cancelled = walk.cancel();
+      parked.complete();
+      await cancelled;
+
+      expect(
+        released,
+        ['b'],
+        reason: 'the walk stopped where it was, without reaching a',
+      );
+      expect(
+        tree.disposalRequired,
+        isTrue,
+        reason: 'a is still holding what it took, and nothing has reached it',
+      );
+
+      await tree.dispose().drain<void>();
+
+      expect(
+        released,
+        ['b', 'a'],
+        reason: 'the second walk picks up where the cancelled one stopped',
+      );
+    });
+
+    // `_markNothingToDispose` keeps `Initial` on a child that never ran, and
+    // says why: "not initialized" is the true thing to say about it. The node
+    // the walk itself passes through was saying the opposite.
+    test('leaves a tree that never ran saying it never ran', () async {
+      final tree = ScopeDependency.sequential('', [
+        ScopeDependency('a', (handle) {}),
+      ]);
+
+      await tree.dispose().drain<void>();
+
+      expect(tree.state, isA<ScopeDependencyInitial>());
+      expect(
+        (tree as ScopeDependencyGroup).dependencies.single.state,
+        isA<ScopeDependencyInitial>(),
+        reason: 'the child already said so; the root disagreed with it',
+      );
+    });
+  });
 }

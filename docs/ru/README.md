@@ -1,6 +1,6 @@
 # scopo
 
-> Перевод `README.md` (blob `faeb74efff068dce8793438c80fdfa7c4cfa662f`).
+> Перевод `README.md` (blob `e676ea6d01c4ec20c99f6bf40eaea91a04a97ad1`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 [![pub version](https://img.shields.io/pub/v/scopo)](https://pub.dev/packages/scopo)
@@ -624,7 +624,7 @@ App.access.of(context).increment();
 
 ```sh
 mkdir -p .vscode
-cp "$(find ~/.pub-cache/hosted/pub.dev -maxdepth 1 -name 'scopo-*' | sort | tail -1)"/ide/scopo.code-snippets .vscode/
+cp "$(find ~/.pub-cache/hosted/pub.dev -maxdepth 1 -name 'scopo-*' | sort -V | tail -1)"/ide/scopo.code-snippets .vscode/
 ```
 
 Для IntelliJ IDEA и Android Studio кнопки импорта на странице Live Templates
@@ -637,7 +637,7 @@ cp "$(find ~/.pub-cache/hosted/pub.dev -maxdepth 1 -name 'scopo-*' | sort | tail
 # ~/Library/Application Support/JetBrains/<продукт>/
 DIR=~/Library/Application\ Support/Google/AndroidStudio<версия>/templates
 mkdir -p "$DIR"
-cp "$(find ~/.pub-cache/hosted/pub.dev -maxdepth 1 -name 'scopo-*' | sort | tail -1)"/ide/scopo-live-templates.xml "$DIR/scopo.xml"
+cp "$(find ~/.pub-cache/hosted/pub.dev -maxdepth 1 -name 'scopo-*' | sort -V | tail -1)"/ide/scopo-live-templates.xml "$DIR/scopo.xml"
 ```
 
 Группа появится в **Settings → Editor → Live Templates**.

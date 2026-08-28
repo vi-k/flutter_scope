@@ -23,6 +23,20 @@
   the teardown. Sent only for a dependency that has a release to run, so an
   entry with no `onDisposalProgress` behind it always means a release that did
   not come back.
+* `ScopePrintObserver` writes the three new events as `initialize <path>…`,
+  `dispose <path>…` and `disposed <path>`. The last of those replaces the
+  `progress: <path>` line a release used to print, so anything that reads its
+  output as text sees a changed format, not only added lines.
+* Fixed: a disposal walk stopped halfway went on to mark itself finished
+  unless the tree was in `ScopeDependencyInitialized`. A tree in
+  `ScopeDependencyFailed` or `ScopeDependencyCancelled` — one led by hand
+  after an initialization went wrong — and a second `dispose()` that was
+  itself cancelled therefore stopped asking to be disposed of, and everything
+  the walk had not reached was left holding what it took.
+* Fixed: a tree built and then let go of without ever being initialized left
+  its root saying `ScopeDependencyDisposed` while every child under it
+  correctly said `ScopeDependencyInitial`, so a `flattenDependencies()` dump
+  of it contradicted itself.
 
 ## 0.12.0
 

@@ -1,6 +1,6 @@
 # Шаблоны для редакторов
 
-> Перевод `ide/README.md` (blob `2a0d1896ee12351240a14e344dcd58d46ba1c9d6`).
+> Перевод `ide/README.md` (blob `12bbeb943f50f3786f83000ef065f17ed80a8c9c`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 Одиннадцать шаблонов на тот код, который у скоупа приходится писать всегда:
@@ -25,7 +25,7 @@
 
 ```sh
 mkdir -p .vscode
-cp "$(find ~/.pub-cache/hosted/pub.dev -maxdepth 1 -name 'scopo-*' | sort | tail -1)"/ide/scopo.code-snippets .vscode/
+cp "$(find ~/.pub-cache/hosted/pub.dev -maxdepth 1 -name 'scopo-*' | sort -V | tail -1)"/ide/scopo.code-snippets .vscode/
 ```
 
 Чтобы поставить их сразу для всех проектов, выполните **Snippets: Configure
@@ -42,7 +42,7 @@ Snippets** из палитры команд, выберите Dart и встав
 # ~/Library/Application Support/JetBrains/<продукт>/
 DIR=~/Library/Application\ Support/Google/AndroidStudio<версия>/templates
 mkdir -p "$DIR"
-cp "$(find ~/.pub-cache/hosted/pub.dev -maxdepth 1 -name 'scopo-*' | sort | tail -1)"/ide/scopo-live-templates.xml "$DIR/scopo.xml"
+cp "$(find ~/.pub-cache/hosted/pub.dev -maxdepth 1 -name 'scopo-*' | sort -V | tail -1)"/ide/scopo-live-templates.xml "$DIR/scopo.xml"
 ```
 
 Имя файла обязано совпадать с группой: XML объявляет `scopo`, значит файл —

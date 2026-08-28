@@ -179,7 +179,7 @@ base class ScopeObserver {
 ///
 /// **Written here rather than left to be written by hand**, and that is the
 /// point of it. [ScopeObserver] is a `base class` whose hooks are empty, so a
-/// subclass keeps compiling when a tenth hook is added — which is what
+/// subclass keeps compiling when a new hook is added — which is what
 /// protects an ordinary observer from a new version. A delegate is the one
 /// subclass that gets nothing from it: the new hook arrives with the empty
 /// implementation of the base, and every observer behind the delegate stops

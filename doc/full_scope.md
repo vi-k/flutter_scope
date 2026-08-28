@@ -429,8 +429,11 @@ time, instead of freezing on the last frame. Taking the screenshot is
 best-effort: a subtree that is never painted — one inside an `Offstage`, or in
 the unselected branch of an `IndexedStack` — cannot be captured. The attempt is
 bounded by `ScreenshotReplacer.maxRetries` frames, after which `close()`
-proceeds and `buildOnClosing` runs over the live subtree instead of a frozen
-one.
+proceeds and the ready subtree is taken away all the same, with nothing in the
+picture's place: `buildOnClosing` runs over an empty background rather than
+over a live subtree. It has to — the point of waiting for the screenshot is to
+let go of what the subtree holds, and a subtree left standing keeps its own
+child scopes mounted. The `LiteScope` topic says the same at greater length.
 
 ### Two initializations, and what a failure of each leaves behind
 

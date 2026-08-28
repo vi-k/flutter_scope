@@ -22,7 +22,7 @@ copy it into the project:
 
 ```sh
 mkdir -p .vscode
-cp "$(find ~/.pub-cache/hosted/pub.dev -maxdepth 1 -name 'scopo-*' | sort | tail -1)"/ide/scopo.code-snippets .vscode/
+cp "$(find ~/.pub-cache/hosted/pub.dev -maxdepth 1 -name 'scopo-*' | sort -V | tail -1)"/ide/scopo.code-snippets .vscode/
 ```
 
 For all your projects at once, run **Snippets: Configure Snippets** from the
@@ -39,7 +39,7 @@ Copy the file into the configuration directory of the IDE instead, under
 # ~/Library/Application Support/JetBrains/<product>/
 DIR=~/Library/Application\ Support/Google/AndroidStudio<version>/templates
 mkdir -p "$DIR"
-cp "$(find ~/.pub-cache/hosted/pub.dev -maxdepth 1 -name 'scopo-*' | sort | tail -1)"/ide/scopo-live-templates.xml "$DIR/scopo.xml"
+cp "$(find ~/.pub-cache/hosted/pub.dev -maxdepth 1 -name 'scopo-*' | sort -V | tail -1)"/ide/scopo-live-templates.xml "$DIR/scopo.xml"
 ```
 
 The file name has to match the group: the XML declares `scopo`, so the file is

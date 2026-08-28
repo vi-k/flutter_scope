@@ -57,7 +57,8 @@ ScopeConfig.observer = const ScopeCompositeObserver([
 
 It is part of the package rather than something to write by hand, and that is
 the point of it. The empty hooks above are what keep an ordinary observer
-compiling when a tenth is added later — and a delegate is the one subclass that
+compiling when a new one is added later — and a delegate is the one subclass
+that
 gains nothing from them: the new hook would arrive with the empty
 implementation of the base, and every observer behind the delegate would stop
 hearing that event without a word from anywhere. This one is written with the
@@ -87,10 +88,14 @@ fails" below.
 | `onTimeout(target, what)` | a bounded wait expired |
 | `onTrace(target, message)` | a step of the machinery below the lifecycle |
 
-The four in the middle are the dependency container's, and they are two pairs:
-an entry and an exit for each half of its lifecycle. Both entries are sent
-from inside the step and before it awaits anything, which is what makes the
-pairs worth reading — see "The last entry with no exit" below.
+Four of them are the dependency container's steps — `onStepStarted` and
+`onProgress` for an initialization, `onDisposalStepStarted` and
+`onDisposalProgress` for a teardown — and they are two pairs: an entry and an
+exit for each half of its lifecycle. Both entries are sent from inside the step
+and before it awaits anything, which is what makes the pairs worth reading —
+see "The last entry with no exit" below. `onProgress` is the one of the four
+that a scope sends as well, on its own account; the other three come from a
+container and nowhere else.
 
 ### Who sends them
 
@@ -158,10 +163,10 @@ recording of an initialization that hung ends with the path of the step it
 hung in:
 
 ```text
-scopo | AppDeps(#1a2b) | initialize…
-scopo | AppDeps(#1a2b) | initialize storage/db…
-scopo | AppDeps(#1a2b) | progress: storage/db (1/3)
-scopo | AppDeps(#1a2b) | initialize network/session…
+scopo | AppDeps(#1a2b7) | initialize…
+scopo | AppDeps(#1a2b7) | initialize storage/db…
+scopo | AppDeps(#1a2b7) | progress: storage/db (1/3)
+scopo | AppDeps(#1a2b7) | initialize network/session…
 ```
 
 `network/session` was entered and never came back. Nothing else in the
