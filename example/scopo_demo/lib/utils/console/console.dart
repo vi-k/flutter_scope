@@ -22,8 +22,9 @@ final class Console with ChangeNotifier {
       lines.removeAt(0);
     }
 
-    // Храним view, чтобы подписчики могли узнавать, изменились ли lines:
-    // lines никогда не меняется, view меняется каждый раз.
+    // The view is kept beside the list so that a listener can tell whether
+    // anything changed: `lines` is the same object every time, and a fresh
+    // view is not.
     _cache[source] = (lines: lines, view: UnmodifiableListView(lines));
     notifyListeners();
   }

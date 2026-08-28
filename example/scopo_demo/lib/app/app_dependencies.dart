@@ -33,11 +33,11 @@ final class AppDependencies implements ScopeDependencies {
     FakeService? service;
     FakeAnalytics? analytics;
 
-    // В случае, если инициализация не завершилась, необходимо утилизировать
-    // уже проинициализированные зависимости. Нам недостаточно обернуть код
-    // в try/catch, т.к. процесс может не только завершиться ошибкой, но и быть
-    // отменён извне. А это мы можем поймать только в try/finally. А был ли он
-    // отменён или завершился успешно узнаем с помощью данного флага.
+    // An initialization that did not finish has to give back whatever it
+    // already took. A `try`/`catch` is not enough for that: the run can end
+    // in a failure, but it can also be cancelled from outside — the scope
+    // leaving the tree is enough — and only a `try`/`finally` sees both. The
+    // flag is how the `finally` tells the two endings apart.
     var isInitialized = false;
 
     try {
@@ -83,7 +83,7 @@ final class AppDependencies implements ScopeDependencies {
 
   @override
   Future<void> dispose() async {
-    // Утилизируем все зависимости параллельно.
+    // Every dependency is released at once: none of them holds another.
     await [
       httpClient.close(),
       service.dispose(),

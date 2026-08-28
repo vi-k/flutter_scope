@@ -40,7 +40,8 @@ class _ConsoleSourceViewState extends State<ConsoleView> {
   }
 
   void _scrollToBottom() {
-    // Необходимо дождаться, когда новые строки появятся на экране.
+    // The new lines have to be on screen before there is anything to
+    // scroll to.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients) {
         _scrollController.animateTo(

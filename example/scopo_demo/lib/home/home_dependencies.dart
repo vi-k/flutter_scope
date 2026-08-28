@@ -18,15 +18,22 @@ final class HomeDependencies
 
   @override
   ScopeDependency buildDependencies(void context) => sequential('', [
+        // Acquire, register, then carry on: the disposer goes on the handle
+        // before the first `await`, so there is no window in which the client
+        // exists and nothing knows how to close it. Registered after the
+        // `await`, as this used to be, a failing `init()` left it created and
+        // unreachable -- and `AppEnvironment.errorOnFakeUserHttpClientInit`
+        // is a switch this demo ships, so that was the path it demonstrated.
         dep('httpClient', (dep) async {
           httpClient = FakeUserHttpClient();
-          await httpClient.init();
           dep.dispose = httpClient.close;
+          await httpClient.init();
         }),
         concurrent('', [
           dep('bloc', (dep) async {
             final completer = Completer<void>();
             bloc = FakeBloc()..add(FakeBlocLoad());
+            dep.dispose = bloc.close;
             bloc.stream.listen((state) {
               switch (state) {
                 case FakeBlocInitial():
@@ -34,19 +41,20 @@ final class HomeDependencies
                   break;
                 case FakeBlocSuccess():
                   completer.complete();
+                // Closing it here as well would be closing it twice: the
+                // handle above already knows how, and a failed step is
+                // disposed of like any other -- what decides that is whether
+                // the initializer took anything, not how it ended.
                 case FakeBlocError(:final error, :final stackTrace):
-                  bloc.close().whenComplete(() {
-                    completer.completeError(error, stackTrace);
-                  });
+                  completer.completeError(error, stackTrace);
               }
             });
             await completer.future;
-            dep.dispose = bloc.close;
           }),
           dep('controller', (dep) async {
             fakeController = FakeController();
-            await fakeController.init();
             dep.dispose = fakeController.dispose;
+            await fakeController.init();
           }),
         ]),
       ]);

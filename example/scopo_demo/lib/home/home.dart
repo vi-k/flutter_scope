@@ -203,7 +203,7 @@ final class HomeState extends ScopeState<Home, HomeDependencies, HomeState> {
   void initState() {
     super.initState();
 
-    // Пример использования
+    // What reading a dependency looks like.
     // ignore: unused_local_variable
     final controller = dependencies.fakeController;
   }

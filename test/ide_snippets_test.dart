@@ -272,6 +272,56 @@ void main() {
             'such class any more',
       );
     }
+
+    // The same list lives twice, and the body comparison only reaches the
+    // first of the eight: VS Code writes the choice as `${1|a,b,c|}` and
+    // IntelliJ as `expression="enum("a","b","c")"`.
+    final offerings = RegExp(
+      r'name="scopo-access"[\s\S]*?expression="enum\(([^"]*(?:"[^"]*"[^"]*)*)\)"',
+    );
+    final enumeration = offerings.firstMatch(templatesFile.readAsStringSync());
+    expect(enumeration, isNotNull, reason: 'the live template offers no list');
+    expect(
+      _unescapeXml(enumeration!.group(1)!).replaceAll('"', '').split(','),
+      offered,
+      reason: 'the two formats offer different accessor types',
+    );
+  });
+
+  // The bodies, not just the names. `both formats describe the same set`
+  // above compares the eleven prefixes, the contexts are checked, the XML is
+  // checked, and the skeletons under `test/ide/` are compiled -- but those
+  // skeletons are generated from the VS Code snippets, so the `value="…"` of
+  // a live template was compared with nothing at all. Editing a snippet and
+  // regenerating its skeleton left the gate green and every IntelliJ user on
+  // the old text. The two formats are one thing kept in two files by hand,
+  // and this is the half that was on trust.
+  test('both formats describe the same bodies', () {
+    final xml = templatesFile.readAsStringSync();
+
+    final byPrefix = <String, Map<dynamic, dynamic>>{
+      for (final entry in snippets.values)
+        (entry as Map)['prefix'] as String: entry,
+    };
+
+    final templates =
+        RegExp(r'<template name="([^"]+)"[\s\S]*?</template>').allMatches(xml);
+    expect(templates, hasLength(byPrefix.length));
+
+    for (final template in templates) {
+      final name = template.group(1)!;
+      final body = _intellijSkeletonOf(template.group(0)!);
+      final snippet = byPrefix[name];
+
+      expect(snippet, isNotNull, reason: 'no VS Code snippet named `$name`');
+      expect(
+        _squeezed(body),
+        _squeezed(_skeletonOf(snippet!)),
+        reason: 'the live template `$name` and the snippet of the same name '
+            'no longer paste the same code; whichever was edited, the other '
+            'was not',
+      );
+    }
   });
 }
 
@@ -294,3 +344,73 @@ String _skeletonOf(Map<dynamic, dynamic> snippet) {
 /// The text with every run of whitespace removed, so that formatting cannot
 /// make two equal skeletons look different.
 String _squeezed(String text) => text.replaceAll(RegExp(r'\s+'), '');
+
+/// What an IntelliJ editor pastes: the XML unescaped, every variable replaced
+/// by its declared default, `$END$` dropped and `$$` read as one `$`.
+///
+/// The mirror of [_skeletonOf], so that the two formats meet in one shape.
+String _intellijSkeletonOf(String template) {
+  final value = RegExp('<template name="[^"]+" value="([^"]*)"')
+      .firstMatch(template)!
+      .group(1)!;
+
+  final defaults = <String, String>{
+    for (final variable in RegExp(
+      r'<variable name="(V\d+)" expression="([^"]*)"\s*defaultValue="([^"]*)"',
+    ).allMatches(template))
+      variable.group(1)!: _defaultOf(
+        expression: _unescapeXml(variable.group(2)!),
+        declared: _unescapeXml(variable.group(3)!).replaceAll('"', ''),
+      ),
+  };
+
+  // `$$` first, so that an escaped dollar is not read as the opening of a
+  // variable.
+  return _unescapeXml(value).replaceAllMapped(
+    RegExp(r'\$\$|\$(END|V\d+)\$'),
+    (match) => switch (match.group(1)) {
+      null => r'$',
+      'END' => '',
+      final variable => defaults[variable] ?? match.group(0)!,
+    },
+  );
+}
+
+/// What a variable stands for before the writer picks something else.
+///
+/// A choice of values is where the two formats part ways and mean the same
+/// thing: VS Code writes `${1|a,b,c|}` and takes the first as the default,
+/// IntelliJ leaves `defaultValue` empty and puts the list in `expression` as
+/// `enum("a","b","c")`. Read literally, the second pastes nothing where the
+/// first pastes `a`.
+String _defaultOf({required String expression, required String declared}) {
+  if (declared.isNotEmpty) {
+    return declared;
+  }
+
+  final options = RegExp(r'^enum\((.*)\)$').firstMatch(expression);
+
+  return options == null
+      ? declared
+      : options.group(1)!.split(',').first.replaceAll('"', '');
+}
+
+String _unescapeXml(String text) => text
+    .replaceAllMapped(
+      RegExp(r'&#(x[0-9a-fA-F]+|\d+);'),
+      (match) {
+        final digits = match.group(1)!;
+        final code = digits.startsWith('x')
+            ? int.parse(digits.substring(1), radix: 16)
+            : int.parse(digits);
+
+        return String.fromCharCode(code);
+      },
+    )
+    .replaceAll('&lt;', '<')
+    .replaceAll('&gt;', '>')
+    .replaceAll('&quot;', '"')
+    .replaceAll('&apos;', "'")
+    // Last, so that an escaped ampersand is not read as opening an entity of
+    // its own.
+    .replaceAll('&amp;', '&');
