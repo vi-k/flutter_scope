@@ -1,0 +1,330 @@
+# Полное независимое техническое ревью scopo
+
+> **Состояние на 2026-08-28:** ревью проведено, находки не разбирались.
+> **Что это:** независимое ревью всего пакета scopo с упором на владение ресурсами, асинхронную инициализацию, разбор и новые хуки наблюдателя.
+> **Связанные записи:** `2026-08-28[1]-step-entry-notification-design.md`, `2026-08-20[1]-project-review.md`, `2026-08-23[1]-consumer-review.md`.
+
+## Итог
+
+Найдено семь проблем: одна P1, две P2 и четыре P3. P0 нет. Самая опасная
+находка лежит в публичном `ScopeDependency.dispose()`: защита от двойного
+вызова disposer не делает разбор single-flight, поэтому параллельная вторая
+прогулка может завершиться раньше первой и нарушить обратный порядок
+последовательной группы. Ещё два прикладных риска — несовместимые обещания о
+повторном `ScopeAutoDependencies.init()` и `late final`, а также неправильный
+порядок регистрации disposer в демонстрационном контейнере.
+
+## Находки
+
+### P1-1 — Параллельный прямой `ScopeDependency.dispose()` нарушает ожидание завершения и порядок разбора
+
+**Координаты:**
+`lib/src/scope/full_scope/scope_auto_dependency/scope_dependency/scope_dependency_impl.dart:72`,
+`lib/src/scope/full_scope/scope_auto_dependency/scope_dependency/scope_dependency_impl.dart:88`,
+`lib/src/scope/full_scope/scope_auto_dependency/scope_dependency/scope_dependency_impl.dart:101`,
+`lib/src/scope/full_scope/scope_auto_dependency/scope_dependency/scope_dependency_mixin.dart:145`,
+`lib/src/scope/full_scope/scope_auto_dependency/scope_dependency/scope_dependency_mixin.dart:153`,
+`lib/src/scope/full_scope/scope_auto_dependency/scope_dependency/scope_dependency_mixin.dart:167`,
+`lib/src/scope/full_scope/scope_auto_dependency/scope_dependency/scope_dependency_group.dart:102`,
+`lib/src/scope/full_scope/scope_auto_dependency/scope_dependency/scope_dependency_group.dart:217`,
+`lib/src/scope/full_scope/scope_auto_dependency/scope_dependency/scope_dependency.dart:51`,
+`doc/full_scope.md:135`,
+`test/scope_auto_dependencies_test.dart:2030`,
+`test/scope_auto_dependencies_test.dart:2034`.
+
+Первый разбор листа снимает `helper.dispose` до `await`, что правильно защищает
+ресурс от двойного освобождения. Но второй `dispose()`, пришедший во время этого
+`await`, видит уже пустой hook, сразу заканчивает `_runDispose()`, ставит
+`ScopeDependencyDisposed` и `_isDisposalDone = true`. Его `drain()` поэтому
+может завершиться, пока первый disposer ещё держит ресурс, а возможная ошибка
+первого разбора ещё не известна.
+
+Для `sequential`-группы последствие хуже. Пока первая прогулка ждёт disposer
+последнего ребёнка, вторая `_disposalOrder()` пропускает этот лист с уже снятым
+hook и может начать disposer предыдущего ребёнка. Два disposer работают
+параллельно, хотя публичное обещание группы — обратный последовательный порядок.
+Обычный `ScopeAutoDependencies.dispose()` скрывает дефект своим Future
+single-flight, но `ScopeDependency` и его `dispose()` публичны и прямо
+предназначены в том числе для ручного управления деревом.
+
+Существующий тест проверяет только «disposer вызван один раз»: он открывает
+второй поток, затем на строке 2034 сам отпускает первый и лишь после этого ждёт
+оба результата. Он не проверяет, что второй результат остаётся незавершённым,
+и не строит последовательную группу из двух ресурсов.
+
+**Риск:** код после второго `await dispose().drain()` начинает пользоваться
+предположением «ресурс уже освобождён», хотя release ещё идёт; у группы может
+закрыться базовый ресурс раньше зависящего от него. Это гонка владения с
+возможными ошибками закрытого сокета/БД, преждевременным commit/rollback и
+расхождением наблюдаемого состояния с фактическим.
+
+**Как исправить:** сделать разбор single-flight на уровне
+`ScopeDependencyMixin`, а не только снимать hook листа. Поскольку API возвращает
+поток путей, нужно либо разделять одну активную прогулку между подписчиками с
+ясной политикой replay, либо явно отвергать параллельный второй вызов
+`StateError` до изменения состояния. Добавить два нагруженных теста: второй
+вызов не завершается до gate первого и получает ту же ошибку; в
+`sequential([a, b])` disposer `a` не начинается, пока заблокированный disposer
+`b` не закончен.
+
+**Уверенность:** высокая.
+
+### P2-1 — Поддержанный повторный `init()` несовместим с документированной идиомой `late final`
+
+**Координаты:**
+`lib/src/scope/full_scope/scope_auto_dependency/scope_auto_dependency.dart:41`,
+`lib/src/scope/full_scope/scope_auto_dependency/scope_auto_dependency.dart:54`,
+`lib/src/scope/full_scope/scope_auto_dependency/scope_auto_dependency.dart:61`,
+`doc/full_scope.md:94`,
+`doc/full_scope.md:103`,
+`test/scope_auto_dependencies_test.dart:1589`.
+
+`_prepareDependencies()` явно поддерживает повторный `init()` того же
+контейнера после законченного разбора: на строке 61 он заново вызывает
+`buildDependencies()`, и тест закрепляет создание нового дерева. Одновременно
+публичная тема учит хранить построенные зависимости в `late final` полях и
+присваивать им внутри initializer. На втором запуске тот же объект контейнера
+пытается присвоить полю второй раз и получает `LateInitializationError` вместо
+новой рабочей зависимости. Это одинаково относится к обычному `dep()` и к
+`controllerDep()`.
+
+**Риск:** документированный сценарий повторной инициализации падает на
+документированном же способе объявления контейнера. Ошибка появляется внутри
+шага и выглядит как отказ конкретной зависимости, хотя причина — противоречие
+двух контрактов пакета. Проблема уже записана как открытая в
+`docs/handoff.md:1480`, но в публичной поверхности остаётся.
+
+**Как исправить:** принять один контракт. Либо запретить повторный `init()`
+после завершённого дерева понятным `StateError` и изменить тест, либо заменить
+рекомендуемый `late final` на сбрасываемое хранение и показать безопасный
+паттерн повторной инициализации. Одной правки документации недостаточно, если
+повторный запуск остаётся обещанной возможностью API.
+
+**Уверенность:** высокая; сценарий уже подтверждён зафиксированной в handoff
+пробой для `dep()` и `controllerDep()`.
+
+### P2-2 — Демонстрационный auto-deps регистрирует disposer после падающего `await`
+
+**Координаты:**
+`example/scopo_demo/lib/home/home_dependencies.dart:21`,
+`example/scopo_demo/lib/home/home_dependencies.dart:23`,
+`example/scopo_demo/lib/home/home_dependencies.dart:24`,
+`example/scopo_demo/lib/home/home_dependencies.dart:46`,
+`example/scopo_demo/lib/home/home_dependencies.dart:48`,
+`example/scopo_demo/lib/home/home_dependencies.dart:49`,
+`example/scopo_demo/lib/common/data/fake_services/fake_user_http_client.dart:6`,
+`example/scopo_demo/lib/common/data/fake_services/fake_controller.dart:6`,
+`lib/src/scope/full_scope/scope_auto_dependency/scope_dependency/scope_dependency_impl.dart:32`,
+`doc/full_scope.md:224`.
+
+`HomeDependencies` сначала создаёт `FakeUserHttpClient` и `FakeController`,
+потом ждёт их `init()`, и только после успешного ожидания записывает
+`dep.dispose`. Оба `init()` имеют предусмотренную демонстрацией ветку с
+исключением. На ней объект уже создан, но контейнер не получил ни одного hook,
+которым мог бы его освободить. Это ровно антипример «acquire, await, register»,
+который тема `Scope` несколькими строками выше запрещает правилом «acquire,
+register, then carry on».
+
+**Риск:** переключатели ошибок демонстрируют не гарантированный автоматический
+rollback, а потерю жизненного цикла созданного объекта. Сами fake-классы не
+держат внешний ресурс, но пример — публичное руководство: перенесённый в
+приложение паттерн оставит реальный клиент или контроллер без release при
+ошибке инициализации.
+
+**Как исправить:** назначать `dep.dispose` сразу после конструктора и до первого
+`await` в обоих листьях. Добавить тест примера, который включает
+`errorOnFakeUserHttpClientInit` и `errorOnFakeControllerInit` и проверяет, что
+соответствующий release был вызван.
+
+**Уверенность:** высокая.
+
+### P3-1 — У новых хуков нет регрессий на ошибку disposal и повторную инициализацию дерева
+
+**Координаты:**
+`test/scope_step_entry_test.dart:136`,
+`test/scope_step_entry_test.dart:137`,
+`test/scope_step_entry_test.dart:164`,
+`test/scope_step_entry_test.dart:182`,
+`test/scope_auto_dependencies_test.dart:1589`,
+`lib/src/scope/full_scope/scope_auto_dependency/scope_auto_dependency.dart:120`,
+`lib/src/scope/full_scope/scope_auto_dependency/scope_auto_dependency.dart:352`.
+
+Новая сьюта хорошо проверяет успешную пару disposal, лист только с `unmount` и
+переезд выхода из `onProgress`. Но в группе disposal нет падающего disposer:
+не закреплено, что `onDisposalStepStarted` остаётся без
+`onDisposalProgress`, ошибка приходит через `onError`, а последующие ресурсы
+всё равно разбираются. Тест повторного `init()` отдельно проверяет новое дерево,
+но не проверяет, что второе дерево заново проводит оба entry-hook. Код сейчас
+делает обе вещи правильно — `_wireStepsStarted` вызывается после подготовки
+корня и перед каждым разбором, — однако именно две новые границы остаются без
+нагруженной регрессии.
+
+**Риск:** будущая правка error handling или `_prepareDependencies()` может
+сломать семантику пар вход/выход либо оставить свежий root без entry-событий,
+не покрасив текущую сьюту. Для потребителя хуки вводились именно как средство
+диагностики зависшего/упавшего шага.
+
+**Как исправить:** добавить два теста в `scope_step_entry_test.dart`: падающий
+disposer с точным списком entry/error и без exit; цикл
+`init → dispose → init` с одинаковыми полными парами для обоих деревьев.
+
+**Уверенность:** высокая как для пробела покрытия; дефект текущего поведения не
+утверждается.
+
+### P3-2 — Тема `Scope` неверно описывает fallback неудавшегося screenshot
+
+**Координаты:**
+`doc/full_scope.md:431`,
+`doc/full_scope.md:432`,
+`lib/src/utils/screenshot_replacer.dart:140`,
+`lib/src/utils/screenshot_replacer.dart:224`,
+`lib/src/utils/screenshot_replacer.dart:228`,
+`doc/lite_scope.md:199`.
+
+Тема `Scope` обещает, что после исчерпания попыток `buildOnClosing` работает
+«over the live subtree instead of a frozen one». Код ставит `_gaveUp = true` и
+строит `SizedBox.shrink()`: живое поддерево удалено. Тема `LiteScope` и README
+описывают текущий код правильно — ребёнок снимается с дерева, а на месте снимка
+не остаётся ничего.
+
+**Риск:** автор closing UI может рассчитывать на живой фон и доступные дочерние
+скоупы в редком, но штатно описанном сценарии `Offstage`/`IndexedStack`; в
+действительности фон исчезает, а дочерние элементы уже размонтированы.
+
+**Как исправить:** привести `doc/full_scope.md` к коду и соседней теме: после
+`maxRetries` ready-поддерево снимается, `buildOnClosing` остаётся поверх пустого
+места, а разбор продолжается.
+
+**Уверенность:** высокая.
+
+### P3-3 — Release notes слишком широко обещают, что добавление методов наблюдателя не ломает компиляцию
+
+**Координаты:**
+`CHANGELOG.md:7`,
+`doc/debug.md:615`,
+`lib/src/environment/scope_observer.dart:86`,
+`lib/src/environment/scope_observer.dart:122`,
+`lib/src/environment/scope_observer.dart:131`.
+
+Для обычного observer верно, что старый override `onProgress` продолжит
+компилироваться и лишь перестанет слышать disposal. Но релиз одновременно
+добавляет в базовый класс три новых имени. Если существующий подкласс уже имел
+собственный helper с одним из этих имён и несовместимой сигнатурой, после
+обновления он становится некорректным override и анализ/компиляция прекращаются.
+Dart не поддерживает перегрузку методов по сигнатуре.
+
+**Риск:** редкое, но настоящее source-breaking обновление представлено как
+исключительно молчаливое изменение поведения; потребитель ищет проблему не в
+миграции observer API.
+
+**Как исправить:** сузить фразу: «существующий override `onProgress` продолжит
+компилироваться», и отдельно предупредить о возможном конфликте трёх новых имён
+с методами пользовательского подкласса.
+
+**Уверенность:** высокая.
+
+**Вердикт: исправлено.** 2026-08-28, тем же заходом, что и ревью. Находка
+права: «Nothing stops compiling» стояло безусловным зачином, и хотя дальше шла
+оговорка именно про `onProgress`, обещание читалось шире, чем есть. Сделано
+ровно предложенное, в трёх местах: `CHANGELOG.md` теперь говорит «an existing
+`onProgress` override keeps compiling» и отдельной фразой называет три новых
+имени единственным способом уронить сборку — перегрузки в Dart нет, поэтому
+чужой член с таким именем становится некорректным переопределением; в
+`doc/debug.md` и в русском зеркале то же самое развёрнуто абзацем в разделе
+миграции, с тем уточнением, что это ошибка компиляции, которую назовёт
+анализатор, а не молчаливая смена поведения.
+
+### P3-4 — Шапка завершённого дизайна всё ещё говорит «работа идёт»
+
+**Координаты:**
+`docs/records/2026-08-28[1]-step-entry-notification-design.md:3`,
+`docs/handoff.md:11`,
+`docs/handoff.md:16`,
+`AGENTS.md:77`.
+
+Обязательная запись дизайна помечена как текущая работа, хотя handoff называет
+её последней законченной задачей, а изменение уже находится в `main`. Это
+нарушает правило актуальности шапок исторических записей из `AGENTS.md` и
+создаёт два взаимоисключающих источника состояния на обязательном пути
+восстановления контекста.
+
+**Риск:** следующий агент принимает завершённую и проверенную работу за
+незаконченную, повторяет проверки или неверно определяет допустимый объём
+следующей правки.
+
+**Как исправить:** изменить только шапку записи на «сделано и смержено,
+`18b73eb`», не переписывая историческое тело дизайна.
+
+**Уверенность:** высокая.
+
+**Вердикт: исправлено.** 2026-08-28, `18b73eb`. Находка права полностью, и
+промах мой: шапку писали до того, как работа была сделана, и после мержа её не
+обновили — при том, что `AGENTS.md` §4 требует именно этого. Шапка теперь
+говорит «сделано целиком и смержено в `main`, `18b73eb`; CI зелёная», с числом
+тестов и отметкой о пройденном гейте; тело записи не тронуто.
+
+## Отдельная проверка трёх новых хуков
+
+В штатном дереве из `dep`, `sequential` и `concurrent` дефекта доставки не
+найдено.
+
+- Вход и успешный выход получают один путь: группа заворачивает оба через
+  `_path`
+  (`lib/src/scope/full_scope/scope_auto_dependency/scope_dependency/scope_dependency_group.dart:114`,
+  `lib/src/scope/full_scope/scope_auto_dependency/scope_dependency/scope_dependency_group.dart:145`,
+  `lib/src/scope/full_scope/scope_auto_dependency/scope_dependency/scope_dependency_group.dart:211`,
+  `lib/src/scope/full_scope/scope_auto_dependency/scope_dependency/scope_dependency_group.dart:266`).
+  Именованные, вложенные и анонимные группы проверены тестом
+  `test/scope_step_entry_test.dart:89`.
+- Вход без выхода на падающем initializer — намеренная семантика, закреплённая
+  `test/scope_step_entry_test.dart:104`; для успешного шага обязательный выход
+  проходит тем же stream. Лист только с `unmount` не создаёт ложного входа:
+  ранний возврат стоит до уведомления
+  (`lib/src/scope/full_scope/scope_auto_dependency/scope_dependency/scope_dependency_impl.dart:72`,
+  `lib/src/scope/full_scope/scope_auto_dependency/scope_dependency/scope_dependency_impl.dart:96`).
+- Свежий root проводится после `_prepareDependencies`, а disposal — перед
+  каждой прогулкой
+  (`lib/src/scope/full_scope/scope_auto_dependency/scope_auto_dependency.dart:115`,
+  `lib/src/scope/full_scope/scope_auto_dependency/scope_auto_dependency.dart:120`,
+  `lib/src/scope/full_scope/scope_auto_dependency/scope_auto_dependency.dart:352`).
+  Потери проводки в текущем коде нет; отсутствует лишь регрессия P3-1.
+- Исключение или повторный вход observer не ломают lifecycle: новые callbacks
+  доходят до общего `notifyObserver`, который ловит пользовательский throw и
+  запрещает re-entry (`lib/src/environment/scope_config.dart:120`,
+  `lib/src/environment/scope_config.dart:143`).
+- Пользовательская реализация только интерфейса `ScopeDependency` не получает
+  entry, потому что приватного канала у неё нет; exit через публичный stream
+  сохраняется. Это явно документировано и проверено
+  `test/scope_step_entry_test.dart:123`.
+
+## Что ещё проверено
+
+Прочитаны все 61 файла под `lib/src/`. Отдельно пройдены большие lifecycle-
+ядра `async_scope_core.dart`, `scope_widget_core.dart`, весь `full_scope` и
+`environment`; фасады восьми семейств, state/notifier-модели и утилиты;
+публичные экспорты, `README.md`, все темы `doc/`, конфигурация анализатора и
+релевантные тесты.
+
+Новых подтверждённых дефектов в отмене незавершённого `AsyncScope`, выдаче и
+освобождении `scopeKey`, ожидании дочерних скоупов, post-frame переходе в Ready,
+single-flight `close()`, изоляции исключений observer и таймаутах не найдено.
+Код в этих местах последовательно защищает каждый этап разбора, не даёт отказу
+одного пользовательского hook пропустить следующий и ограничивает ожидания,
+которые способны зависнуть.
+
+Свежий полный гейт не запускался: задача разрешает `fvm`-команды только для
+проверки отдельной гипотезы, а перечисленные выводы закрылись чтением точных
+ветвей и существующих тестов. `docs/handoff.md:117` фиксирует полный зелёный
+гейт на текущей голове от 2026-08-28; это контекст, а не выданная этим ревью
+новая гарантия.
+
+## Рекомендуемый порядок разбора
+
+1. P1-1: закрыть гонку публичного dependency-disposal и нагрузить порядок
+   последовательной группы.
+2. P2-1: решить контракт повторной инициализации до следующей правки
+   `ScopeAutoDependencies`.
+3. P2-2 и P3-1: исправить обучающий пример и поставить недостающие регрессии
+   новых хуков.
+4. P3-2 — P3-4: синхронизировать публичные обещания и состояние исторической
+   записи.

@@ -4,9 +4,13 @@
   `ScopeObserver.onProgress`. The release of each dependency arrives at the
   new `onDisposalProgress(target, path)` instead, so `onProgress` now means
   one thing — a step of an *initialization* is done — rather than two told
-  apart by the type of a value. Nothing stops compiling: an observer that
-  handled both halves in `onProgress` simply stops hearing the disposal. The
-  `debug` topic has a "Coming from 0.12.x" section with the two-line
+  apart by the type of a value. An existing `onProgress` override keeps
+  compiling and simply stops hearing the disposal — which is the awkward part,
+  since nothing points at the change. The three names added below are the one
+  way this release can fail a build instead: a subclass that already has a
+  member of its own called `onStepStarted`, `onDisposalStepStarted` or
+  `onDisposalProgress` now declares an invalid override, Dart having no
+  overloading. The `debug` topic has a "Coming from 0.12.x" section with the
   migration.
 * Added `ScopeObserver.onStepStarted(target, path)`: a dependency container
   now announces each step of its initialization *before* running it, from

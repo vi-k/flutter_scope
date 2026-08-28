@@ -612,10 +612,10 @@ for a demo that shows every lifecycle call of every scope family side by side.
 `onDisposalProgress(target, path)` instead, and the step it belongs to is
 announced ahead of it by `onDisposalStepStarted(target, path)`.
 
-Nothing stops compiling, which is the awkward part of this one: an observer
-whose `onProgress` handled both halves still overrides a method that still
-exists — it just stops being called for the disposal. If yours told the two
-apart by the type of `progress`, that branch is now a hook:
+An existing `onProgress` override keeps compiling, which is the awkward part of
+this one: it still overrides a method that still exists — it just stops being
+called for the disposal, and nothing points at the change. If yours told the
+two halves apart by the type of `progress`, that branch is now a hook:
 
 ```dart
 // before
@@ -640,6 +640,14 @@ void onDisposalProgress(ScopeObservable target, String path) =>
 
 `ScopeCompositeObserver` and `ScopePrintObserver` come with the package and
 were changed with it; an observer of your own is the only thing to look at.
+
+**One way this release can fail a build rather than go quiet.** Three names
+are added to `ScopeObserver`, and Dart has no overloading: a subclass that
+already has a member of its own called `onStepStarted`,
+`onDisposalStepStarted` or `onDisposalProgress` now declares an invalid
+override. Rare — they are not obvious names for a helper — but it is a
+compile error rather than a change of behaviour, so the analyzer names it and
+renaming your member settles it.
 
 ## Coming from 0.9.x
 
