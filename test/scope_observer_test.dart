@@ -937,12 +937,18 @@ void main() {
 
     expect(observer.events, [
       'init _TestDependencies',
+      'step _TestDependencies dep1',
       'progress _TestDependencies dep1 (1/2)',
+      'step _TestDependencies dep2',
       'progress _TestDependencies dep2 (2/2)',
       'ready _TestDependencies',
       'dispose _TestDependencies',
       'disposed _TestDependencies',
     ]);
+    // Neither dependency registered a disposer, so the walk finds nothing to
+    // release and says nothing about either -- an entry with no release
+    // behind it is what a hung teardown looks like, and these two are not
+    // that. The pairs of the disposal are in `scope_step_entry_test.dart`.
   });
 
   test('the print observer writes one line per event', () {

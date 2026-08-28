@@ -18,7 +18,7 @@ void main() {
 }
 ```
 
-`ScopeObserver` is a class of nine methods, every one of them empty. A subclass
+`ScopeObserver` is a class of twelve methods, every one of them empty. A subclass
 overrides what it wants and inherits the silence of the rest, so an observer
 that only cares about failures is one method long:
 
@@ -70,19 +70,27 @@ come out in is the order the package did the work — and it is also why one tha
 throws is caught rather than left to escape; see "When the observer itself
 fails" below.
 
-## The nine hooks
+## The twelve hooks
 
 | hook | what happened |
 | ---------------------------- | ----------------------------------------- |
 | `onInit(target)` | an initialization has begun |
+| `onStepStarted(target, path)` | one step of it has begun |
 | `onProgress(target, progress)` | one step of it is done |
 | `onReady(target)` | it finished successfully |
 | `onCancelled(target)` | it was cancelled before it finished |
 | `onDispose(target)` | a teardown has begun |
+| `onDisposalStepStarted(target, path)` | one step of it has begun |
+| `onDisposalProgress(target, path)` | one step of it is done |
 | `onDisposed(target)` | a teardown has finished |
 | `onError(target, phase, error, stackTrace)` | something failed |
 | `onTimeout(target, what)` | a bounded wait expired |
 | `onTrace(target, message)` | a step of the machinery below the lifecycle |
+
+The four in the middle are the dependency container's, and they are two pairs:
+an entry and an exit for each half of its lifecycle. Both entries are sent
+from inside the step and before it awaits anything, which is what makes the
+pairs worth reading — see "The last entry with no exit" below.
 
 ### Who sends them
 
@@ -130,17 +138,62 @@ that pairs events up:
   throw from it reports `onError` with `ScopePhase.initialization` for both.
 
 The container of automatic dependencies of a `Scope` reports its own lifecycle
-under its own label, beside the scope that owns it: `onInit`, `onProgress` per
-dependency initialized, `onReady` or `onCancelled`, and then `onDispose`,
-`onProgress` per dependency released, `onDisposed`.
+under its own label, beside the scope that owns it: `onInit`, then
+`onStepStarted`/`onProgress` per dependency initialized, `onReady` or
+`onCancelled`, and then `onDispose`,
+`onDisposalStepStarted`/`onDisposalProgress` per dependency released,
+`onDisposed`.
 
 A single dependency sends nothing but `onTrace`: the two points where it
 handles an error of its own, and the steps of the guarded stream its `init()`
-and `dispose()` run through.
+and `dispose()` run through. The four step events above are its steps but the
+container's events — they arrive under the container's label, which is the
+label an observer that filters by target is already holding.
+
+### The last entry with no exit
+
+`onStepStarted` is sent from inside the step, before the initializer awaits
+anything, and `onProgress` for that same step is sent once it is done. So the
+recording of an initialization that hung ends with the path of the step it
+hung in:
+
+```text
+scopo | AppDeps(#1a2b) | initialize…
+scopo | AppDeps(#1a2b) | initialize storage/db…
+scopo | AppDeps(#1a2b) | progress: storage/db (1/3)
+scopo | AppDeps(#1a2b) | initialize network/session…
+```
+
+`network/session` was entered and never came back. Nothing else in the
+recording says so: `progress` counts what finished, and the step after
+`storage/db` is only guessable for a `sequential` group — a `concurrent` one
+has several steps in flight at once, and the number of the last completed one
+says nothing about which of them is stuck.
+
+`onDisposalStepStarted` and `onDisposalProgress` are the same pair for the
+teardown, and are read the same way.
+
+Two things the pairs promise, and one they do not:
+
+- **the path of the two halves is the same string.** It is assembled by the
+  same groups, through the same code, on the way up — so `path` can be used as
+  the key of a map that opens on the entry and closes on the exit;
+- **a release is announced only when there is one to run.** A dependency that
+  registered nothing, or only an `unmount`, has no asynchronous teardown, and
+  a bare entry for it would read as a release that hung. It is walked past in
+  silence instead, so an unmatched entry always means what it looks like;
+- **a dependency of your own making announces no entry.** One that implements
+  `ScopeDependency` rather than being built by `dep`, `sequential` or
+  `concurrent` has nowhere to take the mark from. Its `onProgress` still
+  arrives: that half travels the stream of `init()`, which is the part of the
+  contract such a dependency does implement.
+
+Unlike `onProgress`, an entry is **not** passed on to the scope that owns the
+container — see the note at the end of the section below.
 
 ### What `onProgress` carries
 
-`progress` is an `Object?` because the three sources report different things,
+`progress` is an `Object?` because the two sources report different things,
 each already typed on its own terms:
 
 - from a scope, the value its initialization reported as progress: whatever
@@ -149,11 +202,24 @@ each already typed on its own terms:
   `ScopeAutoDependenciesProgress`, which carries the `path` of the dependency
   just built along with `name`, `number`, `total` and `value`. A `Scope` whose
   container builds its dependencies passes the same value on, so it arrives
-  twice: once under the container's label and once under the scope's;
-- from a dependency container that is disposing, the bare `String` path of the
-  dependency just released.
+  twice: once under the container's label and once under the scope's.
 
-Wrapping those three in a common type would have meant inventing a fourth.
+Wrapping the two in a common type would have meant inventing a third.
+
+**A disposal is not one of them.** It used to be — the bare `String` path of
+the dependency just released arrived here too — and that left one hook meaning
+two different things at two different points of the lifecycle, told apart by
+the type of a value. It has `onDisposalProgress` of its own now. See "Coming
+from 0.12.x" below.
+
+**The entry marks arrive once, not twice.** `onProgress` reaches the scope as
+well as the container because it travels the container's initialization
+stream, and the scope passes on what that stream yields. `onStepStarted` and
+`onDisposalStepStarted` travel a channel of their own — that is what lets them
+be sent from inside a step rather than after it — so they arrive under the
+container's label only. An observer that wants them beside a scope reads
+`target`: the container reports next to the scope that owns it, under a label
+of its own.
 
 ### `onError` and `ScopePhase`
 
@@ -538,6 +604,42 @@ See
 for the setup of a real application, and
 [example/scopo_demo](https://github.com/vi-k/scopo/tree/main/example/scopo_demo)
 for a demo that shows every lifecycle call of every scope family side by side.
+
+## Coming from 0.12.x
+
+**A dependency container no longer reports its disposal through
+`onProgress`.** The release of each dependency arrives at
+`onDisposalProgress(target, path)` instead, and the step it belongs to is
+announced ahead of it by `onDisposalStepStarted(target, path)`.
+
+Nothing stops compiling, which is the awkward part of this one: an observer
+whose `onProgress` handled both halves still overrides a method that still
+exists — it just stops being called for the disposal. If yours told the two
+apart by the type of `progress`, that branch is now a hook:
+
+```dart
+// before
+@override
+void onProgress(ScopeObservable target, Object? progress) {
+  if (progress is String) {
+    log('released $progress');
+  } else {
+    log('built $progress');
+  }
+}
+
+// after
+@override
+void onProgress(ScopeObservable target, Object? progress) =>
+    log('built $progress');
+
+@override
+void onDisposalProgress(ScopeObservable target, String path) =>
+    log('released $path');
+```
+
+`ScopeCompositeObserver` and `ScopePrintObserver` come with the package and
+were changed with it; an observer of your own is the only thing to look at.
 
 ## Coming from 0.9.x
 

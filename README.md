@@ -673,10 +673,18 @@ error the caller has to handle: the future completes normally and the
 ## Observing and configuration
 
 The package says nothing until `ScopeConfig.observer` is assigned. A
-`ScopeObserver` has one hook per lifecycle event — `onInit`, `onProgress`,
-`onReady`, `onCancelled`, `onDispose`, `onDisposed`, `onError`, `onTimeout`,
-`onTrace` — all of them empty, so a subclass overrides only what it needs.
-`ScopePrintObserver` comes with the package and writes a line per event.
+`ScopeObserver` has one hook per lifecycle event — `onInit`, `onStepStarted`,
+`onProgress`, `onReady`, `onCancelled`, `onDispose`, `onDisposalStepStarted`,
+`onDisposalProgress`, `onDisposed`, `onError`, `onTimeout`, `onTrace` — all of
+them empty, so a subclass overrides only what it needs. `ScopePrintObserver`
+comes with the package and writes a line per event.
+
+A dependency container reports each of its steps twice: `onStepStarted` with
+the path of the step, from inside it and before it awaits anything, and then
+`onProgress` once that step is done. The pair is what makes a hung start
+readable — the last path announced with nothing behind it is the step that
+never came back — and `onDisposalStepStarted`/`onDisposalProgress` are the
+same pair for the teardown. The `debug` topic has the whole of it.
 
 ```dart
 void main() {

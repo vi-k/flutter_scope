@@ -66,13 +66,30 @@ base class ScopeObserver {
   /// An initialization has begun.
   void onInit(ScopeObservable target) {}
 
-  /// One step of an initialization is done — or, for a dependency container,
-  /// one step of its disposal.
+  /// One step of an initialization has begun; [path] names it.
+  ///
+  /// The other half of [onProgress], which arrives when that same step is
+  /// done and carries the same `path`. Sent by a dependency container, from
+  /// inside the step and before it awaits anything — so a step that never
+  /// finishes is the last path announced here with no [onProgress] behind it,
+  /// and that is what this hook is for. Read the other way round, the rule is
+  /// "the last entry with no exit is where the initialization stopped", and
+  /// it holds for a `concurrent` group too, where several steps are in flight
+  /// and the number of the last completed one says nothing about which of
+  /// them hung.
+  ///
+  /// A dependency of your own making — one that implements `ScopeDependency`
+  /// rather than being built by `dep`, `sequential` or `concurrent` — has
+  /// nowhere to take this from, so its step is not announced. Its
+  /// [onProgress] still arrives: that half travels the stream, which is the
+  /// part of the contract such a dependency does implement.
+  void onStepStarted(ScopeObservable target, String path) {}
+
+  /// One step of an initialization is done.
   ///
   /// [progress] is what that source reports: the value an `initScope` yielded
-  /// for a scope, a `ScopeAutoDependenciesProgress` while a container
-  /// initializes, or the bare `String` path of the dependency a container
-  /// just disposed of.
+  /// for a scope, or a `ScopeAutoDependenciesProgress` while a container
+  /// initializes.
   void onProgress(ScopeObservable target, Object? progress) {}
 
   /// An initialization has finished successfully.
@@ -93,6 +110,25 @@ base class ScopeObserver {
   /// scope that announced [onInit], so one whose `init()` threw or never ran
   /// reports neither half, even though its teardown still runs.
   void onDispose(ScopeObservable target) {}
+
+  /// One step of a disposal has begun; [path] names it.
+  ///
+  /// The disposal half of [onStepStarted], and the other half of
+  /// [onDisposalProgress]. Sent only for a dependency that has something to
+  /// release: one that registered nothing, or only an `unmount`, has no
+  /// asynchronous release to run and is walked past in silence. So every path
+  /// announced here is one [onDisposalProgress] is due for, and a path
+  /// announced without it is a release that did not come back.
+  void onDisposalStepStarted(ScopeObservable target, String path) {}
+
+  /// One step of a disposal is done; [path] names the dependency released.
+  ///
+  /// The pair [onStepStarted]/[onProgress] makes for an initialization, made
+  /// for a disposal by this hook and [onDisposalStepStarted]. A release used
+  /// to be reported through [onProgress] as a bare `String`, which left that
+  /// hook meaning two different things at two different points of the
+  /// lifecycle and the reader telling them apart by the type of a value.
+  void onDisposalProgress(ScopeObservable target, String path) {}
 
   /// A teardown has finished.
   ///
@@ -189,6 +225,10 @@ final class ScopeCompositeObserver extends ScopeObserver {
   void onInit(ScopeObservable target) => _each((o) => o.onInit(target));
 
   @override
+  void onStepStarted(ScopeObservable target, String path) =>
+      _each((o) => o.onStepStarted(target, path));
+
+  @override
   void onProgress(ScopeObservable target, Object? progress) =>
       _each((o) => o.onProgress(target, progress));
 
@@ -201,6 +241,14 @@ final class ScopeCompositeObserver extends ScopeObserver {
 
   @override
   void onDispose(ScopeObservable target) => _each((o) => o.onDispose(target));
+
+  @override
+  void onDisposalStepStarted(ScopeObservable target, String path) =>
+      _each((o) => o.onDisposalStepStarted(target, path));
+
+  @override
+  void onDisposalProgress(ScopeObservable target, String path) =>
+      _each((o) => o.onDisposalProgress(target, path));
 
   @override
   void onDisposed(ScopeObservable target) => _each((o) => o.onDisposed(target));
@@ -248,6 +296,12 @@ final class ScopePrintObserver extends ScopeObserver {
   @override
   void onInit(ScopeObservable target) => _write(target, 'initialize…');
 
+  // The ellipsis says "begun" here as it does on the two lines above and
+  // below it, so the pair reads `initialize db…` / `progress: db (1/3)`.
+  @override
+  void onStepStarted(ScopeObservable target, String path) =>
+      _write(target, 'initialize $path…');
+
   @override
   void onProgress(ScopeObservable target, Object? progress) =>
       _write(target, 'progress: $progress');
@@ -261,6 +315,14 @@ final class ScopePrintObserver extends ScopeObserver {
 
   @override
   void onDispose(ScopeObservable target) => _write(target, 'dispose…');
+
+  @override
+  void onDisposalStepStarted(ScopeObservable target, String path) =>
+      _write(target, 'dispose $path…');
+
+  @override
+  void onDisposalProgress(ScopeObservable target, String path) =>
+      _write(target, 'disposed $path');
 
   @override
   void onDisposed(ScopeObservable target) => _write(target, 'disposed');

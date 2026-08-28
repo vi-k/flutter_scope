@@ -35,6 +35,12 @@ final class _ScopeDependencyImpl with ScopeDependencyMixin {
 
   @override
   Stream<String> _runInit() async* {
+    // First of all, before the handle and before the initializer: the promise
+    // is that this is out before the step awaits anything, so that a step
+    // which never comes back is still the last one announced. The body of an
+    // `async*` runs on subscription and stops at the first `yield`, and there
+    // is no `yield` between here and the end.
+    _onStepStarted?.call(name);
     final helper = _helper = ScopeDependencyHandle._(this);
     final result = _init(helper);
     if (result is Future<void>) {
@@ -80,6 +86,14 @@ final class _ScopeDependencyImpl with ScopeDependencyMixin {
     // The hook alone: the handle itself is what answers `dep.name`, which the
     // disposer may well read, and it is let go of below.
     helper.dispose = null;
+
+    // After the early return above, not before it: a dependency that
+    // registered only an `unmount` is still walked -- `disposalRequired`
+    // counts that hook as much as a disposer, and it is right to -- but it
+    // has no release to run and yields nothing. Announced from the top of
+    // this method it would have been an entry with no exit behind it, which
+    // is precisely the shape a reader takes for a release that hung.
+    _onDisposalStepStarted?.call(name);
 
     try {
       final result = disposer();

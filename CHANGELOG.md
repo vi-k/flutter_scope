@@ -1,3 +1,25 @@
+## 0.13.0
+
+* **Breaking:** a dependency container no longer reports its disposal through
+  `ScopeObserver.onProgress`. The release of each dependency arrives at the
+  new `onDisposalProgress(target, path)` instead, so `onProgress` now means
+  one thing — a step of an *initialization* is done — rather than two told
+  apart by the type of a value. Nothing stops compiling: an observer that
+  handled both halves in `onProgress` simply stops hearing the disposal. The
+  `debug` topic has a "Coming from 0.12.x" section with the two-line
+  migration.
+* Added `ScopeObserver.onStepStarted(target, path)`: a dependency container
+  now announces each step of its initialization *before* running it, from
+  inside the step and ahead of anything it awaits. Paired with the
+  `onProgress` that follows, this makes a start that hung readable — the last
+  path announced with nothing behind it is the step that never came back —
+  including for a `concurrent` group, where the number of the last completed
+  step says nothing about which of the steps in flight is stuck.
+* Added `ScopeObserver.onDisposalStepStarted(target, path)`, the same mark for
+  the teardown. Sent only for a dependency that has a release to run, so an
+  entry with no `onDisposalProgress` behind it always means a release that did
+  not come back.
+
 ## 0.12.0
 
 * Added `controllerDep(name, create)`, a fourth `ScopeAutoDependencies`

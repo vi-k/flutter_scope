@@ -43,6 +43,24 @@ mixin ScopeDependencyMixin implements ScopeDependency, ScopeObservable {
     }
   }
 
+  /// Told the path of each step of this subtree as it is entered, before the
+  /// step does anything.
+  ///
+  /// The other half of what [init] yields once the step is done. Set by the
+  /// enclosing group, which wraps it in its own `_path` — the very assembly
+  /// the completed step travels through on its way up, so the two halves
+  /// cannot come to report different paths for one step.
+  ///
+  /// A second channel rather than a second kind of stream element, because
+  /// the stream is the public [ScopeDependency.init] and its element type is
+  /// what a caller's own implementation returns; and because the container
+  /// counts its steps by the elements of that stream, so a mark travelling it
+  /// would move every progress bar by one.
+  void Function(String path)? _onStepStarted;
+
+  /// The same, for the disposal walk.
+  void Function(String path)? _onDisposalStepStarted;
+
   /// The initialization step itself, run and accounted for by [init].
   Stream<String> _runInit();
 

@@ -1,6 +1,6 @@
 # scopo
 
-> Перевод `README.md` (blob `63920e56a44a56ff5508e936c275c8a3e212beba`).
+> Перевод `README.md` (blob `faeb74efff068dce8793438c80fdfa7c4cfa662f`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 [![pub version](https://img.shields.io/pub/v/scopo)](https://pub.dev/packages/scopo)
@@ -686,10 +686,18 @@ await AsyncScopeCoordinator.waitForChildren(context);
 ## Наблюдение и настройка
 
 Пакет молчит, пока не присвоен `ScopeConfig.observer`. У `ScopeObserver` по
-хуку на событие жизненного цикла — `onInit`, `onProgress`, `onReady`,
-`onCancelled`, `onDispose`, `onDisposed`, `onError`, `onTimeout`, `onTrace`, —
-и все они пустые, так что наследник переопределяет только нужное.
+хуку на событие жизненного цикла — `onInit`, `onStepStarted`, `onProgress`,
+`onReady`, `onCancelled`, `onDispose`, `onDisposalStepStarted`,
+`onDisposalProgress`, `onDisposed`, `onError`, `onTimeout`, `onTrace`, — и все
+они пустые, так что наследник переопределяет только нужное.
 `ScopePrintObserver` едет в комплекте и пишет по строке на событие.
+
+Контейнер зависимостей отчитывается о каждом своём шаге дважды:
+`onStepStarted` с путём шага — изнутри шага и до того, как тот чего-либо
+дождётся, — и затем `onProgress`, когда шаг сделан. Пара и делает зависший
+старт читаемым: последний объявленный путь, за которым ничего не последовало,
+и есть шаг, который не вернулся. `onDisposalStepStarted`/`onDisposalProgress`
+— та же пара для разбора. Целиком — в теме `debug`.
 
 ```dart
 void main() {
