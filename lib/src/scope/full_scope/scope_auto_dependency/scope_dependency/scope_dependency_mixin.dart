@@ -143,6 +143,38 @@ mixin ScopeDependencyMixin implements ScopeDependency, ScopeObservable {
   /// way.
   @override
   Stream<String> dispose() async* {
+    // Joined rather than repeated, the way `ScopeAutoDependencies.dispose()`
+    // joins its own one level up -- and for a heavier reason than tidiness.
+    //
+    // A second walk arriving while the first was parked in a disposer found
+    // that child already stripped of its hook -- taken off before the `await`,
+    // so that a disposer runs exactly once -- decided there was nothing to do
+    // there, and walked on to the child below it. In a `sequential` group that
+    // is the child the parked one is built on top of, and the group's whole
+    // promise is that it is released after, never beside. `[b started, a
+    // released, b released]` is what came out. The second walk then reported
+    // itself finished while the first was still holding, so a caller that
+    // waited on it went on to use what it thought it had given back.
+    //
+    // The joiner is told when the walk is over and is given no paths of its
+    // own: they were handed to whoever asked first, and a walk cannot yield
+    // them twice without every node keeping a copy of its own history for as
+    // long as it lives.
+    if (_disposalInFlight case final inFlight?) {
+      await inFlight.future;
+
+      return;
+    }
+
+    final inFlight = Completer<void>();
+    _disposalInFlight = inFlight;
+    // Nobody has to join, and a completer completed with an error nobody
+    // listens to is an unhandled asynchronous error. This listener is not the
+    // one that swallows it: `catchError` answers a future of its own, and a
+    // joiner still hears what the walk raised.
+    unawaited(inFlight.future.catchError((Object _) {}));
+    AsyncError? failure;
+
     // Whether the walk got to its end, however it got there.
     //
     // The state cannot answer this, and used to be asked: anything other than
@@ -183,7 +215,7 @@ mixin ScopeDependencyMixin implements ScopeDependency, ScopeObservable {
         _ => const ScopeDependencyDisposed(),
       };
       // ignore: avoid_catching_errors
-    } on Object {
+    } on Object catch (error, stackTrace) {
       // A walk that ended by reporting a failure ended all the same, and is
       // done. Both groups collect what their children threw and carry the
       // first one out after the walk is over, and a leaf whose disposer threw
@@ -191,8 +223,18 @@ mixin ScopeDependencyMixin implements ScopeDependency, ScopeObservable {
       // failed would go on asking to be disposed of for ever, and the
       // container it belongs to could never be initialized again.
       walkEnded = true;
+      failure = AsyncError(error, stackTrace);
       rethrow;
     } finally {
+      // Let go of the walk before the joiners are woken, so that one of them
+      // starting a walk of its own from the continuation finds the way clear.
+      _disposalInFlight = null;
+      if (failure case final failure?) {
+        inFlight.completeError(failure.error, failure.stackTrace);
+      } else {
+        inFlight.complete();
+      }
+
       // Catch the cancellation.
       if (walkEnded) {
         _isDisposalDone = true;
@@ -201,6 +243,14 @@ mixin ScopeDependencyMixin implements ScopeDependency, ScopeObservable {
       }
     }
   }
+
+  /// The walk running right now, joined by anyone who asks for a second.
+  ///
+  /// Cleared as that walk ends, so a later call runs again: a walk a caller
+  /// stopped halfway leaves the tree still asking to be disposed of, and the
+  /// call that picks it up must not be turned into a joiner of something that
+  /// is already over.
+  Completer<void>? _disposalInFlight;
 
   void _addErrorToState(
     Object error,

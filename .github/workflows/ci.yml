@@ -30,6 +30,16 @@ jobs:
           channel: stable
           cache: true
 
+      # `cache: true` on the action above caches the SDK and nothing else, so
+      # every run re-downloaded every package. Keyed by the lockfiles that
+      # decide what is in there; the examples' are committed, and the root one
+      # is not, so its `pubspec.yaml` stands in for it.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.pub-cache
+          key: pub-${{ runner.os }}-${{ hashFiles('pubspec.yaml', 'example/*/pubspec.lock') }}
+          restore-keys: pub-${{ runner.os }}-
+
       - name: Toolchain
         run: flutter --version
 
@@ -95,5 +105,45 @@ jobs:
       # The examples' lockfiles are committed and are supposed to be the ones
       # this toolchain resolves. The `pub get` calls above rewrite them if they
       # are not, and then this step says so.
+      #
+      # `git status --porcelain` rather than `git diff --exit-code`: the latter
+      # compares what is tracked and says nothing at all about a file the run
+      # created out of nothing, which is the other way a step can leave the
+      # tree dirty.
       - name: Nothing drifted
-        run: git diff --exit-code
+        run: |
+          git status --porcelain
+          test -z "$(git status --porcelain)"
+
+  # The floor is what the package promises and what the gate above proves. This
+  # one asks the other question -- whether the package still works on what
+  # people actually have -- and asks it without a vote: `continue-on-error`
+  # makes a break on a Flutter release the maintainer's news rather than the
+  # maintainer's emergency. Turning it into a blocking job is a decision to
+  # promise the ceiling as well as the floor.
+  ceiling:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Toolchain
+        run: flutter --version
+
+      - name: Dependencies
+        run: |
+          flutter pub get
+          for example in example/*/; do
+            (cd "$example" && flutter pub get)
+          done
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Tests
+        run: flutter test

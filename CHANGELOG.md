@@ -33,6 +33,15 @@
   after an initialization went wrong — and a second `dispose()` that was
   itself cancelled therefore stopped asking to be disposed of, and everything
   the walk had not reached was left holding what it took.
+* Fixed: a second `ScopeDependency.dispose()` arriving while the first was
+  still running started a walk of its own, and in a `sequential` group that
+  broke the reverse order the group promises. The child the running walk was
+  parked in had already had its hook taken off, so the second walk read it as
+  having nothing to do and moved on to the child below — the one the parked
+  disposer is built on top of. It also reported itself finished while the
+  first was still holding. A second call now joins the walk already running:
+  it yields no paths of its own, closes when that walk closes, and raises what
+  it raised.
 * Fixed: a tree built and then let go of without ever being initialized left
   its root saying `ScopeDependencyDisposed` while every child under it
   correctly said `ScopeDependencyInitial`, so a `flattenDependencies()` dump

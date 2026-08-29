@@ -51,6 +51,14 @@ for translation in docs/ru/README.md docs/ru/doc/*.md \
 done
 
 # 2. У каждого оригинала — зеркало.
+#
+# Список намеренно неполон. Внутри `example/scopo_demo/lib/` лежат ещё три
+# README — `app/`, `home/` и `common/data/fake_services/`, — и они едут в архив
+# пакета вместе с кодом демки. Зеркал у них нет и не заводится: это подписи к
+# каталогам в одну строку («Contains the root `App` scope and global
+# dependencies»), а не документы, которые читают. §7 они не нарушают —
+# написаны по-английски, как и требуется от публичных артефактов. Решение
+# владельца, 2026-08-29; найдено пятым ревью (`2026-08-28[2]`, P3-13).
 for source in README.md doc/*.md example/README.md example/*/README.md \
               ide/README.md; do
   translation="docs/ru/$source"

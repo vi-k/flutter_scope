@@ -373,6 +373,59 @@ void _diagnosticsGroup() {
       );
     });
 
+    // A group promises reverse order, and the promise was kept only as long as
+    // one walk was running. A second `dispose()` arriving while the first was
+    // parked found the child it was parked in already stripped of its hook --
+    // taken off before the `await`, so that a disposer runs once -- decided it
+    // had nothing to do there, and walked on to the child below, which the
+    // parked one is built on top of.
+    test('is not started a second time while one is running', () async {
+      final log = <String>[];
+      final parked = Completer<void>();
+
+      final tree = ScopeDependency.sequential('', [
+        ScopeDependency('a', (handle) {
+          handle.dispose = () async => log.add('a released');
+        }),
+        ScopeDependency('b', (handle) {
+          handle.dispose = () async {
+            log.add('b started');
+            await parked.future;
+            log.add('b released');
+          };
+        }),
+      ]);
+
+      await tree.init().drain<void>();
+
+      final first = tree.dispose().drain<void>();
+      await pumpEventQueue();
+      expect(log, ['b started'], reason: 'the first walk is parked inside b');
+
+      var secondFinished = false;
+      final second = tree.dispose().drain<void>().then((_) {
+        secondFinished = true;
+      });
+      await pumpEventQueue();
+
+      expect(
+        log,
+        ['b started'],
+        reason: 'a is below b and is released after it, never beside it',
+      );
+      expect(
+        secondFinished,
+        isFalse,
+        reason: 'a caller told the disposal is over while it is still running '
+            'goes on to use what it thinks it has given back',
+      );
+
+      parked.complete();
+      await Future.wait([first, second]);
+
+      expect(log, ['b started', 'b released', 'a released']);
+    });
+
     // `_markNothingToDispose` keeps `Initial` on a child that never ran, and
     // says why: "not initialized" is the true thing to say about it. The node
     // the walk itself passes through was saying the opposite.
