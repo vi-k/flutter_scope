@@ -1266,7 +1266,7 @@ CI отвечает через несколько минут и на чисто�
 
 | проверка | результат |
 | --- | --- |
-| `fvm flutter test` | **451 тест, все зелёные, leak-трекер включён** |
+| `fvm flutter test` | **459 тестов, все зелёные, leak-трекер включён** |
 | `fvm flutter analyze` (корень) | `No issues found!` |
 | `analyze` в обоих `example/*` | `No issues found!` в каждом |
 | `fvm dart format --set-exit-if-changed lib test` | 112 файлов, 0 changed |
