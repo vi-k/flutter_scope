@@ -119,6 +119,20 @@ final class HomeDependencies
 }
 ```
 
+**`late final` makes the container single-use, and that is usually what you
+want.** A container is an object, and `init()` can be called on it a second
+time — after its `dispose()` has run to its end, and only then. That second
+run builds the tree afresh and runs every initializer again, over the same
+container, and a `late final` field the first run assigned refuses the second
+assignment. Declare the fields `late` rather than `late final` for a container
+you mean to initialize more than once; a `Scope` builds a container per scope
+and never reaches this, so the fields above stay `final`.
+
+An `init()` at any other moment — while one is running, or on a container that
+has been initialized and not disposed of — is refused with a `StateError` that
+says which of the two it was. It is refused whether or not the tree is holding
+anything: holding nothing is not the same as having been given back.
+
 Four builders describe the tree, and all of them return a `ScopeDependency`:
 
 - `dep(name, init)` — a single dependency. The `ScopeDependencyHandle` handed to `init` is

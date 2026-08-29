@@ -33,6 +33,17 @@
   after an initialization went wrong — and a second `dispose()` that was
   itself cancelled therefore stopped asking to be disposed of, and everything
   the walk had not reached was left holding what it took.
+* **Breaking:** a second `ScopeAutoDependencies.init()` on a container that
+  has been initialized and not disposed of is now refused whether or not its
+  tree is holding anything. The guard used to ask whether anything was still
+  held, and a tree whose dependencies registered no disposer answers no to
+  that from the moment it is built — so such a container could be initialized
+  again with no `dispose()` anywhere in sight, and the second run assigned its
+  `late final` fields a second time. That came out as a
+  `LateInitializationError` from inside a dependency's initializer, reading as
+  a mistake in the caller's code rather than as the refusal it should have
+  been. A container is still re-initializable after a disposal that ran to its
+  end; the `Scope` topic now says what `late final` costs there.
 * Fixed: a second `ScopeDependency.dispose()` arriving while the first was
   still running started a walk of its own, and in a `sequential` group that
   broke the reverse order the group promises. The child the running walk was

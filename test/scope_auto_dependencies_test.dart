@@ -219,6 +219,24 @@ final class TestDependenciesConcurrentEmptyInit
 /// automatic disposal — the path on which the group-level failure used to be
 /// overwritten — and so that a second `init()` runs against whatever that
 /// disposal left behind.
+/// A container whose dependency takes nothing, so there is nothing to release.
+///
+/// `late final` is what the `Scope` topic teaches, and it is what makes the
+/// second run fail where the guard does not stop it.
+final class TestHoldsNothingDependencies
+    extends ScopeAutoDependencies<TestHoldsNothingDependencies, void> {
+  int buildCount = 0;
+
+  late final String value;
+
+  @override
+  ScopeDependency buildDependencies(void context) {
+    buildCount++;
+
+    return dep('free', (dep) async => value = 'built');
+  }
+}
+
 final class TestAutoDisposeDependencies
     extends ScopeAutoDependencies<TestAutoDisposeDependencies, void> {
   static const step = Duration(milliseconds: 10);
@@ -1656,6 +1674,32 @@ void main() {
           contains('has already been initialized'),
           reason: 'a tree that is still alive must not be silently thrown '
               'away by a second init(): whatever it holds would leak',
+        );
+        expect(dependencies.buildCount, 1);
+        expect(identical(dependencies.root, firstRoot), isTrue);
+      });
+    });
+
+    // The guard used to stand on "the tree still holds something" rather than
+    // on "this container has already run", and the two part company for a
+    // tree whose dependencies registered no disposer. There is nothing to
+    // leak there, so the second `init()` went through -- and rebuilt the tree
+    // over a container whose fields the first run had already assigned. What
+    // came out was a `LateInitializationError` from the initializer of a
+    // dependency, which reads as a mistake in the caller's own code.
+    test('a second init() on a tree that holds nothing fails the same way', () {
+      myFakeAsync((async) {
+        final dependencies = TestHoldsNothingDependencies();
+        handleInitFor(dependencies, async);
+        final firstRoot = dependencies.root;
+
+        final progress = handleInitFor(dependencies, async);
+
+        expect(
+          progress.single,
+          contains('has already been initialized'),
+          reason: 'holding nothing is not the same as having been disposed '
+              'of, and the container is the same object either way',
         );
         expect(dependencies.buildCount, 1);
         expect(identical(dependencies.root, firstRoot), isTrue);

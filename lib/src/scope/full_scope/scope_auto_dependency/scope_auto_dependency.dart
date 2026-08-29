@@ -55,21 +55,43 @@ abstract base class ScopeAutoDependencies<T extends ScopeAutoDependencies<T, C>,
     final root = _root;
 
     return switch (root) {
-      // Nothing has been built yet, or the previous tree is done: its
-      // disposal has run, so nothing it acquired is still held.
+      // Nothing has been built yet.
       null => _root = buildDependencies(context),
-      _ when !root.disposalRequired && root.state is! ScopeDependencyInitial =>
-        _root = buildDependencies(context),
       // Built, but never initialized: this *is* that first initialization.
       _ when root.state is ScopeDependencyInitial => root,
+      // The previous tree is done: its disposal walk reached its end, so
+      // nothing it acquired is still held and a new tree can stand where it
+      // stood.
+      _ when _disposalIsOver(root) => _root = buildDependencies(context),
       _ => throw StateError(
           '$T has already been initialized (${root.stateToString()}) and has'
           ' not been disposed of. Dispose of it before initializing it again:'
-          ' a second `init()` would abandon everything the first one is'
-          ' still holding, and nothing would ever release it.',
+          ' a second `init()` builds the tree afresh and runs every'
+          ' initializer over the same container, whose fields the first run'
+          ' has already assigned — and where that run is still holding'
+          ' something, nothing would ever release it.',
         ),
     };
   }
+
+  /// Whether the disposal of [root] ran to its end.
+  ///
+  /// This used to ask `disposalRequired` instead, which is a different
+  /// question: it means "is anything still held", and a tree whose
+  /// dependencies registered no disposer answers `false` to it from the
+  /// moment it is built. So a second `init()` on such a container — no
+  /// `dispose()` anywhere in sight — walked past the guard and rebuilt the
+  /// tree, over a container whose `late final` fields the first run had
+  /// already assigned. What came out was a `LateInitializationError` from
+  /// inside a dependency's initializer: it read as a mistake in the caller's
+  /// own code, and it was a contradiction between two promises of this
+  /// package. Nothing leaked, which is why it went unnoticed.
+  ///
+  /// A dependency of the caller's own making keeps no such flag, so it is
+  /// asked the older question. It is the only thing it can answer.
+  bool _disposalIsOver(ScopeDependency root) => root is ScopeDependencyMixin
+      ? root._isDisposalDone
+      : !root.disposalRequired;
 
   /// Initialize the scope dependencies.
   Stream<ScopeInitState<ScopeAutoDependenciesProgress, T>> init(
