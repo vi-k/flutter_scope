@@ -58,7 +58,7 @@ abstract base class ScopeAutoDependencies<T extends ScopeAutoDependencies<T, C>,
       // Nothing has been built yet.
       null => _root = buildDependencies(context),
       // Built, but never initialized: this *is* that first initialization.
-      _ when root.state is ScopeDependencyInitial => root,
+      ScopeDependency(state: ScopeDependencyInitial()) => root,
       // The previous tree is done: its disposal walk reached its end, so
       // nothing it acquired is still held and a new tree can stand where it
       // stood.
