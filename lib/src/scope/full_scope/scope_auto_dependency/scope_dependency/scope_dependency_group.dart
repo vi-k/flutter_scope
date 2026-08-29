@@ -15,6 +15,29 @@ abstract base class ScopeDependencyGroup with ScopeDependencyMixin {
   ScopeDependencyGroup._(this.name, Iterable<ScopeDependency> dependencies) {
     _dependencies = List.of(dependencies, growable: false);
     _count = _dependencies.fold<int>(0, (p, e) => p + e.count);
+
+    // Wired here, once, rather than by each walk as it reaches a child. The
+    // closures read `_onStepStarted` when they fire and not now, so a group
+    // can be wired long before anything above it is: the container points the
+    // root at its observer as it prepares the tree, and every segment below is
+    // already in place, assembled by the same [_path] the completed step
+    // travels through. A child that neither walk ever visits simply never
+    // fires what it was handed.
+    //
+    // Doing it on the walks meant three sites here and two in the container,
+    // and the rule that kept them right was unwritten: reach a child any other
+    // way -- a new kind of group, a `_runDispose` that does not go through
+    // [_disposalOrder] -- and the marks of that whole subtree go missing in
+    // silence. Construction is the one moment every child is reached by
+    // definition.
+    for (final dependency in _dependencies) {
+      ScopeDependencyMixin._wireStepsStarted(
+        dependency,
+        onStepStarted: (path) => _onStepStarted?.call(_path(path)),
+        onDisposalStepStarted: (path) =>
+            _onDisposalStepStarted?.call(_path(path)),
+      );
+    }
   }
 
   @override
@@ -87,21 +110,16 @@ abstract base class ScopeDependencyGroup with ScopeDependencyMixin {
   }
 
   /// The children to walk, innermost first, with the ones that hold nothing
-  /// marked as passed by and the rest wired to report their entry.
+  /// marked as passed by.
   ///
   /// Skipping them is right — there is nothing to run — but skipping them in
   /// silence left them saying `initialized` after the tree had been torn down.
   /// See [ScopeDependencyMixin._markNothingToDispose].
-  ///
-  /// The wiring rides along on this walk rather than taking one of its own:
-  /// the children that are about to be disposed of are exactly the ones this
-  /// method picks out, and both groups reach them only through it.
   List<ScopeDependency> _disposalOrder() {
     final order = <ScopeDependency>[];
 
     for (final dependency in _dependencies.reversed) {
       if (dependency.disposalRequired) {
-        _wireStepsStarted(dependency);
         order.add(dependency);
       } else if (dependency is ScopeDependencyMixin) {
         dependency._markNothingToDispose();
@@ -112,42 +130,6 @@ abstract base class ScopeDependencyGroup with ScopeDependencyMixin {
   }
 
   String _path(String name) => this.name.isEmpty ? name : '${this.name}/$name';
-
-  /// Hands [dependency] the entry callbacks, wrapped in this group's segment.
-  ///
-  /// The wrapping is [_path], the same function the completed step is mapped
-  /// through on its way up, so the entry and the exit of one step are
-  /// assembled by one piece of code and cannot drift apart.
-  ///
-  /// Both halves at once, wherever it is called from: the two walks visit
-  /// different sets -- [ScopeDependencyExtension.initializationRequired]
-  /// against [_disposalOrder] -- and a channel wired for a walk that never
-  /// comes simply never fires. The initialization calls this as it reaches
-  /// each child; the disposal has it done by [_disposalOrder], which is the
-  /// one way either group reaches the children it is about to release.
-  ///
-  /// A dependency of the caller's own making is not a [ScopeDependencyMixin]
-  /// and has nowhere to take these, so its entry is not announced; its
-  /// completed step still arrives, since that half travels the stream of
-  /// [ScopeDependency.init], which is the part of the contract it does
-  /// implement. [_disposalOrder] tells the two apart the same way and for a
-  /// neighbouring reason.
-  void _wireStepsStarted(ScopeDependency dependency) {
-    if (dependency is! ScopeDependencyMixin) {
-      return;
-    }
-
-    // Block bodies rather than `=>`: an arrow body swallows the `..` that
-    // follows it, and the second assignment would become part of the first
-    // closure.
-    dependency
-      .._onStepStarted = (path) {
-        _onStepStarted?.call(_path(path));
-      }
-      .._onDisposalStepStarted = (path) {
-        _onDisposalStepStarted?.call(_path(path));
-      };
-  }
 
   @override
   String get wrappedName => '[${name.isEmpty ? 'group' : name}]';
@@ -207,7 +189,6 @@ final class _ScopeDependencySequential extends ScopeDependencyGroup {
     final dependencies = _dependencies //
         .where((d) => d.initializationRequired);
     for (final dependency in dependencies) {
-      _wireStepsStarted(dependency);
       yield* dependency.init().map(_path);
     }
   }
@@ -246,21 +227,12 @@ final class _ScopeDependencyConcurrent extends ScopeDependencyGroup {
 
   @override
   Stream<String> _runInit() async* {
-    // Collected rather than filtered lazily, as this used to be: the children
-    // are wired for their entry marks on the way in, and `_mergeStreams`
-    // walks the result again on `onListen`. A lazy `where` would re-read
-    // `initializationRequired` for that second walk -- the two would agree
-    // today, but nothing says they have to.
-    final dependencies = <ScopeDependency>[];
-
-    for (final dependency in _dependencies) {
-      if (dependency.initializationRequired) {
-        _wireStepsStarted(dependency);
-        dependencies.add(dependency);
-      }
-    }
-
-    yield* dependencies //
+    // The loop that stood here collected the children so that each could be
+    // wired on the way in; the wiring moved to the constructor, and the filter
+    // is a filter again. Walked once: `_mergeStreams` collects what it is
+    // given before it asks it anything.
+    yield* _dependencies //
+        .where((dep) => dep.initializationRequired)
         .map((dep) => dep.init())
         ._mergeStreams()
         .map(_path);

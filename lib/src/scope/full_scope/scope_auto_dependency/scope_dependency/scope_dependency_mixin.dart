@@ -61,6 +61,37 @@ mixin ScopeDependencyMixin implements ScopeDependency, ScopeObservable {
   /// The same, for the disposal walk.
   void Function(String path)? _onDisposalStepStarted;
 
+  /// Points both entry channels of [dependency] at the given callbacks.
+  ///
+  /// The one place either channel is ever assigned. It used to be two
+  /// near-identical methods -- one on [ScopeDependencyGroup], one on
+  /// [ScopeAutoDependencies] -- set from five sites between them, so that a
+  /// new kind of group, or a `_runDispose` that did not go through
+  /// `_disposalOrder`, would lose the marks of its whole subtree without a
+  /// word. What actually differs between the two callers is only what a mark
+  /// is told to do: a group wraps it in its own path segment, a container
+  /// hands it to its observer. That is what they pass in; the wiring itself
+  /// is the same both times, and is now written once.
+  ///
+  /// A dependency of the caller's own making is not a [ScopeDependencyMixin]
+  /// and has nowhere to take these, so its entry is not announced; its
+  /// completed step still arrives, since that half travels the stream of
+  /// [ScopeDependency.init], which is the part of the contract it does
+  /// implement.
+  static void _wireStepsStarted(
+    ScopeDependency dependency, {
+    required void Function(String path) onStepStarted,
+    required void Function(String path) onDisposalStepStarted,
+  }) {
+    if (dependency is! ScopeDependencyMixin) {
+      return;
+    }
+
+    dependency
+      .._onStepStarted = onStepStarted
+      .._onDisposalStepStarted = onDisposalStepStarted;
+  }
+
   /// The initialization step itself, run and accounted for by [init].
   Stream<String> _runInit();
 

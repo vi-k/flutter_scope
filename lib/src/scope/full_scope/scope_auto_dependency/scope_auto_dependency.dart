@@ -54,7 +54,7 @@ abstract base class ScopeAutoDependencies<T extends ScopeAutoDependencies<T, C>,
   ScopeDependency _prepareDependencies(C context) {
     final root = _root;
 
-    return switch (root) {
+    final tree = switch (root) {
       // Nothing has been built yet.
       null => _root = buildDependencies(context),
       // Built, but never initialized: this *is* that first initialization.
@@ -72,6 +72,22 @@ abstract base class ScopeAutoDependencies<T extends ScopeAutoDependencies<T, C>,
           ' something, nothing would ever release it.',
         ),
     };
+
+    // The one place the root's entry channels are set. `_root` is assigned
+    // nowhere else, so no tree can reach either walk unwired; [init] and
+    // [_runDispose] used to do it, once each, and a third entry point would
+    // have had to remember. The marks of the whole subtree below travel the
+    // segments the groups put in place in their own constructors.
+    ScopeDependencyMixin._wireStepsStarted(
+      tree,
+      onStepStarted: (path) =>
+          notifyObserver((observer) => observer.onStepStarted(this, path)),
+      onDisposalStepStarted: (path) => notifyObserver(
+        (observer) => observer.onDisposalStepStarted(this, path),
+      ),
+    );
+
+    return tree;
   }
 
   /// Whether the disposal of [root] ran to its end.
@@ -139,7 +155,6 @@ abstract base class ScopeAutoDependencies<T extends ScopeAutoDependencies<T, C>,
 
     _initializing = true;
     try {
-      _wireStepsStarted(dependencies);
       notifyObserver((observer) => observer.onInit(this));
       yield* dependencies.init().map((path) {
         final step = progressIterator.nextStep();
@@ -209,42 +224,6 @@ abstract base class ScopeAutoDependencies<T extends ScopeAutoDependencies<T, C>,
   /// The tree cannot answer this: it stays in [ScopeDependencyInitial] for the
   /// whole of the run and leaves it only at the end.
   bool _initializing = false;
-
-  /// Points the entry marks of the whole tree at this container's observer.
-  ///
-  /// Both walks call it, on the root each time: [init] after
-  /// [_prepareDependencies], which may have built a fresh tree, and
-  /// [_runDispose] for a container whose tree is being released without ever
-  /// having been initialized here. The marks travel a channel of their own,
-  /// not the stream — see `ScopeDependencyMixin._onStepStarted` for why — and
-  /// the path each one carries is assembled by the same groups that assemble
-  /// the path of the completed step.
-  ///
-  /// Never taken off again. The tree outlives the run that built it, so that
-  /// [flattenDependencies] can still be read; the container outlives the
-  /// tree; and a new tree arrives wired afresh.
-  ///
-  /// A root of the caller's own making is not a [ScopeDependencyMixin] and
-  /// announces nothing, the way any such dependency deeper in the tree does
-  /// not.
-  void _wireStepsStarted(ScopeDependency dependencies) {
-    if (dependencies is! ScopeDependencyMixin) {
-      return;
-    }
-
-    // Block bodies rather than `=>`: an arrow body swallows the `..` that
-    // follows it, and the second assignment would become part of the first
-    // closure.
-    dependencies
-      .._onStepStarted = (path) {
-        notifyObserver((observer) => observer.onStepStarted(this, path));
-      }
-      .._onDisposalStepStarted = (path) {
-        notifyObserver(
-          (observer) => observer.onDisposalStepStarted(this, path),
-        );
-      };
-  }
 
   /// Awaits [dispose] with a limit, and gives up rather than holding the
   /// generator open for ever.
@@ -371,7 +350,6 @@ abstract base class ScopeAutoDependencies<T extends ScopeAutoDependencies<T, C>,
 
     final completer = Completer<void>();
 
-    _wireStepsStarted(dependencies);
     notifyObserver((observer) => observer.onDispose(this));
     dependencies.dispose().listen(
       (path) {
