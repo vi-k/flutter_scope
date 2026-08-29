@@ -61,6 +61,17 @@ mixin ScopeDependencyMixin implements ScopeDependency, ScopeObservable {
   /// The same, for the disposal walk.
   void Function(String path)? _onDisposalStepStarted;
 
+  /// Told the path of each step of this subtree as it comes back.
+  ///
+  /// The exit half of [_onDisposalStepStarted], wired by the same code, wrapped
+  /// by the same `_path` and travelling the same way — so the pair cannot come
+  /// apart depending on who drove the walk. It used to travel the stream of
+  /// [ScopeDependency.dispose] instead, which belongs to whoever subscribed:
+  /// a walk driven by hand, or one this node only joined, left the container
+  /// hearing entries with nothing behind them, and every step read as a
+  /// release that hung.
+  void Function(String path)? _onDisposalStepEnded;
+
   /// Points both entry channels of [dependency] at the given callbacks.
   ///
   /// The one place either channel is ever assigned. It used to be two
@@ -74,14 +85,17 @@ mixin ScopeDependencyMixin implements ScopeDependency, ScopeObservable {
   /// is the same both times, and is now written once.
   ///
   /// A dependency of the caller's own making is not a [ScopeDependencyMixin]
-  /// and has nowhere to take these, so its entry is not announced; its
-  /// completed step still arrives, since that half travels the stream of
-  /// [ScopeDependency.init], which is the part of the contract it does
-  /// implement.
+  /// and has nowhere to take these, so it announces neither entry itself. Its
+  /// completed initialization step still arrives, since that half travels the
+  /// stream of [ScopeDependency.init], which is the part of the contract it
+  /// does implement; and its release is announced for it — by the group above
+  /// it as the path comes through, or, for such a dependency standing as the
+  /// root, by the container's own listener.
   static void _wireStepsStarted(
     ScopeDependency dependency, {
     required void Function(String path) onStepStarted,
     required void Function(String path) onDisposalStepStarted,
+    required void Function(String path) onDisposalStepEnded,
   }) {
     if (dependency is! ScopeDependencyMixin) {
       return;
@@ -89,7 +103,8 @@ mixin ScopeDependencyMixin implements ScopeDependency, ScopeObservable {
 
     dependency
       .._onStepStarted = onStepStarted
-      .._onDisposalStepStarted = onDisposalStepStarted;
+      .._onDisposalStepStarted = onDisposalStepStarted
+      .._onDisposalStepEnded = onDisposalStepEnded;
   }
 
   /// The initialization step itself, run and accounted for by [init].

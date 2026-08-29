@@ -117,8 +117,11 @@ base class ScopeObserver {
   /// [onDisposalProgress]. Sent only for a dependency that has something to
   /// release: one that registered nothing, or only an `unmount`, has no
   /// asynchronous release to run and is walked past in silence. So every path
-  /// announced here is one [onDisposalProgress] is due for, and a path
-  /// announced without it is a release that did not come back.
+  /// announced here is one [onDisposalProgress] is due for.
+  ///
+  /// An entry with no exit behind it means the release did not come back —
+  /// it hung, *or* it threw. The two are told apart by an [onError] carrying
+  /// the same phase, which arrives beside the unmatched entry.
   void onDisposalStepStarted(ScopeObservable target, String path) {}
 
   /// One step of a disposal is done; [path] names the dependency released.
@@ -128,6 +131,19 @@ base class ScopeObserver {
   /// to be reported through [onProgress] as a bare `String`, which left that
   /// hook meaning two different things at two different points of the
   /// lifecycle and the reader telling them apart by the type of a value.
+  ///
+  /// Sent when the disposer has actually returned, which is before the path
+  /// reaches whoever is driving the walk — and whether or not anyone is. The
+  /// pair therefore holds however the disposal was started: by the container,
+  /// by a caller walking the tree by hand, or by a container that only joined
+  /// a walk already running. It used to travel the stream of the walk instead,
+  /// and then only the driver heard it: an observer watching a container whose
+  /// tree someone else was disposing of saw every step enter and none come
+  /// back.
+  ///
+  /// One walk, one observer: [ScopeConfig.observer] is read afresh for each
+  /// event, so replacing it while a disposer is parked hands the entry to the
+  /// old observer and the exit to the new one.
   void onDisposalProgress(ScopeObservable target, String path) {}
 
   /// A teardown has finished.

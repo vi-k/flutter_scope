@@ -281,6 +281,194 @@ void main() {
     });
   });
 
+  // R5: the pair used to hold only while the container drove the walk. The
+  // entry travels a channel pointed at the container from the moment the tree
+  // is built; the exit used to travel the stream, which belongs to whoever
+  // subscribed. Anyone else driving -- and the walk is public -- left the
+  // container hearing entries and nothing behind them.
+  group('the pair holds whoever drives the walk', () {
+    test('when the walk is driven by hand and the container is never asked',
+        () async {
+      final dependencies = _TwoDisposers();
+
+      await dependencies.init(null).drain<void>();
+      observer.events.clear();
+
+      final byHand = <String>[];
+      await dependencies.root.dispose().forEach(byHand.add);
+
+      expect(
+        observer.events,
+        [
+          'disposal step _TwoDisposers b',
+          'disposal progress _TwoDisposers b',
+          'disposal step _TwoDisposers a',
+          'disposal progress _TwoDisposers a',
+        ],
+        reason: 'both halves arrive, outside any onDispose/onDisposed',
+      );
+      expect(byHand, ['b', 'a'], reason: 'the driver still gets the paths');
+    });
+
+    test('when the container joins a walk driven by hand', () async {
+      final parked = Completer<void>();
+      final dependencies = _ParkedDisposer(parked);
+
+      await dependencies.init(null).drain<void>();
+      observer.events.clear();
+
+      final byHand = <String>[];
+      dependencies.root.dispose().listen(byHand.add);
+      await pumpEventQueue();
+
+      final joined = dependencies.dispose();
+      await pumpEventQueue();
+
+      parked.complete();
+      await joined;
+
+      expect(observer.events, [
+        'disposal step _ParkedDisposer b',
+        'dispose _ParkedDisposer',
+        'disposal progress _ParkedDisposer b',
+        'disposal step _ParkedDisposer a',
+        'disposal progress _ParkedDisposer a',
+        'disposed _ParkedDisposer',
+      ]);
+      expect(byHand, ['b', 'a']);
+    });
+
+    // The mark is sent before the `yield`, and this is the test that holds it
+    // there: a cancelled `async*` resumes past its `await` and runs up to the
+    // next `yield`, but never past it. Sent after the `yield`, the exit of a
+    // disposer that actually finished would be lost for ever -- an entry with
+    // no exit over a resource that is already released.
+    test('when the walk is cancelled on a parked disposer', () async {
+      final parked = Completer<void>();
+      final dependencies = _ParkedDisposer(parked);
+
+      await dependencies.init(null).drain<void>();
+      observer.events.clear();
+
+      final byHand = <String>[];
+      final subscription = dependencies.root.dispose().listen(byHand.add);
+      await pumpEventQueue();
+
+      unawaited(subscription.cancel());
+      parked.complete();
+      await pumpEventQueue();
+
+      expect(
+        observer.events,
+        [
+          'disposal step _ParkedDisposer b',
+          'disposal progress _ParkedDisposer b',
+        ],
+        reason: 'the disposer finished, so its exit is due even though the '
+            'walk that started it was cancelled',
+      );
+
+      await dependencies.dispose();
+
+      expect(
+        observer.events,
+        [
+          'disposal step _ParkedDisposer b',
+          'disposal progress _ParkedDisposer b',
+          'dispose _ParkedDisposer',
+          'disposal step _ParkedDisposer a',
+          'disposal progress _ParkedDisposer a',
+          'disposed _ParkedDisposer',
+        ],
+        reason: 'the container picks up what is left, and b is not released '
+            'a second time',
+      );
+    });
+
+    test('is announced for a foreign child by the group above it', () async {
+      final dependencies = _ForeignChild();
+
+      await dependencies.init(null).drain<void>();
+      observer.events.clear();
+      await dependencies.dispose();
+
+      expect(
+        observer.events,
+        [
+          'dispose _ForeignChild',
+          'disposal progress _ForeignChild outer/foreign',
+          'disposal step _ForeignChild outer/own',
+          'disposal progress _ForeignChild outer/own',
+          'disposed _ForeignChild',
+        ],
+        reason: 'the foreign child has no channel of its own, so the group '
+            'speaks its exit; its entry stays unannounced, as it always was',
+      );
+    });
+
+    test('holds for a package root with no group above it', () async {
+      final dependencies = _RootLeaf();
+
+      await dependencies.init(null).drain<void>();
+      observer.events.clear();
+      await dependencies.dispose();
+
+      expect(observer.events, [
+        'dispose _RootLeaf',
+        'disposal step _RootLeaf solo',
+        'disposal progress _RootLeaf solo',
+        'disposed _RootLeaf',
+      ]);
+    });
+
+    test('holds for every arm of a concurrent group', () async {
+      final dependencies = _ConcurrentDisposers();
+
+      await dependencies.init(null).drain<void>();
+      observer.events.clear();
+      await dependencies.dispose();
+
+      final walk =
+          observer.events.where((e) => e.startsWith('disposal ')).toList();
+
+      expect(walk, hasLength(4), reason: 'two arms, two halves each');
+      for (final arm in ['a', 'b']) {
+        final entry = walk.indexOf('disposal step _ConcurrentDisposers $arm');
+        final exit =
+            walk.indexOf('disposal progress _ConcurrentDisposers $arm');
+        expect(entry, isNonNegative, reason: '$arm was announced');
+        expect(
+          exit,
+          greaterThan(entry),
+          reason: "$arm's exit follows its entry",
+        );
+      }
+    });
+
+    test('says nothing on a second dispose after the walk is over', () async {
+      final dependencies = _TwoDisposers();
+
+      await dependencies.init(null).drain<void>();
+      await dependencies.dispose();
+      observer.events.clear();
+      await dependencies.dispose();
+
+      expect(
+        observer.events.where((e) => e.startsWith('disposal ')),
+        isEmpty,
+        reason: 'everything was released the first time round',
+      );
+    });
+
+    test('says nothing for a container that was never initialized', () async {
+      final dependencies = _TwoDisposers();
+
+      await dependencies.dispose();
+
+      expect(observer.events, isEmpty);
+    });
+  });
+
   test('the composite observer forwards all three new hooks', () {
     final first = RecordingObserver();
     final second = RecordingObserver();
@@ -448,4 +636,64 @@ final class _FakeObservable implements ScopeObservable {
 
   @override
   final String debugLabel;
+}
+
+final class _TwoDisposers extends ScopeAutoDependencies<_TwoDisposers, void> {
+  @override
+  ScopeDependency buildDependencies(void context) => sequential('', [
+        dep('a', (handle) async {
+          handle.dispose = () async {};
+        }),
+        dep('b', (handle) async {
+          handle.dispose = () async {};
+        }),
+      ]);
+}
+
+final class _ParkedDisposer
+    extends ScopeAutoDependencies<_ParkedDisposer, void> {
+  _ParkedDisposer(this._parked);
+
+  final Completer<void> _parked;
+
+  @override
+  ScopeDependency buildDependencies(void context) => sequential('', [
+        dep('a', (handle) async {
+          handle.dispose = () async {};
+        }),
+        dep('b', (handle) async {
+          handle.dispose = () => _parked.future;
+        }),
+      ]);
+}
+
+final class _ForeignChild extends ScopeAutoDependencies<_ForeignChild, void> {
+  @override
+  ScopeDependency buildDependencies(void context) => sequential('outer', [
+        dep('own', (handle) async {
+          handle.dispose = () async {};
+        }),
+        _ForeignDependency(),
+      ]);
+}
+
+final class _RootLeaf extends ScopeAutoDependencies<_RootLeaf, void> {
+  @override
+  ScopeDependency buildDependencies(void context) =>
+      dep('solo', (handle) async {
+        handle.dispose = () async {};
+      });
+}
+
+final class _ConcurrentDisposers
+    extends ScopeAutoDependencies<_ConcurrentDisposers, void> {
+  @override
+  ScopeDependency buildDependencies(void context) => concurrent('', [
+        dep('a', (handle) async {
+          handle.dispose = () async {};
+        }),
+        dep('b', (handle) async {
+          handle.dispose = () async {};
+        }),
+      ]);
 }

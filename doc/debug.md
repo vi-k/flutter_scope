@@ -188,9 +188,19 @@ Two things the pairs promise, and one they do not:
   silence instead, so an unmatched entry always means what it looks like;
 - **a dependency of your own making announces no entry.** One that implements
   `ScopeDependency` rather than being built by `dep`, `sequential` or
-  `concurrent` has nowhere to take the mark from. Its `onProgress` still
-  arrives: that half travels the stream of `init()`, which is the part of the
-  contract such a dependency does implement.
+  `concurrent` has nowhere to take the mark from. Both of its exits still
+  arrive: `onProgress` travels the stream of `init()`, which is the part of
+  the contract such a dependency does implement, and its release is announced
+  for it — by the group above it as the path comes through, or, for such a
+  dependency standing as the whole tree, by the container itself.
+
+The disposal pair holds **whoever drives the walk.** Disposing of the tree by
+hand is a supported thing to do, and a container can also join a walk already
+running rather than start a second one; in both cases the container is not the
+one reading the stream. `onDisposalProgress` is sent when the disposer has
+returned, not when the path reaches a listener, so the pair survives all three.
+It also survives a walk that was cancelled while a disposer was parked: the
+release that did finish is still announced.
 
 Unlike `onProgress`, an entry is **not** passed on to the scope that owns the
 container — see the note at the end of the section below.

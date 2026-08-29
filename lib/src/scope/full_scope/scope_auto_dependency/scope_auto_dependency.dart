@@ -85,6 +85,8 @@ abstract base class ScopeAutoDependencies<T extends ScopeAutoDependencies<T, C>,
       onDisposalStepStarted: (path) => notifyObserver(
         (observer) => observer.onDisposalStepStarted(this, path),
       ),
+      onDisposalStepEnded: (path) =>
+          notifyObserver((observer) => observer.onDisposalProgress(this, path)),
     );
 
     return tree;
@@ -353,7 +355,13 @@ abstract base class ScopeAutoDependencies<T extends ScopeAutoDependencies<T, C>,
     notifyObserver((observer) => observer.onDispose(this));
     dependencies.dispose().listen(
       (path) {
-        notifyObserver((observer) => observer.onDisposalProgress(this, path));
+        // Only for a root of the caller's own making, which has no channel to
+        // announce from. A root of the package's own making has already sent
+        // this exit from inside the walk, and reporting it again here would
+        // double every step of a disposal the container drove itself.
+        if (dependencies is! ScopeDependencyMixin) {
+          notifyObserver((observer) => observer.onDisposalProgress(this, path));
+        }
       },
       onError: (Object error, StackTrace stackTrace) {
         notifyObserver(

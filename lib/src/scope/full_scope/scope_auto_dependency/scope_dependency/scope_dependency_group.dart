@@ -36,6 +36,7 @@ abstract base class ScopeDependencyGroup with ScopeDependencyMixin {
         onStepStarted: (path) => _onStepStarted?.call(_path(path)),
         onDisposalStepStarted: (path) =>
             _onDisposalStepStarted?.call(_path(path)),
+        onDisposalStepEnded: (path) => _onDisposalStepEnded?.call(_path(path)),
       );
     }
   }
@@ -131,6 +132,24 @@ abstract base class ScopeDependencyGroup with ScopeDependencyMixin {
 
   String _path(String name) => this.name.isEmpty ? name : '${this.name}/$name';
 
+  /// Announces the exit of [dependency]'s step for a child that cannot
+  /// announce it itself.
+  ///
+  /// A dependency of the caller's own making is not a [ScopeDependencyMixin]
+  /// and has no channel to be given, so the group speaks for it, from the one
+  /// place it sees that child's steps come back: the stream it is already
+  /// forwarding. The type test is also what keeps the exit from being
+  /// announced twice — a child of the package's own making has sent it from
+  /// inside itself before this path ever got here.
+  ///
+  /// Called before the path is passed upwards, so that the two halves keep the
+  /// order they have everywhere else.
+  void _announceExitFor(ScopeDependency dependency, String path) {
+    if (dependency is! ScopeDependencyMixin) {
+      _onDisposalStepEnded?.call(_path(path));
+    }
+  }
+
   @override
   String get wrappedName => '[${name.isEmpty ? 'group' : name}]';
 
@@ -203,6 +222,7 @@ final class _ScopeDependencySequential extends ScopeDependencyGroup {
         // Iterated rather than `yield*`-ed: an error inside a delegated stream
         // goes straight to the listener, where no `catch` of ours can see it.
         await for (final path in dependency.dispose()) {
+          _announceExitFor(dependency, path);
           yield _path(path);
         }
         // ignore: avoid_catching_errors
@@ -261,10 +281,18 @@ final class _ScopeDependencyConcurrent extends ScopeDependencyGroup {
     // over, as the sequential group passes on the first in walk order.
     yield* _disposalOrder()
         .map(
-          (dep) => dep.dispose().handleError(
+          (dep) => dep
+              .dispose()
+              .handleError(
                 (Object error, StackTrace stackTrace) =>
                     errors.add(AsyncError(error, stackTrace)),
-              ),
+              )
+              // Per arm, because the bridge needs to know which child a path
+              // came from, and after the merge that is gone.
+              .map((path) {
+            _announceExitFor(dep, path);
+            return path;
+          }),
         )
         ._mergeStreams()
         .map(_path);

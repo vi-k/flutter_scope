@@ -100,6 +100,15 @@ final class _ScopeDependencyImpl with ScopeDependencyMixin {
       if (result is Future<void>) {
         await result;
       }
+
+      // Before the `yield`, not after it, and this is load-bearing. A
+      // cancelled `async*` is not stopped where it stands: a body parked on an
+      // `await` resumes, runs up to the next `yield`, and stops there. Sent
+      // after the `yield`, the exit of a disposer that had actually finished
+      // would be lost for ever, leaving an entry with no exit over a resource
+      // that is already released -- the exact false positive the pair exists
+      // to rule out.
+      _onDisposalStepEnded?.call(name);
       yield name;
     } finally {
       _helper?._dep = null;

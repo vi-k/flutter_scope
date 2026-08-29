@@ -22,7 +22,17 @@
 * Added `ScopeObserver.onDisposalStepStarted(target, path)`, the same mark for
   the teardown. Sent only for a dependency that has a release to run, so an
   entry with no `onDisposalProgress` behind it always means a release that did
-  not come back.
+  not come back — it hung, or it threw, and an `onError` beside it tells those
+  two apart.
+* `onDisposalProgress` is now sent by the container itself, when the disposer
+  has returned, rather than from the stream of the disposal walk. The pair
+  therefore holds however the walk was started — by the container, by a caller
+  walking the tree by hand, or by a container that only joined a walk already
+  running — and it survives a walk cancelled while a disposer was parked. It
+  used to reach only whoever was reading the stream, so an observer watching a
+  container whose tree someone else disposed of saw every step enter and none
+  come back. A dependency of your own making is unaffected: its release is
+  announced for it, by the group above it or by the container.
 * `ScopePrintObserver` writes the three new events as `initialize <path>…`,
   `dispose <path>…` and `disposed <path>`. The last of those replaces the
   `progress: <path>` line a release used to print, so anything that reads its
