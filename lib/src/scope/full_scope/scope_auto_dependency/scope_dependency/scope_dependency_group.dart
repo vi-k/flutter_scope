@@ -309,15 +309,20 @@ extension<T> on Iterable<Stream<T>> {
     final controller = StreamController<T>(sync: true);
 
     controller.onListen = () {
-      // Collected before it is asked anything. `isEmpty` on a lazy iterable is
-      // answered by taking one step of it, and on a `map` that step calls the
-      // mapping function -- here, the one that asks a dependency for its
-      // stream -- and drops what it returns; the walk below then asks a second
-      // time. Both callers hand this a `List`, whose `map` answers `isEmpty`
-      // from `length` and never runs the function, so nothing came of it; the
-      // one that used to stand here was a lazy `where().map()`, and a
-      // dependency whose stream begins its work when it is made rather than
-      // when it is listened to would have begun twice.
+      // Collected before it is asked anything, so that the shape of the chain
+      // handed in cannot matter. Whether `isEmpty` walks at all depends on
+      // which operation is outermost: `MappedIterable` overrides it and
+      // delegates to its source, so a chain ending in `map` never runs the
+      // mapping function for it; `WhereIterable` has no such override and
+      // answers by taking one step, which runs whatever `map` sits further in
+      // -- and the walk below then runs that one again.
+      //
+      // Neither caller ends on a `where` today, so nothing has come of it. It
+      // is collected anyway because the function at stake is the one that asks
+      // a dependency for its stream: a dependency whose stream begins its work
+      // when it is made rather than when it is listened to would begin twice,
+      // and that is too quiet a failure to leave hanging on which operation
+      // happens to be last.
       final streams = toList(growable: false);
       if (streams.isEmpty) {
         controller.close(); // ignore: discarded_futures
