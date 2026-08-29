@@ -309,14 +309,24 @@ extension<T> on Iterable<Stream<T>> {
     final controller = StreamController<T>(sync: true);
 
     controller.onListen = () {
-      if (isEmpty) {
+      // Collected before it is asked anything. `isEmpty` on a lazy iterable is
+      // answered by taking one step of it, and on a `map` that step calls the
+      // mapping function -- here, the one that asks a dependency for its
+      // stream -- and drops what it returns; the walk below then asks a second
+      // time. Both callers hand this a `List`, whose `map` answers `isEmpty`
+      // from `length` and never runs the function, so nothing came of it; the
+      // one that used to stand here was a lazy `where().map()`, and a
+      // dependency whose stream begins its work when it is made rather than
+      // when it is listened to would have begun twice.
+      final streams = toList(growable: false);
+      if (streams.isEmpty) {
         controller.close(); // ignore: discarded_futures
         return;
       }
 
       final subscriptions = <StreamSubscription<T>>[];
 
-      for (final stream in this) {
+      for (final stream in streams) {
         final subscription =
             stream.listen(controller.add, onError: controller.addError);
         subscriptions.add(subscription);

@@ -58,8 +58,7 @@ ScopeConfig.observer = const ScopeCompositeObserver([
 It is part of the package rather than something to write by hand, and that is
 the point of it. The empty hooks above are what keep an ordinary observer
 compiling when a new one is added later — and a delegate is the one subclass
-that
-gains nothing from them: the new hook would arrive with the empty
+that gains nothing from them: the new hook would arrive with the empty
 implementation of the base, and every observer behind the delegate would stop
 hearing that event without a word from anywhere. This one is written with the
 class it forwards. An observer that throws does not stop the ones after it

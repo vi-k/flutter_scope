@@ -306,6 +306,26 @@ void _diagnosticsGroup() {
     });
   });
 
+  // A group hands its children's streams to `_mergeStreams`, which used to ask
+  // the iterable whether it was empty before walking it. On a lazy `map` that
+  // question is not free: it calls the mapping function for the first element
+  // -- `dep.init()`, `dep.dispose()` -- and throws the answer away, and the
+  // walk then calls it again. The package's own leaves are `async*`, whose
+  // bodies wait to be listened to, so the discarded stream did nothing; a
+  // stream that starts its work when it is made does not have that manner.
+  group('a concurrent group', () {
+    test('asks each child for its stream exactly once', () async {
+      final dependency = _CountingDependency();
+      final tree = ScopeDependency.concurrent('', [dependency]);
+
+      await tree.init().drain<void>();
+      expect(dependency.initCalls, 1);
+
+      await tree.dispose().drain<void>();
+      expect(dependency.disposeCalls, 1);
+    });
+  });
+
   // `ScopeDependency` and its `dispose()` are public, and leading a tree by
   // hand is what they are for. A walk the caller stops halfway leaves whatever
   // it never reached still holding what it took, so the tree has to go on
@@ -426,6 +446,77 @@ void _diagnosticsGroup() {
       expect(log, ['b started', 'b released', 'a released']);
     });
 
+    // Joining is only half an answer. The walk joined can end without having
+    // disposed of anything -- a caller stops it -- and the joiner then holds a
+    // future that completed, a stream that closed, and a tree that still needs
+    // disposing of. Told "done", it goes on to use what it believes it has
+    // given back: the very failure the join was written to prevent, moved one
+    // caller along.
+    test('picks up a walk it joined that was stopped halfway', () async {
+      final released = <String>[];
+      final parked = Completer<void>();
+
+      final tree = ScopeDependency.sequential('', [
+        ScopeDependency('a', (handle) {
+          handle.dispose = () async => released.add('a');
+        }),
+        ScopeDependency('b', (handle) {
+          handle.dispose = () async {
+            released.add('b');
+            await parked.future;
+          };
+        }),
+      ]);
+
+      await tree.init().drain<void>();
+
+      final walk = tree.dispose().listen(null);
+      await pumpEventQueue();
+      expect(released, ['b']);
+
+      final joined = tree.dispose().drain<void>();
+      await pumpEventQueue();
+
+      final cancelled = walk.cancel();
+      parked.complete();
+      await cancelled;
+      await joined;
+
+      expect(
+        released,
+        ['b', 'a'],
+        reason: 'the joiner is the caller who still wants the disposal done',
+      );
+      expect(tree.disposalRequired, isFalse);
+    });
+
+    // The other half of what a joiner is owed. A walk that ended by failing
+    // ended, and both callers asked for the same disposal: telling the second
+    // that it went well is the same lie in a different place.
+    test('carries the failure of the walk it joined', () async {
+      final parked = Completer<void>();
+
+      final tree = ScopeDependency.sequential('', [
+        ScopeDependency('a', (handle) {
+          handle.dispose = () async {
+            await parked.future;
+            throw StateError('boom');
+          };
+        }),
+      ]);
+
+      await tree.init().drain<void>();
+
+      final first = tree.dispose().drain<void>();
+      await pumpEventQueue();
+      final joined = tree.dispose().drain<void>();
+      await pumpEventQueue();
+      parked.complete();
+
+      await expectLater(first, throwsA(isA<ScopeDependencyException>()));
+      await expectLater(joined, throwsA(isA<ScopeDependencyException>()));
+    });
+
     // `_markNothingToDispose` keeps `Initial` on a child that never ran, and
     // says why: "not initialized" is the true thing to say about it. The node
     // the walk itself passes through was saying the opposite.
@@ -443,5 +534,79 @@ void _diagnosticsGroup() {
         reason: 'the child already said so; the root disagreed with it',
       );
     });
+
+    // Saying "not initialized" is only half of it: the walk that passed
+    // through also wrote down that the disposal was done, and nothing took
+    // that back. So the tree could be initialized -- `init()` asserts on
+    // `Initial`, and `Initial` is what it now says -- and came up already
+    // marked as disposed of, with `disposalRequired` false from the first
+    // instant. The teardown after it walked past everything.
+    test('can still be initialized and disposed of after that', () async {
+      final released = <String>[];
+      final tree = ScopeDependency.sequential('', [
+        ScopeDependency('a', (handle) {
+          handle.dispose = () async => released.add('a');
+        }),
+      ]);
+
+      await tree.dispose().drain<void>();
+      await tree.init().drain<void>();
+
+      expect(
+        tree.disposalRequired,
+        isTrue,
+        reason: 'it holds what the initializer just took',
+      );
+
+      await tree.dispose().drain<void>();
+
+      expect(released, ['a']);
+    });
   });
+}
+
+/// A dependency of the caller's own making that counts how often it is asked
+/// for a stream, and starts its work when it is made rather than when it is
+/// listened to -- `Stream.fromFuture` is the shape that does it.
+final class _CountingDependency implements ScopeDependency {
+  int initCalls = 0;
+  int disposeCalls = 0;
+
+  @override
+  final String name = 'counted';
+
+  @override
+  final int count = 1;
+
+  @override
+  ScopeDependencyState get state => _state;
+  ScopeDependencyState _state = const ScopeDependencyInitial();
+
+  @override
+  bool get disposalRequired => _state is ScopeDependencyInitialized;
+
+  @override
+  Stream<String> init() {
+    initCalls++;
+    _state = const ScopeDependencyInitialized();
+
+    return Stream.fromFuture(Future.value(name));
+  }
+
+  @override
+  void onUnmount() {}
+
+  @override
+  Stream<String> dispose() {
+    disposeCalls++;
+    _state = const ScopeDependencyDisposed();
+
+    return Stream.fromFuture(Future.value(name));
+  }
+
+  @override
+  String get wrappedName => '"$name"';
+
+  @override
+  String stateToString() => '$state';
 }

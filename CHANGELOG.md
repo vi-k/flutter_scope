@@ -52,11 +52,16 @@
   disposer is built on top of. It also reported itself finished while the
   first was still holding. A second call now joins the walk already running:
   it yields no paths of its own, closes when that walk closes, and raises what
-  it raised.
+  it raised. A walk stopped halfway is not a walk that finished, so a joiner
+  over one of those is not told the disposal is over: it walks the tree
+  itself, being a caller who asked for exactly that.
 * Fixed: a tree built and then let go of without ever being initialized left
   its root saying `ScopeDependencyDisposed` while every child under it
   correctly said `ScopeDependencyInitial`, so a `flattenDependencies()` dump
-  of it contradicted itself.
+  of it contradicted itself. Such a tree can be initialized afterwards, and
+  `init()` now takes back the note the disposal walk left — without that, the
+  tree came up already marked as disposed of and the next teardown walked
+  past everything the initializer had taken.
 
 ## 0.12.0
 

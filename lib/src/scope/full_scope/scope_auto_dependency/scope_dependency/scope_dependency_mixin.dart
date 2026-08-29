@@ -104,6 +104,16 @@ mixin ScopeDependencyMixin implements ScopeDependency, ScopeObservable {
       );
     }
     _initializing = true;
+    // A tree that is being initialized is not a tree that has been disposed
+    // of, whatever a previous walk wrote down. It matters for the one tree
+    // that can be walked before it is ever initialized: nothing was released,
+    // because nothing had been taken, but the walk still marked the disposal
+    // done -- and the node kept saying [ScopeDependencyInitial], which is what
+    // lets this method run at all. Left standing, that mark made the tree
+    // answer `disposalRequired` with `false` from the first instant of a life
+    // it had only just begun, and the teardown after it walked past
+    // everything the initializer had taken.
+    _isDisposalDone = false;
 
     try {
       yield* runStreamGuarded(
@@ -160,10 +170,27 @@ mixin ScopeDependencyMixin implements ScopeDependency, ScopeObservable {
     // own: they were handed to whoever asked first, and a walk cannot yield
     // them twice without every node keeping a copy of its own history for as
     // long as it lives.
-    if (_disposalInFlight case final inFlight?) {
-      await inFlight.future;
+    while (true) {
+      final running = _disposalInFlight;
+      if (running == null) {
+        break;
+      }
 
-      return;
+      // Raises what that walk raised, if it raised anything: both callers
+      // asked for the same disposal, and telling the second that it went well
+      // is the same untruth as telling it the walk is over when it is not.
+      await running.future;
+
+      // Over, and everything it was due to release is released. Its work
+      // counts as ours.
+      if (_isDisposalDone) {
+        return;
+      }
+
+      // Stopped halfway instead -- a caller cancelled it. The tree still needs
+      // disposing of, and this caller is one who asked for that, so the loop
+      // goes round: either somebody else has started a walk in the meantime
+      // and it is joined too, or the way is clear and it is walked below.
     }
 
     final inFlight = Completer<void>();
@@ -173,7 +200,7 @@ mixin ScopeDependencyMixin implements ScopeDependency, ScopeObservable {
     // one that swallows it: `catchError` answers a future of its own, and a
     // joiner still hears what the walk raised.
     unawaited(inFlight.future.catchError((Object _) {}));
-    AsyncError? failure;
+    _disposalFailure = null;
 
     // Whether the walk got to its end, however it got there.
     //
@@ -214,22 +241,11 @@ mixin ScopeDependencyMixin implements ScopeDependency, ScopeObservable {
         ScopeDependencyInitial() => _state,
         _ => const ScopeDependencyDisposed(),
       };
-      // ignore: avoid_catching_errors
-    } on Object catch (error, stackTrace) {
-      // A walk that ended by reporting a failure ended all the same, and is
-      // done. Both groups collect what their children threw and carry the
-      // first one out after the walk is over, and a leaf whose disposer threw
-      // has no second step to take. Left out of the count, a disposal that
-      // failed would go on asking to be disposed of for ever, and the
-      // container it belongs to could never be initialized again.
-      walkEnded = true;
-      failure = AsyncError(error, stackTrace);
-      rethrow;
     } finally {
       // Let go of the walk before the joiners are woken, so that one of them
       // starting a walk of its own from the continuation finds the way clear.
       _disposalInFlight = null;
-      if (failure case final failure?) {
+      if (_disposalFailure case final failure?) {
         inFlight.completeError(failure.error, failure.stackTrace);
       } else {
         inFlight.complete();
@@ -251,6 +267,16 @@ mixin ScopeDependencyMixin implements ScopeDependency, ScopeObservable {
   /// call that picks it up must not be turned into a joiner of something that
   /// is already over.
   Completer<void>? _disposalInFlight;
+
+  /// What the walk running right now has failed with, for the joiners.
+  ///
+  /// Recorded where the failure actually passes rather than caught around the
+  /// walk: `yield*` hands a delegated stream's error to the listener and goes
+  /// on with the next statement, so a `catch` around it never runs and the
+  /// generator finishes as though nothing had gone wrong. A `catch` is what
+  /// stood here, and it made this class promise the joiners a failure it then
+  /// never gave them.
+  AsyncError? _disposalFailure;
 
   void _addErrorToState(
     Object error,
@@ -315,6 +341,9 @@ mixin ScopeDependencyMixin implements ScopeDependency, ScopeObservable {
   }
 
   void _handleDisposalError(Object error, StackTrace stackTrace) {
+    // Kept for whoever joined this walk; the first one is the one they get,
+    // as it is the one the walk itself carries out.
+    _disposalFailure ??= AsyncError(error, stackTrace);
     _handleError(error, stackTrace, ScopeDependencyDisposalFailed.new);
   }
 
