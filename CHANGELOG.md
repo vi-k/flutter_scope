@@ -33,6 +33,13 @@
   container whose tree someone else disposed of saw every step enter and none
   come back. A dependency of your own making is unaffected: its release is
   announced for it, by the group above it or by the container.
+* `ScopeObserver.onError` for a failed release is now sent by the container the
+  same way, and arrives right behind the entry it ends rather than at the end
+  of the walk. A disposal driven by hand used to deliver the failure only to
+  whoever was driving, so an observer that had already heard the entry — sent
+  on the container's behalf whoever drives — was left with an unmatched entry
+  and nothing to say it had failed, which is exactly what a hung release looks
+  like. The error names the dependency as it always did.
 * `ScopePrintObserver` writes the three new events as `initialize <path>…`,
   `dispose <path>…` and `disposed <path>`. The last of those replaces the
   `progress: <path>` line a release used to print, so anything that reads its

@@ -87,6 +87,17 @@ abstract base class ScopeAutoDependencies<T extends ScopeAutoDependencies<T, C>,
       ),
       onDisposalStepEnded: (path) =>
           notifyObserver((observer) => observer.onDisposalProgress(this, path)),
+      onDisposalStepFailed: (path, error, stackTrace) => notifyObserver(
+        (observer) => observer.onError(
+          this,
+          ScopePhase.disposal,
+          // Named the way the failure that travels the walk is named: the
+          // observer is told which dependency failed, and `onError` has no
+          // path of its own to tell it with.
+          ScopeDependencyException(path, error, stackTrace),
+          stackTrace,
+        ),
+      ),
     );
 
     return tree;
@@ -364,10 +375,16 @@ abstract base class ScopeAutoDependencies<T extends ScopeAutoDependencies<T, C>,
         }
       },
       onError: (Object error, StackTrace stackTrace) {
-        notifyObserver(
-          (observer) =>
-              observer.onError(this, ScopePhase.disposal, error, stackTrace),
-        );
+        // The observer half only for a root of the caller's own making, on the
+        // same terms as the exit above: a root of the package's own making has
+        // announced this failure from inside the walk, where it happened and
+        // beside the entry it ends.
+        if (dependencies is! ScopeDependencyMixin) {
+          notifyObserver(
+            (observer) =>
+                observer.onError(this, ScopePhase.disposal, error, stackTrace),
+          );
+        }
 
         // Reported through FlutterError too, not only the observer: this
         // method never re-throws -- the teardown above it goes on whatever

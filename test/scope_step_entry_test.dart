@@ -219,18 +219,23 @@ void main() {
       expect(observer.events, [
         'dispose _FailingDisposer',
         'disposal step _FailingDisposer storage/cache',
+        'error _FailingDisposer disposal storage/cache: Bad state: boom',
         'disposal step _FailingDisposer storage/db',
         'disposal progress _FailingDisposer storage/db',
-        'error _FailingDisposer disposal storage/cache: Bad state: boom',
         'disposed _FailingDisposer',
       ]);
       // Three things at once, and the order is the point of writing the whole
       // list. `storage/cache` was entered and never came back, which is the
-      // shape of a release that did not finish. `storage/db` was released all
-      // the same -- one dependency that cannot let go is no reason to walk
-      // away from the ones below it. And the failure arrives after the walk,
-      // not where it happened: both groups collect what their children threw
-      // and carry the first one out at the end.
+      // shape of a release that did not finish -- and the failure that ended
+      // it arrives immediately behind it, so the two are read together and
+      // the entry never looks like a step that hung. `storage/db` was
+      // released all the same: one dependency that cannot let go is no reason
+      // to walk away from the ones below it.
+      //
+      // The failure used to arrive at the end of the walk instead, carried
+      // out by the groups that collected it. That was fine while the
+      // container was the only thing that could drive a disposal; it is not,
+      // and a walk driven by hand never reached that listener at all.
     });
 
     // The wiring is put on the root by `init`, and `_prepareDependencies` may
@@ -445,6 +450,34 @@ void main() {
       }
     });
 
+    // The bridge has a branch of its own in each group, and the test above
+    // walks only the sequential one: a concurrent group of package leaves
+    // announces from their own channels and never reaches the bridge at all.
+    test('is announced for a foreign child of a concurrent group', () async {
+      final dependencies = _ForeignInConcurrent();
+
+      await dependencies.init(null).drain<void>();
+      observer.events.clear();
+      await dependencies.dispose();
+
+      final walk =
+          observer.events.where((e) => e.startsWith('disposal ')).toList();
+
+      expect(
+        walk,
+        containsAll([
+          'disposal progress _ForeignInConcurrent g/foreign',
+          'disposal step _ForeignInConcurrent g/own',
+          'disposal progress _ForeignInConcurrent g/own',
+        ]),
+      );
+      expect(
+        walk.where((e) => e.contains('foreign')),
+        ['disposal progress _ForeignInConcurrent g/foreign'],
+        reason: 'the foreign arm has an exit and, as ever, no entry',
+      );
+    });
+
     test('says nothing on a second dispose after the walk is over', () async {
       final dependencies = _TwoDisposers();
 
@@ -460,7 +493,34 @@ void main() {
       );
     });
 
-    test('says nothing for a container that was never initialized', () async {
+    // The entry is sent on the container's behalf however the walk was
+    // started, so the failure that ends that step has to reach the container
+    // too. Driven by hand, the error used to go only to the driver: the
+    // observer saw an entry with no exit and nothing to say it had failed,
+    // which is indistinguishable from a release that hung.
+    test('carries the failure of a walk driven by hand', () async {
+      final dependencies = _FailingDisposer();
+
+      await dependencies.init(null).drain<void>();
+      observer.events.clear();
+
+      await dependencies.root.dispose().drain<void>().onError((_, __) {});
+
+      expect(observer.events, [
+        'disposal step _FailingDisposer storage/cache',
+        'error _FailingDisposer disposal storage/cache: Bad state: boom',
+        'disposal step _FailingDisposer storage/db',
+        'disposal progress _FailingDisposer storage/db',
+      ]);
+    });
+
+    // Not the design's "a tree built and then disposed of before `init`":
+    // that one is unreachable through a container, because `init` is an
+    // `async*` and `_prepareDependencies` — the only thing that ever builds
+    // the tree — does not run until the stream is listened to. A container
+    // that was never initialized has no tree at all, and this is what that
+    // looks like from outside.
+    test('says nothing for a container with no tree behind it', () async {
       final dependencies = _TwoDisposers();
 
       await dependencies.dispose();
@@ -695,5 +755,16 @@ final class _ConcurrentDisposers
         dep('b', (handle) async {
           handle.dispose = () async {};
         }),
+      ]);
+}
+
+final class _ForeignInConcurrent
+    extends ScopeAutoDependencies<_ForeignInConcurrent, void> {
+  @override
+  ScopeDependency buildDependencies(void context) => concurrent('g', [
+        dep('own', (handle) async {
+          handle.dispose = () async {};
+        }),
+        _ForeignDependency(),
       ]);
 }

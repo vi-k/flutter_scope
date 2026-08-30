@@ -110,6 +110,14 @@ final class _ScopeDependencyImpl with ScopeDependencyMixin {
       // to rule out.
       _onDisposalStepEnded?.call(name);
       yield name;
+      // ignore: avoid_catching_errors
+    } on Object catch (error, stackTrace) {
+      // The third thing an entry can end with. A cancelled walk does not come
+      // through here -- a cancelled `async*` runs its `finally` and not its
+      // `catch`, checked on 3.6.0 and 3.13.0 -- so this fires for a throw and
+      // nothing else.
+      _onDisposalStepFailed?.call(name, error, stackTrace);
+      rethrow;
     } finally {
       _helper?._dep = null;
       _helper = null;

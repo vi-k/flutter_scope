@@ -119,9 +119,13 @@ base class ScopeObserver {
   /// asynchronous release to run and is walked past in silence. So every path
   /// announced here is one [onDisposalProgress] is due for.
   ///
-  /// An entry with no exit behind it means the release did not come back —
-  /// it hung, *or* it threw. The two are told apart by an [onError] carrying
-  /// the same phase, which arrives beside the unmatched entry.
+  /// An entry has three ends, and only two of them are events: the exit, an
+  /// [onError] carrying [ScopePhase.disposal], and silence. So an entry with
+  /// no exit and no error beside it is a release still running — or one that
+  /// never came back, which looks the same and is the point of the pair.
+  ///
+  /// All three travel with the entry, from the walk itself, so they hold
+  /// however the disposal was started — see [onDisposalProgress].
   void onDisposalStepStarted(ScopeObservable target, String path) {}
 
   /// One step of a disposal is done; [path] names the dependency released.
@@ -140,6 +144,10 @@ base class ScopeObserver {
   /// and then only the driver heard it: an observer watching a container whose
   /// tree someone else was disposing of saw every step enter and none come
   /// back.
+  ///
+  /// The failure that ends a step travels the same way and arrives in the
+  /// same place — right behind the entry it ends, rather than at the end of
+  /// the walk, where the groups used to carry it out.
   ///
   /// One walk, one observer: [ScopeConfig.observer] is read afresh for each
   /// event, so replacing it while a disposer is parked hands the entry to the

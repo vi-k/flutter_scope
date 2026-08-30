@@ -37,6 +37,8 @@ abstract base class ScopeDependencyGroup with ScopeDependencyMixin {
         onDisposalStepStarted: (path) =>
             _onDisposalStepStarted?.call(_path(path)),
         onDisposalStepEnded: (path) => _onDisposalStepEnded?.call(_path(path)),
+        onDisposalStepFailed: (path, error, stackTrace) =>
+            _onDisposalStepFailed?.call(_path(path), error, stackTrace),
       );
     }
   }
@@ -150,6 +152,21 @@ abstract base class ScopeDependencyGroup with ScopeDependencyMixin {
     }
   }
 
+  /// The same, for the throw that ends a step instead of an exit.
+  ///
+  /// A child of the caller's own making cannot announce its own failure any
+  /// more than it can announce its own exit, and the group sees both in the
+  /// one place: the stream it is forwarding.
+  void _announceFailureFor(
+    ScopeDependency dependency,
+    Object error,
+    StackTrace stackTrace,
+  ) {
+    if (dependency is! ScopeDependencyMixin) {
+      _onDisposalStepFailed?.call(_path(dependency.name), error, stackTrace);
+    }
+  }
+
   @override
   String get wrappedName => '[${name.isEmpty ? 'group' : name}]';
 
@@ -231,6 +248,7 @@ final class _ScopeDependencySequential extends ScopeDependencyGroup {
         // ones below it, which are still holding resources of their own. Each
         // failure is already recorded on the dependency it belongs to; the
         // first one is passed upwards once the walk is over.
+        _announceFailureFor(dependency, error, stackTrace);
         errors.add(AsyncError(error, stackTrace));
       }
     }
@@ -283,10 +301,10 @@ final class _ScopeDependencyConcurrent extends ScopeDependencyGroup {
         .map(
           (dep) => dep
               .dispose()
-              .handleError(
-                (Object error, StackTrace stackTrace) =>
-                    errors.add(AsyncError(error, stackTrace)),
-              )
+              .handleError((Object error, StackTrace stackTrace) {
+            _announceFailureFor(dep, error, stackTrace);
+            errors.add(AsyncError(error, stackTrace));
+          })
               // Per arm, because the bridge needs to know which child a path
               // came from, and after the merge that is gone.
               .map((path) {

@@ -192,7 +192,16 @@ Two things the pairs promise, and one they do not:
   arrive: `onProgress` travels the stream of `init()`, which is the part of
   the contract such a dependency does implement, and its release is announced
   for it — by the group above it as the path comes through, or, for such a
-  dependency standing as the whole tree, by the container itself.
+  dependency standing as the whole tree, by the container's own listener. That
+  last case is the one place the guarantee below stops: a tree whose root is
+  yours and whose disposal someone else drives is not announced at all, because
+  the container is not the one reading the stream and has nothing else to read.
+
+An entry has three ends, and only two of them are events: the exit, an
+`onError` carrying `ScopePhase.disposal`, and silence. The failure arrives
+right behind the entry it ends, so a release that threw is never mistaken for
+one that hung — and an entry with nothing behind it means the step is still
+running, or never came back.
 
 The disposal pair holds **whoever drives the walk.** Disposing of the tree by
 hand is a supported thing to do, and a container can also join a walk already

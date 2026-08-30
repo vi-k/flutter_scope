@@ -72,6 +72,24 @@ mixin ScopeDependencyMixin implements ScopeDependency, ScopeObservable {
   /// release that hung.
   void Function(String path)? _onDisposalStepEnded;
 
+  /// Told what ended a step of this subtree, when what ended it was a throw.
+  ///
+  /// The third outcome an entry can have, beside the exit and the silence of a
+  /// step still running. Without it an observer that heard the entry has no
+  /// way to tell a release that failed from one that hung — and it heard that
+  /// entry on the container's behalf however the walk was started, so it has
+  /// to hear this the same way. The failure used to reach the container only
+  /// through the stream of the walk, which belongs to whoever subscribed.
+  ///
+  /// Carries the path for the same reason the other two do: the name of the
+  /// failing dependency is assembled on the way up, by the same `_path` the
+  /// marks travel through, and [ScopeObserver.onError] is handed a
+  /// [ScopeDependencyException] built from it at the top. Reported from the
+  /// node itself, the name would be the leaf's own and the groups above it
+  /// would be missing.
+  void Function(String path, Object error, StackTrace stackTrace)?
+      _onDisposalStepFailed;
+
   /// Points both entry channels of [dependency] at the given callbacks.
   ///
   /// The one place either channel is ever assigned. It used to be two
@@ -96,6 +114,8 @@ mixin ScopeDependencyMixin implements ScopeDependency, ScopeObservable {
     required void Function(String path) onStepStarted,
     required void Function(String path) onDisposalStepStarted,
     required void Function(String path) onDisposalStepEnded,
+    required void Function(String path, Object error, StackTrace stackTrace)
+        onDisposalStepFailed,
   }) {
     if (dependency is! ScopeDependencyMixin) {
       return;
@@ -104,7 +124,8 @@ mixin ScopeDependencyMixin implements ScopeDependency, ScopeObservable {
     dependency
       .._onStepStarted = onStepStarted
       .._onDisposalStepStarted = onDisposalStepStarted
-      .._onDisposalStepEnded = onDisposalStepEnded;
+      .._onDisposalStepEnded = onDisposalStepEnded
+      .._onDisposalStepFailed = onDisposalStepFailed;
   }
 
   /// The initialization step itself, run and accounted for by [init].
