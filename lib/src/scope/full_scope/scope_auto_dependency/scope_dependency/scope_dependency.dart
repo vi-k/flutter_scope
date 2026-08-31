@@ -89,7 +89,17 @@ extension ScopeDependencyExtension on ScopeDependency {
         ScopeDependencyAnySuccess() || ScopeDependencyAnyCancelled() => false,
       };
 
-  /// Whether the disposal is over, including when there was nothing to do.
+  /// Whether this dependency stands in [ScopeDependencyDisposed].
+  ///
+  /// Not the same question as "has the teardown run", and it used to be
+  /// written as though it were. A dependency that failed keeps
+  /// [ScopeDependencyFailed] through its own disposal on purpose — the list of
+  /// errors is the only record of what went wrong, and the state is where that
+  /// list lives — so a tree released by `autoDisposeOnError` is disposed of,
+  /// holds nothing, and answers `false` here.
+  ///
+  /// What says there is nothing left to release is [disposalRequired]. This
+  /// getter names the state.
   bool get isDisposed => switch (state) {
         ScopeDependencyDisposed() => true,
         ScopeDependencyAnySuccess() ||

@@ -409,9 +409,48 @@ void main() {
       );
     });
   });
+
+  // L1 of the sixth review. The family promises a controller created,
+  // initialized and released on every path, and it was taking ones that had
+  // already been through all three: `performInit` on such a controller is a
+  // documented no-op, so the initialization ran to its end over a dead one and
+  // the ready branch went up above it, `mounted == false` and nothing said so.
+  testWidgets('refuses a controller that has already been through it', (
+    tester,
+  ) async {
+    final controller = _TestController();
+
+    await tester.pumpWidget(_Host(controller: controller));
+    await tester.pumpAndSettle();
+
+    await tester.pumpWidget(
+      const Directionality(
+        textDirection: TextDirection.ltr,
+        child: SizedBox.shrink(),
+      ),
+    );
+    await settle(tester, until: () => controller.calls.contains('dispose'));
+
+    expect(
+      controller.calls,
+      ['init', 'onUnmount', 'dispose'],
+      reason: 'control: the first scope did take it through the sequence',
+    );
+
+    await tester.pumpWidget(_Host(controller: controller));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.textContaining('createController'),
+      findsOneWidget,
+      reason: 'the refusal names the hook that handed the controller over, '
+          'which is where the mistake is',
+    );
+  });
 }
 
 /// Reads the controller from the context, the way a descendant does.
+
 final class _Reader extends StatelessWidget {
   const _Reader();
 

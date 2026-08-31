@@ -37,7 +37,6 @@
   for good, the framework having delivered it once. A page whose builder reads
   the theme could sit in the old one, indefinitely, while the rest of the app
   changed.
-
 * **Breaking:** a dependency container no longer reports its disposal through
   `ScopeObserver.onProgress`. The release of each dependency arrives at the
   new `onDisposalProgress(target, path)` instead, so `onProgress` now means
@@ -157,6 +156,62 @@
   `init()` now takes back the note the disposal walk left — without that, the
   tree came up already marked as disposed of and the next teardown walked
   past everything the initializer had taken.
+* Fixed: a `ScopeNotifier` whose first value refused the listener — one already
+  disposed of, or any `Listenable` of your own that says no — went on moving
+  the subscription to every later value, while the teardown went on asking
+  whether the initialization had ever subscribed. The listener was left behind
+  on a live notifier with nothing able to remove it, and its next notification
+  reached an element that no longer exists. Such an element shows the
+  `ErrorWidget` from then on and for good, so it now subscribes to nothing.
+* Fixed: `Listenable.select` counted a listener that threw as having received
+  the value, so the next notification carrying that same value was filtered out
+  as "no change" and the listener was never told at all. The listener most
+  likely to throw is a `setState` from inside somebody else's build, which
+  raises in debug and does nothing in release — the two builds disagreed about
+  what the widget showed from then on. The value is taken back when the
+  listener fails, and the next notification is a change again.
+* Fixed: `StateAsNotifier.addListener` built a fresh notifier when it was
+  called from the tail of its own `State.dispose()` — `mounted` stays true for
+  the whole of that call, so the guard was open while the mixin had already
+  let its notifier go. Nothing disposes of that one and nothing ever notifies
+  it. The mixin now knows it is going.
+* Fixed: `CompositeListenableSubscription.cancel()` stopped where a member
+  refused to be cancelled, leaving every member behind it still listening —
+  which is the leak the composite exists to prevent. It now cancels them all,
+  raises the first failure and reports the rest. `removeListener` on a
+  `ChangeNotifier` cannot throw, so this is for a `Listenable` of your own.
+* Fixed: `notifyDependents()` arriving after the scope has left the tree threw
+  the framework's bare assertion about a defunct element — from a subscription
+  not taken off in `onUnmount`, or from a teardown of yours reporting as it
+  goes. A report with nobody left to hear it is dropped, which is the rule the
+  rest of the package already followed.
+* Fixed: a `LiteScope` whose `buildOnWaiting()` returns `null` without a
+  `buildOnProgress()` to fall back on used to be told that it "overrides
+  `initScope()` but not `buildOnProgress()`" — two statements that may both be
+  untrue of it, and neither of them the branch it is missing. The message now
+  names both branches and what `null` there means.
+* Fixed: a teardown that failed while a `close()` was waiting for its
+  screenshot was announced twice — once to the caller of `close()`, and once
+  more through the report that exists for a walk with nobody waiting for it.
+* Added, in debug: `AsyncControllerScope` and `AsyncControllerScopeBase` refuse
+  a `createController` that hands over a controller which has already been
+  through the family. `performInit` on one of those is a documented no-op, so
+  the ready branch used to go up over a controller that was not running, with
+  nothing anywhere saying so. Cached and reused instances are what this
+  catches; the assertion costs nothing in release.
+* `Listenable.select` no longer calls a listener after its subscription has
+  been cancelled, for a `Listenable` that dispatches over a copy of its list.
+* The refusal `CompositeListenableSubscription` raises when something is added
+  after `cancel()` now names `cancel()` — the call that ended the composite —
+  rather than `add()`, the call being refused.
+* `ScopeDependency.isDisposed` says in its dartdoc what it actually answers:
+  which state the dependency stands in, not whether the teardown has run. A
+  dependency that failed keeps `ScopeDependencyFailed` through its own
+  disposal, because the error list lives in the state, so a tree released by
+  `autoDisposeOnError` holds nothing and still answers `false`.
+  `disposalRequired` is the one that says there is nothing left to release.
+* `AsyncDataScopeBase.onUnmount` no longer promises a call "on the way out of a
+  `close()`": that family has no `close()`.
 
 ## 0.12.0
 

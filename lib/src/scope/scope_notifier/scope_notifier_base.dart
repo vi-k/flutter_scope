@@ -103,6 +103,18 @@ final class _ScopeNotifierElement<W extends ScopeNotifierBase<W, M>,
 
     super.update(newWidget);
 
+    // Nothing to move where nothing was ever added. `init()` sets the flag
+    // after it subscribes, so a value that refused the listener -- one already
+    // disposed of, or any `Listenable` of the caller's own that says no --
+    // leaves it down, and that element is an `ErrorWidget` from then on and
+    // for good. Moved on regardless, as this used to do, the subscription
+    // landed on the new value while the teardown went on asking the flag: the
+    // listener stayed behind on a live notifier with nothing left to remove
+    // it, and its next notification reached a defunct element.
+    if (!_didListen) {
+      return;
+    }
+
     // Identity, not equality: a listener belongs to the object that holds the
     // list it is in. Two models that compare equal are still two lists, and
     // reading `==` as "the same subscription" left the listener on the model

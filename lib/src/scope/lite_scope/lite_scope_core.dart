@@ -223,12 +223,36 @@ abstract base class LiteScopeElementBase<
 
   @override
   Widget buildOnState(AsyncScopeState state) => switch (state) {
-        AsyncScopeWaiting() => buildOnWaiting() ?? buildOnProgress(null),
+        AsyncScopeWaiting() => buildOnWaiting() ?? _progressWhileWaiting(),
         AsyncScopeProgress() => buildOnProgress(state.progress),
         AsyncScopeReady() => buildOnReady(),
         AsyncScopeError() =>
           buildOnError(state.error, state.stackTrace, state.progress),
       };
+
+  /// The waiting branch for a scope whose [buildOnWaiting] answered `null`.
+  ///
+  /// `null` there means "show the initializing branch instead", and that is
+  /// allowed only where the branch was written. Where it was not, the default
+  /// [buildOnProgress] refuses with a message about a scope that overrides
+  /// `initScope()` — and the caller who arrives here may well override nothing
+  /// of the sort, so both halves of that message are false for them and the
+  /// branch actually missing is not the one it names. Anything the caller's
+  /// own `buildOnProgress` raises passes through as it is.
+  Widget _progressWhileWaiting() {
+    try {
+      return buildOnProgress(null);
+      // ignore: avoid_catching_errors
+    } on _MissingProgressBranch {
+      throw UnimplementedError(
+        '$W returned `null` from `buildOnWaiting()` and does not override '
+        '`buildOnProgress()`, so there is no branch left to put on screen '
+        'while the scope waits. `null` there means "show the initializing '
+        'branch instead": write `buildOnProgress()`, or return a widget from '
+        '`buildOnWaiting()`.',
+      );
+    }
+  }
 
   /// Builds the ready branch, the state and its wrapper.
   ///
@@ -295,6 +319,20 @@ abstract base class LiteScopeElementBase<
   }
 
   S _createState() => _state = createState().._scopeElement = this as E;
+
+  /// The same question, asked of the layer that has a second answer to it.
+  ///
+  /// `_isDisposing` goes up only after the screenshot barrier is over, and the
+  /// barrier takes frames -- the replacer needs a build, and the picture a
+  /// retry or two. An element taken off the tree in that window said "nobody
+  /// is waiting for this walk" while `close()` was waiting for exactly it, so
+  /// a failed teardown was announced twice: once to the caller of `close()`,
+  /// as an error on its future, and once more as a report for a caller that
+  /// was right there. The memo of the run is what makes the caller visible
+  /// from here, and it is put down before anything else happens.
+  @override
+  bool get _startsTheTeardown =>
+      super._startsTheTeardown && _closeCompleter == null;
 
   @override
   Future<void> _performAsyncDispose() {
@@ -568,6 +606,14 @@ abstract base class LiteScopeCoreState<
   void _completeInit() {
     _initSucceeded = true;
     _initCompleter.complete();
+
+    // `mounted` is the whole guard, and it is true through a `close()` as
+    // well: the element stays in the tree while the closing screen is up. So a
+    // state whose initialization lands in that window is told it is ready, and
+    // is given no way of asking whether it is also on its way out. Nothing in
+    // the package minds -- the teardown that follows releases whatever the
+    // hook set up -- but work started there is work started to be undone, and
+    // that is worth knowing before writing an expensive [onInitialized].
     if (mounted) {
       onInitialized();
       notifyDependents();

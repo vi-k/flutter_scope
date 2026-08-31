@@ -126,7 +126,7 @@ abstract base class LiteScope<W extends LiteScope<W, S>,
   /// nobody wrote is a mistake, and a scope that shows nothing while it
   /// initializes looks like one that never initializes at all.
   Widget buildOnProgress(BuildContext context, Object? progress) =>
-      throw UnimplementedError(
+      throw _MissingProgressBranch(
         '$runtimeType overrides `initScope()` but not `buildOnProgress()`. A '
         'scope that pre-initializes has frames to fill before it is ready, '
         'and this is the branch that fills them. Override it, or drop the '
@@ -407,4 +407,15 @@ final class LiteScopeAccess<W extends LiteScope<W, S>,
     V Function(W widget) selector,
   ) =>
       LiteScope.selectParam<W, S, V>(context, selector);
+}
+
+/// The refusal of a `buildOnProgress` nobody wrote.
+///
+/// A type of its own so that the waiting branch can tell this apart from an
+/// `UnimplementedError` raised by a `buildOnProgress` the caller did write:
+/// that one is the caller's own and travels untouched, while this one means
+/// the branch is missing, and the message about it has to say which branch and
+/// why the scope came looking for it.
+final class _MissingProgressBranch extends UnimplementedError {
+  _MissingProgressBranch(String super.message);
 }

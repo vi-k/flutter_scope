@@ -325,6 +325,18 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
   /// Whether the asynchronous initialization has started.
   bool _didStartAsyncInit = false;
 
+  /// Whether the element leaving the tree is what begins the teardown.
+  ///
+  /// A `close()` in flight -- or one that is already over -- has a caller of
+  /// its own, and the failure of the walk is that caller's; anything else and
+  /// there is nobody, which is what the report in [dispose] is for.
+  ///
+  /// A getter rather than the flag itself, because the flag is not the whole
+  /// answer one layer down: the lite layer raises it only once its screenshot
+  /// barrier is over, and an element taken off the tree while a `close()`
+  /// waits for that barrier has a caller all the same.
+  bool get _startsTheTeardown => !_isDisposing;
+
   @override
   void dispose() {
     _widget = widget;
@@ -332,11 +344,7 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
     // at which there is certainly one. See [debugLabel].
     _debugLabel = super.debugLabel;
 
-    // Whether this call is the one that starts the teardown. A `close()` in
-    // flight -- or one that is already over -- has a caller of its own, and
-    // the failure below is that caller's; anything else and there is nobody,
-    // which is what the report is for.
-    final startsTheTeardown = !_isDisposing;
+    final startsTheTeardown = _startsTheTeardown;
 
     // ignore: discarded_futures
     final disposal = _performAsyncDispose();
@@ -369,6 +377,14 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
     // already over. Registering it with its new parent would hand that parent
     // an entry nobody will ever complete, since the `finally` that would have
     // unregistered it has long since run.
+    //
+    // The flag covers a walk still in flight too, and there the reasoning
+    // above does not hold: that `finally` is still ahead, and it would take
+    // the new entry off correctly. What the new parent gets instead is a
+    // child it never hears about, so it does not wait for the teardown of one
+    // that moved in mid-close. Kept deliberately: a scope moved while it is
+    // closing is a scope on its way out, and a parent waiting for a child
+    // that is leaving anyway is the more surprising of the two.
     if (_isDisposing) {
       assert(_debugCheckScopeKeyOwnership());
 

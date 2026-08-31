@@ -329,6 +329,61 @@ void main() {
       },
     );
 
+    // L16 of the sixth review. Whether a teardown has a caller waiting for it
+    // was read off `_isDisposing`, and the lite layer raises that only once
+    // its screenshot barrier is over -- the replacer needs a build, the
+    // picture a retry or two. An element taken off the tree inside that
+    // window said "nobody is waiting" while `close()` was waiting for exactly
+    // it, and a failed teardown was then announced twice: to the caller, and
+    // to the reporter that exists for walks with no caller at all.
+    testWidgets(
+      'a failure during a close is not reported behind its caller back',
+      (tester) async {
+        await tester.pumpWidget(
+          _app(const _CloseScope(init: _becomesReady, failStateDispose: true)),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('ready'), findsOneWidget);
+
+        final element = _scopeOf(tester);
+
+        final reported = <Object>[];
+        final previous = FlutterError.onError;
+        FlutterError.onError = (details) => reported.add(details.exception);
+
+        Object? failure;
+        var settled = false;
+        unawaited(
+          element.close().then(
+            (_) => settled = true,
+            onError: (Object error) {
+              failure = error;
+              settled = true;
+            },
+          ),
+        );
+
+        // Not pumped: the barrier is installed and nothing has released it
+        // yet, which is the window this test is about.
+        await tester.pumpWidget(_app(const SizedBox(width: 1, height: 1)));
+        await settle(tester, until: () => settled);
+
+        FlutterError.onError = previous;
+
+        expect(
+          failure,
+          isNotNull,
+          reason: 'the caller of close() hears what the teardown raised',
+        );
+        expect(
+          reported,
+          isEmpty,
+          reason: 'and nobody reports it a second time on its behalf: the '
+              'report is for a walk with no caller, and this one has one',
+        );
+      },
+    );
+
     testWidgets(
       'hands the same disposal failure to every close() caller',
       (tester) async {
@@ -1252,6 +1307,71 @@ void main() {
     });
   });
 
+  // L17 of the sixth review. The notification arrives late -- a subscription
+  // the caller did not take off in `onUnmount`, a teardown of their own
+  // reporting as it goes -- and the element it aims at is gone. What the
+  // framework answers is `'_lifecycleState != _ElementLifecycle.defunct' is
+  // not true`, which names neither the scope nor what was done to it; the
+  // deferred half of the same method has always simply dropped it.
+  testWidgets('a notification that arrives after the scope is gone is dropped',
+      (tester) async {
+    await tester.pumpWidget(
+      const Directionality(
+        textDirection: TextDirection.ltr,
+        child: _HalvesScope(child: _HalvesReader()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final state = _HalvesScope.of(tester.element(find.byType(_HalvesReader)));
+
+    await tester.pumpWidget(
+      const Directionality(
+        textDirection: TextDirection.ltr,
+        child: SizedBox(width: 1, height: 1),
+      ),
+    );
+    await settle(tester, until: () => false);
+
+    state.bumpWithNotify();
+
+    expect(
+      tester.takeException(),
+      isNull,
+      reason: 'a report with nobody to hear it is dropped, not raised -- the '
+          'rule this package follows everywhere else',
+    );
+  });
+
+  // L18 of the sixth review. `null` from `buildOnWaiting` means "show the
+  // initializing branch instead", and the default of that branch refuses with
+  // a message about a scope that overrides `initScope()`. A `LiteScope` that
+  // overrides nothing of the sort was told two things that are not true about
+  // it, and neither of them was the branch it is actually missing.
+  testWidgets(
+    'a scope with no waiting branch is told which branch is missing',
+    (tester) async {
+      await tester.pumpWidget(_app(const _NoWaitingBranchScope()));
+
+      expect(
+        tester.takeException(),
+        isA<UnimplementedError>().having(
+          (error) => error.message,
+          'names both branches, and blames neither on `initScope()`',
+          allOf(
+            contains('buildOnWaiting()'),
+            contains('buildOnProgress()'),
+            isNot(contains('initScope()')),
+          ),
+        ),
+      );
+    },
+    // The refusal happens while the element is being inflated, and an element
+    // abandoned half-built is never disposed of by anyone -- see
+    // [unmountableTree], which covers exactly that case.
+    experimentalLeakTesting: unmountableTree,
+  );
+
   // `_performAsyncInit` hands the cancellation over to `_subscription`, and
   // `_performAsyncDispose` can only reach it through that field. A scope with
   // a `scopeKey` awaits `AsyncScopeCoordinator.enter()` before it subscribes,
@@ -1958,6 +2078,25 @@ Future<void> _teardown(WidgetTester tester) async {
 /// What the two halves have put on screen, in one string.
 String _shown(WidgetTester tester) =>
     tester.widgetList<Text>(find.byType(Text)).map((t) => t.data).join(' | ');
+
+/// A scope with nothing to show while it waits: `buildOnWaiting` answers
+/// `null` and `buildOnProgress` was never written.
+final class _NoWaitingBranchScope
+    extends LiteScope<_NoWaitingBranchScope, _NoWaitingBranchState> {
+  const _NoWaitingBranchScope();
+
+  @override
+  _NoWaitingBranchState createState() => _NoWaitingBranchState();
+
+  @override
+  Widget? buildOnWaiting(BuildContext context) => null;
+}
+
+final class _NoWaitingBranchState
+    extends LiteScopeState<_NoWaitingBranchScope, _NoWaitingBranchState> {
+  @override
+  Widget build(BuildContext context) => const SizedBox.shrink();
+}
 
 /// A scope whose state draws one counter and hands the same counter to a
 /// subscriber, so the two halves can be told apart on screen.

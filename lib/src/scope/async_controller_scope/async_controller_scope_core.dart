@@ -98,6 +98,24 @@ abstract base class AsyncControllerScopeElementBase<
   Stream<AsyncDataScopeInitState<Object, C>> initDataAsync() async* {
     final controller = _controller = createController(this);
 
+    // The family promises "a controller created, initialized and released on
+    // every path", and it can only keep that for a controller that has not
+    // been through it already. `performInit` on one that has is a documented
+    // no-op -- the three methods are a one-way sequence -- so a cached or
+    // reused instance passed straight through this initialization: the ready
+    // branch went up over a controller that was not running, `mounted` and
+    // all, and nothing anywhere said a word. Refused here, where the mistake
+    // is, and at no cost in release.
+    assert(
+      !controller._initStarted && controller._disposeCompleter == null,
+      '$runtimeType.createController handed over a $C that has already been '
+      'used. `performInit`, `performUnmount` and `performDispose` run once '
+      'each and in that order, so this controller will not initialize again '
+      'and the scope would show its ready branch over one that is not '
+      'running. Create the controller in `createController`, rather than '
+      'caching one or handing over one that a previous scope has released.',
+    );
+
     try {
       await controller.performInit();
 

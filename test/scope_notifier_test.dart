@@ -404,6 +404,65 @@ void main() {
       );
     },
   );
+
+  // L2 of the sixth review. An `init()` that could not add its listener --
+  // a value that is already disposed of, or any `Listenable` of the caller's
+  // own that refuses -- fails the element for good: what it shows from then on
+  // is the `ErrorWidget`. The rebuild that follows used to move the
+  // subscription on to the new value all the same, and the teardown asks
+  // whether `init()` ever listened before taking one back. So the listener
+  // stayed on a live notifier with nothing left to remove it, and the next
+  // notification reached a defunct element.
+  testWidgets('a listener that init() never added is not moved on', (
+    tester,
+  ) async {
+    final refuses = _Counter()..dispose();
+    final live = _Counter();
+    addTearDown(live.dispose);
+
+    // Collected rather than taken one at a time: the refusal below is
+    // reported once by the framework and twice more by the inspector, which
+    // walks the ancestors of an element that is no longer active on the way
+    // out. None of the three is what this test is about.
+    final reported = <Object>[];
+    final previous = FlutterError.onError;
+    FlutterError.onError = (details) => reported.add(details.exception);
+
+    await tester.pumpWidget(
+      _Host(counter: refuses, child: const SizedBox.shrink()),
+    );
+
+    await tester.pumpWidget(
+      _Host(counter: live, child: const SizedBox.shrink()),
+    );
+    // The scope goes, the `Directionality` above it stays: taking the whole
+    // tree down in a test whose element failed leaves the framework's own walk
+    // half-done, and the leak tracker then reports its render objects rather
+    // than anything this test is about.
+    await tester.pumpWidget(
+      const Directionality(
+        textDirection: TextDirection.ltr,
+        child: SizedBox.shrink(),
+      ),
+    );
+
+    // Back before the expectations: a handler of our own collects the
+    // `TestFailure` of a failing `expect` too, and the run then hangs.
+    FlutterError.onError = previous;
+
+    expect(
+      reported,
+      isNotEmpty,
+      reason: 'adding a listener to a disposed notifier is refused, and this '
+          'test is about what the scope does after that',
+    );
+    expect(
+      live.listened,
+      isFalse,
+      reason: 'nothing was ever added for this element, so nothing is left '
+          'behind on a notifier that outlives it',
+    );
+  });
 }
 
 /// A model whose equality is by name, so two of them can be equal and still be
@@ -466,6 +525,10 @@ class _ValueView extends StatelessWidget {
 final class _Counter extends ChangeNotifier {
   int _value = 0;
   int get value => _value;
+
+  /// Whether anything is listening — `hasListeners` is `@protected`, and the
+  /// name is its own so that nothing here shadows it.
+  bool get listened => hasListeners;
 
   int get constant => 42;
 

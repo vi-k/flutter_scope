@@ -486,6 +486,20 @@ abstract base class ScopeWidgetElementBase<W extends ScopeWidgetCore<W, E>,
   /// element dirty and notify the dependents from [performRebuild].
   @protected
   void notifyDependents() {
+    // A notification with nobody left to hear it. The call arrives late --
+    // from a subscription the caller did not take off in `onUnmount`, or from
+    // a teardown of their own reporting its progress -- and the element it
+    // aims at is gone: what `markNeedsBuild()` answers that with is a bare
+    // `'_lifecycleState != _ElementLifecycle.defunct' is not true`, which
+    // names neither the scope nor what was done to it. The rule of this
+    // package for a report with no addressee is that it is dropped rather
+    // than raised (the disposal walk has followed it since wave 17), and the
+    // deferred branch below has always had this guard -- only the direct one
+    // went without.
+    if (!mounted) {
+      return;
+    }
+
     _notifyPending = true;
 
     // Any build, not this element's own. `markNeedsBuild()` on an element that

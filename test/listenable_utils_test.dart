@@ -119,6 +119,31 @@ void main() {
     // is still a mistake and still says so, with an assertion, the way `cancel`
     // beside it does; what it no longer does is keep the thing it complains
     // about.
+    // Info of the sixth review. A member that cannot let go used to end the
+    // cancellation where it stood, leaving every member behind it listening --
+    // the leak this class exists to prevent. `removeListener` on a
+    // `ChangeNotifier` cannot throw; a `Listenable` of the caller's own can.
+    test('cancels the rest when one of them refuses', () {
+      final refusing = _RefusingListenable();
+      final notifier = _Model();
+      addTearDown(notifier.dispose);
+      final composite = CompositeListenableSubscription();
+
+      refusing.listen(() {}).addTo(composite);
+      notifier.listen(() {}).addTo(composite);
+
+      expect(
+        composite.cancel,
+        throwsA(isA<StateError>()),
+        reason: 'the first failure still reaches the caller',
+      );
+      expect(
+        notifier.isListened,
+        isFalse,
+        reason: 'and the member behind the refusal was let go of all the same',
+      );
+    });
+
     test('adding to a cancelled composite cancels rather than leaks', () {
       final notifier = ChangeNotifier();
       addTearDown(notifier.dispose);
@@ -131,9 +156,17 @@ void main() {
         // A `StateError`, not an `AssertionError`: `debugAssertNotDisposed`
         // raises through `throwIfDisposed`, so what an assert of this package
         // carries is the message, not the type.
-        throwsA(isA<StateError>()),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'names the call that ended it',
+            contains('`cancel()`'),
+          ),
+        ),
         reason: 'adding to a composite that is over is a mistake in the '
-            'caller, and it says so',
+            'caller, and it says so -- naming `cancel()`, which is what ended '
+            'the composite, rather than `add()`, which is the call being '
+            'refused',
       );
 
       // ignore: invalid_use_of_protected_member, invalid_use_of_visible_for_testing_member
@@ -175,6 +208,59 @@ void main() {
       subscription.cancel();
       notifier.value = 2;
       expect(seen, [1]);
+    });
+
+    // L3 of the sixth review. The new value was marked delivered before the
+    // listener was called, so a listener that threw counted as having received
+    // it -- and the next notification carrying the same value was then
+    // filtered out as "no change". The listener most likely to throw is one
+    // that calls `setState` from inside somebody else's build, which is an
+    // assertion in debug and nothing at all in release: the widget stayed on
+    // the old value for good in debug and rebuilt in release.
+    test('a listener that threw did not receive the value', () {
+      final notifier = _Model();
+      addTearDown(notifier.dispose);
+      final seen = <int>[];
+      var refuse = true;
+
+      final subscription = notifier.select(
+        (model) => model.value,
+        (model, value) {
+          seen.add(value);
+          if (refuse) {
+            refuse = false;
+            throw StateError('the listener of the caller failed');
+          }
+        },
+      );
+      addTearDown(subscription.cancel);
+
+      // `ChangeNotifier.notifyListeners` catches what a listener throws and
+      // reports it, so the failure never comes back out of the assignment.
+      final reported = <Object>[];
+      final previous = FlutterError.onError;
+      FlutterError.onError = (details) => reported.add(details.exception);
+
+      notifier.value = 1;
+
+      expect(
+        subscription.value,
+        0,
+        reason: 'the value the listener did not receive is not its value',
+      );
+
+      notifier.touch();
+
+      FlutterError.onError = previous;
+
+      expect(reported.single, isA<StateError>());
+      expect(
+        seen,
+        [1, 1],
+        reason: 'the next notification carries the same selected value, and '
+            'it is still a change as far as this subscription is concerned',
+      );
+      expect(subscription.value, 1, reason: 'received this time');
     });
 
     test('compare decides what counts as a change', () {
@@ -561,6 +647,35 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
+    // L14 of the sixth review. `mounted` was the whole guard, and it stays
+    // true for the length of `State.dispose()` -- `StatefulElement.unmount`
+    // clears the element only after that call returns. So a listener taken
+    // from the tail of the same chain, after the mixin had let its notifier
+    // go, built a fresh one: nobody disposes of that, and nobody will ever
+    // notify it either.
+    testWidgets('a listener taken from inside dispose builds nothing new', (
+      tester,
+    ) async {
+      _LateListeningState.calls = 0;
+
+      await tester.pumpWidget(const _LateListeningHost());
+      final state = tester.state<_LateListeningState>(
+        find.byType(_LateListening),
+      );
+
+      await tester.pumpWidget(const SizedBox.shrink());
+
+      state.bump();
+
+      expect(tester.takeException(), isNull);
+      expect(
+        _LateListeningState.calls,
+        0,
+        reason: 'the state was already going when it asked, so there is no '
+            'notifier holding that listener and nothing to notify',
+      );
+    });
+
     testWidgets('nothing reaches the notifier once the state is gone', (
       tester,
     ) async {
@@ -619,6 +734,17 @@ final class _Model extends ChangeNotifier {
   bool get isListened => hasListeners;
 }
 
+/// A `Listenable` that refuses to give a listener back, which is something the
+/// interface allows and `ChangeNotifier` never does.
+final class _RefusingListenable implements Listenable {
+  @override
+  void addListener(VoidCallback listener) {}
+
+  @override
+  void removeListener(VoidCallback listener) =>
+      throw StateError('this listenable keeps its listeners');
+}
+
 /// A value type: two boxes holding the same number are equal, and a new one is
 /// still a different object.
 ///
@@ -657,6 +783,42 @@ final class _Notifying extends StatefulWidget {
 final class _NotifyingState extends State<_Notifying>
     with StateAsNotifier<_Notifying> {
   void bump() => notifyListeners();
+
+  @override
+  Widget build(BuildContext context) => const SizedBox.shrink();
+}
+
+final class _LateListeningHost extends StatelessWidget {
+  const _LateListeningHost();
+
+  @override
+  Widget build(BuildContext context) => const Directionality(
+        textDirection: TextDirection.ltr,
+        child: _LateListening(),
+      );
+}
+
+final class _LateListening extends StatefulWidget {
+  const _LateListening();
+
+  @override
+  State<_LateListening> createState() => _LateListeningState();
+}
+
+/// A state that listens to itself from the tail of its own `dispose()`, which
+/// is where a cleanup of the caller's own runs — a subscription cancelled
+/// there, a controller that reports back as it closes.
+final class _LateListeningState extends State<_LateListening>
+    with StateAsNotifier<_LateListening> {
+  static int calls = 0;
+
+  void bump() => notifyListeners();
+
+  @override
+  void dispose() {
+    super.dispose();
+    addListener(() => calls++);
+  }
 
   @override
   Widget build(BuildContext context) => const SizedBox.shrink();

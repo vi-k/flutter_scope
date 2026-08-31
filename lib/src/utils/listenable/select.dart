@@ -43,11 +43,37 @@ extension ListenableSelectExtension<L extends Listenable> on L {
     late final ListenableSelectSubscription<T> subscription;
 
     void handle() {
+      // A `Listenable` of the caller's own is free to dispatch over a copy of
+      // its list taken before `cancel()` removed this one from it, and then
+      // this runs after the subscription is over. Nothing in the package does
+      // that; a listener called after it was taken back is still not something
+      // to hand to the caller.
+      if (subscription._isDisposed) {
+        return;
+      }
+
       final newValue = selector(this);
       if (compare?.call(subscription._value, newValue) ??
           subscription._value != newValue) {
+        // Written before the listener runs and taken back if it fails. Before,
+        // because a listener is free to notify again and the value it has
+        // already been given must not start a walk of its own; taken back,
+        // because a listener that threw did not receive anything, and leaving
+        // the value marked as delivered filtered out the next notification
+        // carrying it -- the listener was then never told, ever. The one most
+        // likely to throw is a `setState` from inside somebody else's build,
+        // which raises in debug and does nothing in release, so this was a
+        // widget stuck on an old value in debug alone.
+        final previous = subscription._value;
         subscription._value = newValue;
-        listener(this, newValue);
+        try {
+          listener(this, newValue);
+          // ignore: avoid_catching_errors
+        } on Object {
+          subscription._value = previous;
+
+          rethrow;
+        }
       }
     }
 

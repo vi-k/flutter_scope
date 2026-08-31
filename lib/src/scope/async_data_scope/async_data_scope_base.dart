@@ -101,8 +101,7 @@ abstract base class AsyncDataScopeBase<W extends AsyncDataScopeBase<W, T>,
   /// The initialization, ending with the value.
   Stream<AsyncDataScopeInitState<Object, T>> initData(BuildContext context);
 
-  /// Called synchronously when the scope leaves the tree, and on the way out
-  /// of a `close()`.
+  /// Called synchronously when the scope leaves the tree.
   ///
   /// The value is `null` when the initialization never produced one. For a
   /// nullable [T] that is the same `null` the initialization may have produced

@@ -362,6 +362,36 @@ final class TestPreassignedDependencies
   String toString() => '$TestPreassignedDependencies';
 }
 
+/// A container whose second run trips the *other* `LateError`: a `late` field
+/// nothing ever assigned, read for the first time by that run.
+///
+/// Both refusals are the one class and carry the one name in their text, so
+/// the hint tells them apart by the rest of the sentence. This is the fixture
+/// that holds the second half of that match: everything the hint would say
+/// here is false — no field was assigned by an earlier run, and reading one
+/// that was never assigned is not something a second `init()` explains.
+final class TestUnassignedOnRerunDependencies
+    extends ScopeAutoDependencies<TestUnassignedOnRerunDependencies, void> {
+  late final String neverAssigned;
+  int buildCount = 0;
+
+  @override
+  ScopeDependency buildDependencies(void context) {
+    final run = ++buildCount;
+
+    return dep('player', (dep) async {
+      dep.dispose = () {};
+      if (run > 1) {
+        // ignore: unnecessary_statements
+        neverAssigned;
+      }
+    });
+  }
+
+  @override
+  String toString() => '$TestUnassignedOnRerunDependencies';
+}
+
 /// Копия логики `handleInit()` (см. группу `TestDependencies` ниже),
 /// параметризованная экземпляром зависимостей и `MyFakeAsync`, чтобы её можно
 /// было переиспользовать в других группах тестов этого файла.
@@ -1892,6 +1922,36 @@ void main() {
         );
       });
     });
+
+    // The mirror of the test above, and the half of the match it holds is the
+    // other one. Both refusals of a `late` field are the one class -- there is
+    // no type to tell them apart by, and `LateInitializationError` is not one
+    // -- so the text is matched twice: the name, and then which of the two
+    // this is. A run that reads a field nobody ever assigned carries the name
+    // and is not the failure the hint explains.
+    test('a second run reading an unassigned field is not given the hint', () {
+      myFakeAsync((async) {
+        final dependencies = TestUnassignedOnRerunDependencies();
+        handleInitFor(dependencies, async);
+
+        expectDisposed(async, dependencies.dispose());
+
+        final progress = handleInitFor(dependencies, async);
+
+        expect(
+          progress.single,
+          contains('player: LateInitializationError'),
+          reason: 'the name is there, and the name is half the match',
+        );
+        expect(
+          progress.single,
+          isNot(contains('second `init()`')),
+          reason: 'this field was not assigned by the first run: it was never '
+              'assigned at all, and a hint saying otherwise sends the reader '
+              'looking for an assignment that does not exist',
+        );
+      });
+    });
   });
 
   // `ScopeDependencyDisposalCancelled` was read as unreachable: nothing in the
@@ -1996,6 +2056,14 @@ void main() {
           isFalse,
           reason: 'a group that has been disposed of does not need disposing '
               'again, whatever its state says about the initialization',
+        );
+        expect(
+          dependencies.root.isDisposed,
+          isFalse,
+          reason: 'and `isDisposed` says which state it stands in, not '
+              'whether the walk happened: the failure is kept, so this tree '
+              'is released and not `ScopeDependencyDisposed` -- the contract '
+              'the dartdoc of that getter now states',
         );
       });
     });

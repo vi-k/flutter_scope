@@ -148,7 +148,10 @@ final class CompositeListenableSubscription {
   void add(ListenableSubscription subscription) {
     if (_isDisposed) {
       subscription.cancel();
-      assert(debugAssertNotDisposed(this, _isDisposed, 'add'));
+      // `cancel`, not `add`: the message says which call left the object
+      // unusable, and that is the one that ended it -- `add` is the call being
+      // refused. The two neighbouring assertions pass the same name.
+      assert(debugAssertNotDisposed(this, _isDisposed, 'cancel'));
 
       return;
     }
@@ -168,12 +171,48 @@ final class CompositeListenableSubscription {
     assert(debugAssertNotDisposed(this, _isDisposed, 'cancel'));
     if (!_isDisposed) {
       _isDisposed = true;
+
+      // One member that cannot let go is no reason to walk away from the ones
+      // behind it, which are still listening -- the same rule the disposal of
+      // a dependency group follows, and for the same reason: the leak this
+      // class exists to prevent is exactly what an early exit leaves. A
+      // `ChangeNotifier` cannot get here, `removeListener` on one being
+      // incapable of throwing; a `Listenable` of the caller's own can.
+      AsyncError? failure;
+
       for (final subscription in _subscriptions) {
-        if (!subscription._isDisposed) {
+        if (subscription._isDisposed) {
+          continue;
+        }
+
+        try {
           subscription.cancel();
+          // ignore: avoid_catching_errors
+        } on Object catch (error, stackTrace) {
+          if (failure == null) {
+            failure = AsyncError(error, stackTrace);
+          } else {
+            // A throw carries one failure and the first has claimed it, so
+            // everything behind it goes the only other way there is.
+            FlutterError.reportError(
+              FlutterErrorDetails(
+                exception: error,
+                stack: stackTrace,
+                library: 'scopo',
+                context: ErrorDescription(
+                  'while cancelling a $CompositeListenableSubscription',
+                ),
+              ),
+            );
+          }
         }
       }
+
       _subscriptions.clear();
+
+      if (failure case final failure?) {
+        Error.throwWithStackTrace(failure.error, failure.stackTrace);
+      }
     }
   }
 }
