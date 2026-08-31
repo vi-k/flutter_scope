@@ -1041,6 +1041,17 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
       // round the pair came apart, and a consumer that pairs them got it
       // wrong in both directions.
       try {
+        // Only for an initialization that finished, and this is a decision
+        // rather than a gap -- the neighbouring layer answering the other way
+        // (`disposeStateAsync` runs after an `initStateAsync` that threw, from
+        // 0.13.0) is not an argument to change it. What a scope that failed
+        // needs is a *partial* teardown, and which part that is can only be
+        // known inside `initScope`: it is the code that was doing the taking.
+        // `disposeScope` is written for the whole teardown of a finished
+        // scope, and it stays free of that question -- which is why the
+        // `AsyncScope`, `AsyncDataScope` and `Scope` topics teach an
+        // initializer to give back what it took before it throws, with a
+        // `finally` and a flag, and call that the way rather than a way round.
         if (_initSucceeded) {
           final result = disposeScope();
           if (result is Future<void>) {

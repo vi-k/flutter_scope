@@ -232,10 +232,12 @@ succeeded.** A scope that failed halfway never reaches it, and there is no
 second hook that does — `onUnmount` runs, but it is handed nothing to work
 with.
 
-That is not an oversight. `disposeScope` is written against a scope that is finished,
-and a half-built one is a different thing with a different teardown; only the
-code that did the building knows how far it got. So it is the initialization's
-job to give back what it took before it failed:
+That is not an oversight, and it is not a gap waiting to be closed: **a scope
+that failed needs a partial teardown, and only the code that did the building
+knows which part.** `disposeScope` is written against a scope that is finished
+and does the whole of it — asking it to also work out how far an initialization
+got would put that question into the one hook that is meant to be free of it.
+So it is the initialization's job to give back what it took before it failed:
 
 ```dart
 // Wrong: the connection is open and nobody will ever close it.

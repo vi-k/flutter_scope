@@ -13,7 +13,11 @@
   `ScopeController.dispose` has always stated for the controller family. The
   `Scope` topic's table and its "what a failure of each leaves behind" section
   say the new answer; `disposeScope`, at the scope layer rather than the state
-  one, is unchanged and still skipped.
+  one, is unchanged and still skipped, and deliberately so: what a scope whose
+  `initScope` failed needs is a *partial* teardown, and which part that is can
+  only be known inside the initializer that was doing the taking —
+  `disposeScope` does the whole teardown of a finished scope and stays free of
+  that question.
 * **Breaking:** `ScopeAutoDependencies.dispose()` called while an `init()` of
   the same container is still running is now refused with a `StateError`
   instead of going ahead. It used to walk a tree whose parked dependency had
