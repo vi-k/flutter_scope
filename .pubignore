@@ -28,6 +28,12 @@
 # by everyone who depends on the package and of no use to any of them. It is
 # not documentation -- the topics in `doc/` are, and they ship -- and it is
 # where it belongs, in the repository, for anybody who wants to read or run it.
+#
+# Anchored to the root, and `example/scopo_demo/test/` therefore ships. That is
+# deliberate (decided 2026-08-31): neither half of the rule above holds for it.
+# It weighs 9 KB, not 756, and it *is* a sample -- it shows what nothing else in
+# the archive shows, how to drive a scope's asynchronous teardown in a widget
+# test, since `pumpAndSettle` moves only the fake clock.
 /test/
 
 # Miscellaneous
