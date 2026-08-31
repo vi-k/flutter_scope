@@ -507,6 +507,34 @@ void main() {
       },
     );
 
+    // The same collision with nothing `const` about it. `const` was never what
+    // this turns on: `updateChild` hands an identical widget straight back
+    // without calling `update()`, and a scope built once and kept in the
+    // parent's state is identical on every later build just as a canonicalized
+    // literal is. This is the shape real code takes -- a subtree hoisted out
+    // of a rebuild, parameters and all.
+    testWidgets(
+      'the same holds for a scope kept in the parent state, parameters and all',
+      (tester) async {
+        Future<void> pumpShade(int level) =>
+            tester.pumpWidget(_ShadeHost(level: level));
+
+        await pumpShade(1);
+        expect(find.text('shade:1'), findsOneWidget);
+
+        (tester.element(find.byType(_ShadeScope)) as _ShadeScopeElement).bump();
+        await pumpShade(2);
+
+        expect(
+          find.text('shade:2'),
+          findsOneWidget,
+          reason: 'the widget carries a parameter and is not a constant; what '
+              'matters is that the element was handed the same instance and '
+              'so was never updated',
+        );
+      },
+    );
+
     // The other side of the same rule. A notify-only rebuild hands back what
     // the last real build made and leaves the child element alone -- which
     // needs there to have been a real build. When the first one threw, the
@@ -970,14 +998,45 @@ final class _Shade extends InheritedWidget {
   bool updateShouldNotify(_Shade oldWidget) => oldWidget.level != level;
 }
 
-/// Const and parameterless, so the same instance comes down every frame and
-/// `update()` is never the reason this element rebuilds.
+/// Carries a parameter, so that `const` is visibly not what this turns on.
+///
+/// What matters is that the *same instance* comes down again: `updateChild`
+/// compares the widget it is handed with the one the element holds, and hands
+/// an identical one straight back without calling `update()`. A `const`
+/// literal is one way to get that; an instance built once and kept is another,
+/// and it is the one real code takes.
 final class _ShadeScope
     extends ScopeWidgetCore<_ShadeScope, _ShadeScopeElement> {
-  const _ShadeScope();
+  const _ShadeScope({this.tag = ''});
+
+  final String tag;
 
   @override
   _ShadeScopeElement createScopeElement() => _ShadeScopeElement(this);
+}
+
+/// Builds the scope once and hands the same instance down on every later
+/// build -- the ordinary way a subtree is hoisted out of its parent's
+/// rebuilds. Nothing about it is `const`.
+final class _ShadeHost extends StatefulWidget {
+  const _ShadeHost({required this.level});
+
+  final int level;
+
+  @override
+  State<_ShadeHost> createState() => _ShadeHostState();
+}
+
+final class _ShadeHostState extends State<_ShadeHost> {
+  // No `const` keyword, so this is a fresh instance -- built once here and
+  // handed down unchanged from then on.
+  late final Widget _scope = _ShadeScope(tag: 'kept');
+
+  @override
+  Widget build(BuildContext context) => Directionality(
+        textDirection: TextDirection.ltr,
+        child: _Shade(level: widget.level, child: _scope),
+      );
 }
 
 final class _ShadeScopeElement
