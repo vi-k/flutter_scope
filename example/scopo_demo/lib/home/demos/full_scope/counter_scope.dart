@@ -31,6 +31,7 @@ final class CounterController with ChangeNotifier {
 
   @override
   Future<void> dispose() async {
+    console.log(debugSource, '$debugName: controller disposed');
     super.dispose();
 
     await Future<void>.delayed(const Duration(milliseconds: 500));
@@ -63,13 +64,19 @@ final class CounterDependencies
   ScopeDependency buildDependencies(BuildContext context) {
     // Independent nodes initialize together while still reporting progress.
     return concurrent('', [
+      // Acquire, register, then carry on -- the rule the `Scope` topic
+      // teaches and `home_dependencies.dart` follows. The disposer went on the
+      // handle after the `await` here, which is the shape that leaves a
+      // resource with nobody able to release it when the step does not come
+      // back from that `await`: an initializer that throws there, or one that
+      // never returns at all.
       dep('counterController', (dep) async {
         counterController = CounterController(
           debugSource: debugSource,
           debugName: debugName,
         );
-        await counterController.init();
         dep.dispose = counterController.dispose;
+        await counterController.init();
       }),
       dep('test1', (_) async {
         await Future<void>.delayed(const Duration(milliseconds: 500));

@@ -31,6 +31,7 @@ final class CounterController with ChangeNotifier {
 
   @override
   Future<void> dispose() async {
+    console.log(debugSource, '$debugName: controller disposed');
     super.dispose();
 
     await Future<void>.delayed(const Duration(seconds: 1));
@@ -124,6 +125,14 @@ final class CounterState extends LiteScopeState<CounterScope, CounterState> {
   late final String _debugName;
   late final CounterController counterController;
 
+  /// Whether [initStateAsync] got as far as building the controller.
+  ///
+  /// [disposeStateAsync] runs after an [initStateAsync] that threw as well as
+  /// after one that finished, so what it releases is whatever had been taken
+  /// by the time it did -- and a `late final` field the initializer never
+  /// reached is not something to read.
+  bool _controllerCreated = false;
+
   @override
   Future<void> initStateAsync() async {
     _debugSource = CounterScope.paramsOf(context).debugSource;
@@ -135,6 +144,7 @@ final class CounterState extends LiteScopeState<CounterScope, CounterState> {
       debugSource: _debugSource,
       debugName: _debugName,
     );
+    _controllerCreated = true;
     await counterController.init();
 
     console.log(_debugSource, '$_debugName: state initialized');
@@ -143,6 +153,12 @@ final class CounterState extends LiteScopeState<CounterScope, CounterState> {
   @override
   Future<void> disposeStateAsync() async {
     console.log(_debugSource, '$_debugName: dispose state');
+
+    // The state built the controller, so the state gives it back: nobody else
+    // holds one that the ready branch never handed over.
+    if (_controllerCreated) {
+      await counterController.dispose();
+    }
 
     await Future<void>.delayed(const Duration(seconds: 1));
 
