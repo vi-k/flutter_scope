@@ -60,7 +60,7 @@ you nothing: `provider` is smaller, better known, and enough.
   rebuilds the state's own subtree and reaches no subscriber.
 - **Graceful closing**: `close()` freezes the subtree as a screenshot and shows
   `buildOnClosing` while the asynchronous disposal is running.
-- **Nine families**: from a widget that only passes its own parameters down to
+- **Eight families**: from a widget that only passes its own parameters down to
   a full scope with a dependency container — take the smallest that fits.
 - **Observable lifecycle**: a typed observer is told about every
   initialization, progress step, failure and teardown.
@@ -318,8 +318,10 @@ instead of a subclass.
 
 The same `PlayerController` also fits inside a dependency tree unchanged —
 `controllerDep('player', () => player = PlayerController(api: apiClient))`
-next to `dep` in the Dependencies section below, when what a screen needs is
-one branch of a larger tree rather than a scope of its own.
+next to `dep` in a `ScopeAutoDependencies` — see the topic
+[Scope](https://pub.dev/documentation/scopo/latest/topics/Scope-topic.html) —
+when what a screen needs is one branch of a larger tree rather than a scope of
+its own.
 
 **In depth:** the topic [AsyncControllerScope](https://pub.dev/documentation/scopo/latest/topics/AsyncControllerScope-topic.html).
 
@@ -706,7 +708,10 @@ void main() {
 
 The same observer that prints in an app records in a test, which turns the
 lifecycle into a value to assert on — compare the whole list at once and a
-missing event is caught along with one too many:
+missing event is caught along with one too many. `RecordingObserver` below is
+one you write: twelve lines, one per hook, and the
+[debug](https://pub.dev/documentation/scopo/latest/topics/debug-topic.html)
+topic has it in full.
 
 ```dart
 late RecordingObserver observer;

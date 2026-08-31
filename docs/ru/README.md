@@ -1,6 +1,6 @@
 # scopo
 
-> Перевод `README.md` (blob `e676ea6d01c4ec20c99f6bf40eaea91a04a97ad1`).
+> Перевод `README.md` (blob `74c34f0d134351b9366c4cb133f345b9953625b6`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 [![pub version](https://img.shields.io/pub/v/scopo)](https://pub.dev/packages/scopo)
@@ -66,7 +66,7 @@ Riverpod закрывает часть этого: `FutureProvider` и `AsyncVal
   доходит.
 - **Аккуратное закрытие**: `close()` замораживает поддерево снимком и показывает
   `buildOnClosing`, пока идёт асинхронная утилизация.
-- **Девять семейств**: от виджета, который только отдаёт вниз собственные
+- **Восемь семейств**: от виджета, который только отдаёт вниз собственные
   параметры, до полного скоупа с контейнером зависимостей — берут самое
   маленькое из подходящих.
 - **Наблюдаемый жизненный цикл**: типизированному наблюдателю сообщают о каждой
@@ -327,9 +327,10 @@ final class PlayerController extends ScopeController {
 
 Тот же `PlayerController` без изменений годится и внутрь дерева
 зависимостей — `controllerDep('player', () => player =
-PlayerController(api: apiClient))`, рядом с `dep`, в разделе «Зависимости»
-ниже, когда экрану нужна не своя область, а одна ветка более крупного
-дерева.
+PlayerController(api: apiClient))`, рядом с `dep`, внутри
+`ScopeAutoDependencies` — см. тему
+[Scope](https://pub.dev/documentation/scopo/latest/topics/Scope-topic.html), —
+когда экрану нужна не своя область, а одна ветка более крупного дерева.
 
 **Подробнее:** тема [AsyncControllerScope](https://pub.dev/documentation/scopo/latest/topics/AsyncControllerScope-topic.html).
 
@@ -719,7 +720,10 @@ void main() {
 
 Тот же наблюдатель, который в приложении печатает, в тесте записывает — и
 превращает жизненный цикл в значение, о котором можно писать ожидания.
-Сравнивайте список целиком: так ловится и пропавшее событие, и лишнее:
+Сравнивайте список целиком: так ловится и пропавшее событие, и лишнее.
+`RecordingObserver` ниже — тот, который вы пишете сами: двенадцать строк, по
+одной на хук; целиком он есть в теме
+[debug](https://pub.dev/documentation/scopo/latest/topics/debug-topic.html).
 
 ```dart
 late RecordingObserver observer;

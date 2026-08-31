@@ -78,7 +78,7 @@ container that needs no asynchronous work at all:
 `AppDependencies().asStream<String>()` yields a single
 `ScopeReady`.
 
-The three function types the scope is built from are named as well, for anyone
+The four function types the scope is built from are named as well, for anyone
 passing them around: `ScopeInitCallback`, `ScopeWaitingBuilder`,
 `ScopeProgressBuilder` and `ScopeErrorBuilder`.
 

@@ -43,8 +43,8 @@ examples, and the difference between them is the whole lesson:
    before disposing of itself, so the lines come out inside-out on the way
    down.
 
-Each example has a button that recreates its scope, which is how the three
-sequences above are produced.
+Each tab has a "Restart page" button that recreates the scopes on it, which is
+how the three sequences above are produced.
 
 ## Deferred closing and NavigationNode
 

@@ -80,6 +80,17 @@ final class CounterScopeElement
     extends AsyncScopeElementBase<CounterScope, CounterScopeElement> {
   late final CounterModel _model;
 
+  /// Taken once, on the way in.
+  ///
+  /// The examples number their scopes in `build`, so a rebuild that happens
+  /// for a reason of its own — switching the theme — hands this element a
+  /// widget with a new name. Read live, that printed the teardown of `1.2`
+  /// with no initialization of `1.2` anywhere above it, in a demo that exists
+  /// for the order of its lines. The other three families here cache the name
+  /// for the same reason.
+  late final Object _debugSource;
+  late final String _debugName;
+
   CounterScopeElement(super.widget);
 
   // The coordinator serializes instances only when the widget supplies a key.
@@ -92,25 +103,27 @@ final class CounterScopeElement
   @override
   void init() {
     super.init();
+    _debugSource = widget.debugSource;
+    _debugName = widget.debugName;
     _model = CounterModel(
-      debugSource: widget.debugSource,
-      debugName: widget.debugName,
+      debugSource: _debugSource,
+      debugName: _debugName,
     );
   }
 
   @override
   Stream<AsyncScopeInitState> initScope() async* {
-    console.log(widget.debugSource, '${widget.debugName}: initialize');
+    console.log(_debugSource, '$_debugName: initialize');
     await _model.init();
     yield AsyncScopeReady();
-    console.log(widget.debugSource, '${widget.debugName}: initialized');
+    console.log(_debugSource, '$_debugName: initialized');
   }
 
   @override
   Future<void> disposeScope() async {
-    console.log(widget.debugSource, '${widget.debugName}: dispose');
+    console.log(_debugSource, '$_debugName: dispose');
     await _model.dispose();
-    console.log(widget.debugSource, '${widget.debugName}: disposed');
+    console.log(_debugSource, '$_debugName: disposed');
   }
 
   @override

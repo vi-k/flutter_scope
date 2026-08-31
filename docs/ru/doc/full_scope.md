@@ -1,6 +1,6 @@
 # Scope
 
-> Перевод `doc/full_scope.md` (blob `bd83a7631146ff74ce90e8b7dbb814304fee34e2`).
+> Перевод `doc/full_scope.md` (blob `75ef8ad2abb7a3c4567121ec675a32f19807b316`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 `Scope` — основной строительный блок пакета: виджет, который владеет контейнером
@@ -80,9 +80,9 @@ final class AppDependencies implements ScopeDependencies {
 `AppDependencies().asStream<String>()` выдаёт единственный
 `ScopeReady`.
 
-У трёх функциональных типов, из которых собран скоуп, есть имена — на случай,
-если их приходится передавать: `ScopeInitCallback`, `ScopeWaitingBuilder`,
-`ScopeProgressBuilder` и `ScopeErrorBuilder`.
+У четырёх функциональных типов, из которых собран скоуп, есть имена — на
+случай, если их приходится передавать: `ScopeInitCallback`,
+`ScopeWaitingBuilder`, `ScopeProgressBuilder` и `ScopeErrorBuilder`.
 
 ## ScopeAutoDependencies
 

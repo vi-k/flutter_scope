@@ -40,10 +40,7 @@ final class App extends Scope<App, AppDependencies, AppState> {
     BuildContext context,
     V Function(App widget) selector,
   ) =>
-      Scope.selectParam<App, AppDependencies, AppState, V>(
-        context,
-        (widget) => selector(widget),
-      );
+      Scope.selectParam<App, AppDependencies, AppState, V>(context, selector);
 
   static AppState? maybeOf(BuildContext context) =>
       Scope.maybeOf<App, AppDependencies, AppState>(context);
@@ -56,10 +53,7 @@ final class App extends Scope<App, AppDependencies, AppState> {
     BuildContext context,
     V Function(AppState state) selector,
   ) =>
-      Scope.select<App, AppDependencies, AppState, V>(
-        context,
-        (state) => selector(state),
-      );
+      Scope.select<App, AppDependencies, AppState, V>(context, selector);
 
   Widget _wrap({
     ThemeMode mode = ThemeMode.system,

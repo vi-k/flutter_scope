@@ -111,8 +111,8 @@
             description="AsyncControllerScopeBase and the controller it owns"
             toReformat="false" toShortenFQNames="true">
     <variable name="V1" expression="" defaultValue="&quot;PlayerController&quot;" alwaysStopAt="true"/>
-    <variable name="V3" expression="" defaultValue="&quot;isPlaying&quot;" alwaysStopAt="true"/>
     <variable name="V2" expression="" defaultValue="&quot;PlayerScope&quot;" alwaysStopAt="true"/>
+    <variable name="V3" expression="" defaultValue="&quot;isPlaying&quot;" alwaysStopAt="true"/>
     <context>
       <option name="DART_TOPLEVEL" value="true"/>
     </context>

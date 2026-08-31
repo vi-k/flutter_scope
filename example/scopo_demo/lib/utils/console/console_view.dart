@@ -30,7 +30,18 @@ class _ConsoleSourceViewState extends State<ConsoleView> {
       },
     );
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _firstFrame = false;
+      if (!mounted) {
+        return;
+      }
+
+      // Through `setState`, because the flag decides what the build shows and
+      // nothing else asks for a rebuild here: a console with no new line to
+      // report kept the view at `Opacity(0)`, so a tab entered a second time
+      // looked empty until something happened to log.
+      setState(() {
+        _firstFrame = false;
+      });
+
       if (_scrollController.hasClients) {
         _scrollController.jumpTo(
           _scrollController.position.maxScrollExtent,

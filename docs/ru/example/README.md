@@ -1,6 +1,6 @@
 # example
 
-> Перевод `example/README.md` (blob `e13259912b8d27c7bdff7fa11a668a9a4b468ac0`).
+> Перевод `example/README.md` (blob `dd6301e2aff4e2028b4e2c76f48888511afba4e3`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 Полный обзор scopo — в
@@ -237,7 +237,7 @@ class HomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Подписка на изменения заголовка.
-    final title = App.selectParam(context, (state) => state.title);
+    final title = App.selectParam(context, (widget) => widget.title);
 
     // Подписка на изменения счётчика.
     final counter = App.select(context, (state) => state.counter);

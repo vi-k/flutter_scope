@@ -40,13 +40,6 @@ final class CounterScope
     extends ScopeNotifierCore<CounterScope, CounterScopeElement, CounterModel> {
   const CounterScope({super.key});
 
-  // ignore: unused_element
-  static _CounterModelImpl _of(BuildContext context) =>
-      ScopeNotifierCore.of<CounterScope, CounterScopeElement, CounterModel>(
-        context,
-        listen: false,
-      )._model;
-
   static CounterModel of(BuildContext context) =>
       ScopeNotifierCore.of<CounterScope, CounterScopeElement, CounterModel>(
         context,

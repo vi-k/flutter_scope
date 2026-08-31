@@ -21,6 +21,12 @@ concurrency:
 jobs:
   gate:
     runs-on: ubuntu-latest
+    # The suite has a history of hanging without a word rather than failing --
+    # a reentrant observer, a `flutter_tester` left behind by an interrupted
+    # run -- and a hung job does not fail either: it holds the concurrency
+    # group and burns minutes to GitHub's default ceiling of six hours. This
+    # one takes about four minutes.
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
@@ -124,6 +130,9 @@ jobs:
   ceiling:
     runs-on: ubuntu-latest
     continue-on-error: true
+    # Shorter than the gate: this one runs the tests and `analyze`, and
+    # nothing else.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 

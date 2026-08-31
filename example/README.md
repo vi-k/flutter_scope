@@ -233,7 +233,7 @@ class HomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Subscribe to title changes.
-    final title = App.selectParam(context, (state) => state.title);
+    final title = App.selectParam(context, (widget) => widget.title);
 
     // Subscribe to counter changes.
     final counter = App.select(context, (state) => state.counter);
