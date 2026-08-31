@@ -1007,9 +1007,10 @@ final class _Shade extends InheritedWidget {
 /// and it is the one real code takes.
 final class _ShadeScope
     extends ScopeWidgetCore<_ShadeScope, _ShadeScopeElement> {
-  const _ShadeScope({this.tag = ''});
+  const _ShadeScope({this.label = ''});
 
-  final String tag;
+  /// Not `tag`: `ScopeInheritedWidget` already has one of those.
+  final String label;
 
   @override
   _ShadeScopeElement createScopeElement() => _ShadeScopeElement(this);
@@ -1028,9 +1029,10 @@ final class _ShadeHost extends StatefulWidget {
 }
 
 final class _ShadeHostState extends State<_ShadeHost> {
-  // No `const` keyword, so this is a fresh instance -- built once here and
-  // handed down unchanged from then on.
-  late final Widget _scope = _ShadeScope(tag: 'kept');
+  // Built once here, from a value only known at run time, and handed down
+  // unchanged from then on. Nothing about it is `const`.
+  late final Widget _scope =
+      _ShadeScope(label: 'kept at level ${widget.level}');
 
   @override
   Widget build(BuildContext context) => Directionality(
