@@ -63,7 +63,7 @@ after it:
 
 ```dart
 // Wrong: the database is open, and `disposeData` will never be called with it.
-init: (context) async* {
+initData: (context) async* {
   final database = await Database.open();
 
   yield AsyncDataScopeProgress('migrating');
@@ -71,12 +71,12 @@ init: (context) async* {
 
   yield AsyncDataScopeReady(database);
 },
-dispose: (database) => database.close(),
+disposeData: (database) => database.close(),
 ```
 
 ```dart
 // Right: not handed over yet means still mine to close.
-init: (context) async* {
+initData: (context) async* {
   final database = await Database.open();
   var handedOver = false;
 
@@ -92,7 +92,7 @@ init: (context) async* {
     }
   }
 },
-dispose: (database) => database.close(),
+disposeData: (database) => database.close(),
 ```
 
 `finally`, and not `catch`: a failing step is only one of the two ways this

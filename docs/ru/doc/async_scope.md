@@ -1,6 +1,6 @@
 # AsyncScope
 
-> Перевод `doc/async_scope.md` (blob `3a0f3aff29b4275a68beff0fcd507ec6e62084f7`).
+> Перевод `doc/async_scope.md` (blob `674836be6a9754402eb1ead8810f93215f47ae78`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 Скоуп, всё содержимое которого — жизненный цикл: асинхронная инициализация и
@@ -110,7 +110,7 @@ post-frame-колбэке, поэтому значение прогресса, �
 от 0 до 1 и `toString` вида `2/3`.
 
 ```dart
-init: (context) async* {
+initScope: (context) async* {
   final steps = ProgressIterator(3);
 
   yield AsyncScopeProgress(steps.nextStep()); // 1/3
@@ -241,18 +241,18 @@ if (scope.isInitialized) { … }
 
 ```dart
 // Неправильно: соединение открыто, и закрыть его теперь некому.
-init: (context) async* {
+initScope: (context) async* {
   connection = await Api.connect();
-  await connection.authenticate();      // бросает
+  await connection.authenticate();           // бросает
 
   yield AsyncScopeReady();
 },
-dispose: () => connection.close(),      // не будет вызван
+disposeScope: () => connection.close(),      // не будет вызван
 ```
 
 ```dart
 // Правильно: что шаг взял, то и отдаётся, если скоуп это не забрал себе.
-init: (context) async* {
+initScope: (context) async* {
   connection = await Api.connect();
   var handedOver = false;
 
@@ -267,7 +267,7 @@ init: (context) async* {
     }
   }
 },
-dispose: () => connection.close(),
+disposeScope: () => connection.close(),
 ```
 
 **`finally`, а не `catch`** — вот место, где легко ошибиться. Инициализация

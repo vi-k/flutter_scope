@@ -1,6 +1,6 @@
 # AsyncDataScope
 
-> Перевод `doc/async_data_scope.md` (blob `f5e83cc8114ca74c96d09e6f39149b4662d8f155`).
+> Перевод `doc/async_data_scope.md` (blob `01fd79372fdbe6fabebf20894cda94c0f6c0d28f`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 `AsyncScope`, который производит значение. Инициализация заканчивается объектом,
@@ -65,7 +65,7 @@ AsyncDataScopeReady(await Database.open())
 
 ```dart
 // Неправильно: база открыта, и с ней `disposeData` никогда не позовут.
-init: (context) async* {
+initData: (context) async* {
   final database = await Database.open();
 
   yield AsyncDataScopeProgress('migrating');
@@ -73,12 +73,12 @@ init: (context) async* {
 
   yield AsyncDataScopeReady(database);
 },
-dispose: (database) => database.close(),
+disposeData: (database) => database.close(),
 ```
 
 ```dart
 // Правильно: не передал — значит закрывать самому.
-init: (context) async* {
+initData: (context) async* {
   final database = await Database.open();
   var handedOver = false;
 
@@ -94,7 +94,7 @@ init: (context) async* {
     }
   }
 },
-dispose: (database) => database.close(),
+disposeData: (database) => database.close(),
 ```
 
 `finally`, а не `catch`: упавший шаг — только один из двух способов закончить

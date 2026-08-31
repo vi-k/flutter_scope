@@ -108,7 +108,7 @@ counts them and `Progress` is the value it produces: `number`, `total`,
 `value` as a fraction between 0 and 1, and a `toString` of `2/3`.
 
 ```dart
-init: (context) async* {
+initScope: (context) async* {
   final steps = ProgressIterator(3);
 
   yield AsyncScopeProgress(steps.nextStep()); // 1/3
@@ -239,18 +239,18 @@ job to give back what it took before it failed:
 
 ```dart
 // Wrong: the connection is open and nobody will ever close it.
-init: (context) async* {
+initScope: (context) async* {
   connection = await Api.connect();
-  await connection.authenticate();      // throws
+  await connection.authenticate();           // throws
 
   yield AsyncScopeReady();
 },
-dispose: () => connection.close(),      // never called
+disposeScope: () => connection.close(),      // never called
 ```
 
 ```dart
 // Right: what a step took is given back unless the scope took it over.
-init: (context) async* {
+initScope: (context) async* {
   connection = await Api.connect();
   var handedOver = false;
 
@@ -265,7 +265,7 @@ init: (context) async* {
     }
   }
 },
-dispose: () => connection.close(),
+disposeScope: () => connection.close(),
 ```
 
 **`finally`, and not `catch`** — this is the part that is easy to get wrong. An

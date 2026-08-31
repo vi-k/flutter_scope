@@ -1,6 +1,6 @@
 # base
 
-> Перевод `doc/base.md` (blob `83820fd688107e5646f121e59cc9f5897f314cb7`).
+> Перевод `doc/base.md` (blob `4341bdcad9e546f7a53c34b0acc0037b42d98328`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 Каждое семейство скоупов этого пакета — `ScopeWidgetBase`, `ScopeModel`,
@@ -271,7 +271,7 @@ final counter = App.access.select(context, (state) => state.counter);
 
 ```sh
 mkdir -p .vscode
-cp "$(find ~/.pub-cache/hosted/pub.dev -maxdepth 1 -name 'scopo-*' | sort | tail -1)"/ide/scopo.code-snippets .vscode/
+cp "$(find ~/.pub-cache/hosted/pub.dev -maxdepth 1 -name 'scopo-*' | sort -V | tail -1)"/ide/scopo.code-snippets .vscode/
 ```
 
 Для IntelliJ IDEA и Android Studio кнопки импорта на странице Live Templates
@@ -284,7 +284,7 @@ cp "$(find ~/.pub-cache/hosted/pub.dev -maxdepth 1 -name 'scopo-*' | sort | tail
 # ~/Library/Application Support/JetBrains/<продукт>/
 DIR=~/Library/Application\ Support/Google/AndroidStudio<версия>/templates
 mkdir -p "$DIR"
-cp "$(find ~/.pub-cache/hosted/pub.dev -maxdepth 1 -name 'scopo-*' | sort | tail -1)"/ide/scopo-live-templates.xml "$DIR/scopo.xml"
+cp "$(find ~/.pub-cache/hosted/pub.dev -maxdepth 1 -name 'scopo-*' | sort -V | tail -1)"/ide/scopo-live-templates.xml "$DIR/scopo.xml"
 ```
 
 Группа появится в **Settings → Editor → Live Templates**.

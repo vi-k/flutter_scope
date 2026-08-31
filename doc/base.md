@@ -270,7 +270,7 @@ format — copy the snippets into the project:
 
 ```sh
 mkdir -p .vscode
-cp "$(find ~/.pub-cache/hosted/pub.dev -maxdepth 1 -name 'scopo-*' | sort | tail -1)"/ide/scopo.code-snippets .vscode/
+cp "$(find ~/.pub-cache/hosted/pub.dev -maxdepth 1 -name 'scopo-*' | sort -V | tail -1)"/ide/scopo.code-snippets .vscode/
 ```
 
 For IntelliJ IDEA and Android Studio there is no import button on the Live
@@ -283,7 +283,7 @@ IDE, under `templates/`, named after the group it declares — the XML says
 # ~/Library/Application Support/JetBrains/<product>/
 DIR=~/Library/Application\ Support/Google/AndroidStudio<version>/templates
 mkdir -p "$DIR"
-cp "$(find ~/.pub-cache/hosted/pub.dev -maxdepth 1 -name 'scopo-*' | sort | tail -1)"/ide/scopo-live-templates.xml "$DIR/scopo.xml"
+cp "$(find ~/.pub-cache/hosted/pub.dev -maxdepth 1 -name 'scopo-*' | sort -V | tail -1)"/ide/scopo-live-templates.xml "$DIR/scopo.xml"
 ```
 
 The group then appears under **Settings → Editor → Live Templates**.
