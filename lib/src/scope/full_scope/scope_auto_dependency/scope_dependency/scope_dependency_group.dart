@@ -263,6 +263,31 @@ final class _ScopeDependencySequential extends ScopeDependencyGroup {
 final class _ScopeDependencyConcurrent extends ScopeDependencyGroup {
   _ScopeDependencyConcurrent(super.name, super._dependencies) : super._();
 
+  /// The stream of one arm, with a throw that arrives before it turned into
+  /// an error on it.
+  ///
+  /// A [ScopeDependency] of the caller's own making is free to throw before it
+  /// ever returns its stream — the package's own cannot, both of its walks
+  /// being `async*` bodies that do not run until they are listened to. The
+  /// arms of a concurrent group are asked for their streams from inside
+  /// `onListen` of the controller they are merged into, and a throw there is
+  /// told to nobody and closes nothing: the walk stopped for good, with no
+  /// error, no exit and no end, on the way in as on the way out. The
+  /// sequential group makes the same call from inside its own walk, where a
+  /// throw is either caught by the `try` around the disposal or carried to the
+  /// listener by the generator, which is why it never had this.
+  ///
+  /// One arm answering with an error is a shape the merge already knows: it is
+  /// what a stream that fails after its first event leaves behind.
+  static Stream<String> _guarded(Stream<String> Function() walk) {
+    try {
+      return walk();
+      // ignore: avoid_catching_errors
+    } on Object catch (error, stackTrace) {
+      return Stream<String>.error(error, stackTrace);
+    }
+  }
+
   @override
   Stream<String> _runInit() async* {
     // The loop that stood here collected the children so that each could be
@@ -271,7 +296,7 @@ final class _ScopeDependencyConcurrent extends ScopeDependencyGroup {
     // given before it asks it anything.
     yield* _dependencies //
         .where((dep) => dep.initializationRequired)
-        .map((dep) => dep.init())
+        .map((dep) => _guarded(dep.init))
         ._mergeStreams()
         .map(_path);
   }
@@ -299,8 +324,7 @@ final class _ScopeDependencyConcurrent extends ScopeDependencyGroup {
     // over, as the sequential group passes on the first in walk order.
     yield* _disposalOrder()
         .map(
-          (dep) => dep
-              .dispose()
+          (dep) => _guarded(dep.dispose)
               .handleError((Object error, StackTrace stackTrace) {
             _announceFailureFor(dep, error, stackTrace);
             errors.add(AsyncError(error, stackTrace));

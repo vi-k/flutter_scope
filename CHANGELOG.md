@@ -78,6 +78,25 @@
   on the container's behalf whoever drives — was left with an unmatched entry
   and nothing to say it had failed, which is exactly what a hung release looks
   like. The error names the dependency as it always did.
+* Fixed: a `ScopeDependency` of your own making whose `dispose()` or `init()`
+  throws *before* it returns its stream — which the interface allows, and the
+  package's own dependencies cannot do, both of their walks being `async*`
+  bodies that do not run until they are listened to — no longer leaves the
+  channel every other failure travels. As the root of a container, such a throw
+  used to leave through the future `dispose()` hands its caller: the observer
+  had heard the entry and then heard neither the failure nor `onDisposed`, and
+  the promise that this walk never re-throws was not kept. As an arm of a
+  `concurrent` group it was quieter and worse — the group asks its arms for
+  their streams from inside the merge they are collected into, where a throw
+  is told to nobody and closes nothing, so the walk stopped for good with no
+  error, no exit and no end, on the way in as on the way out. Both now answer
+  as a stream that fails after its first event does; a `sequential` group
+  always did.
+* `ScopeObserver.onError` for the failed release of a root of your own making
+  now names it — a `ScopeDependencyException` carrying the dependency's name,
+  the shape the other two senders of that hook already used — instead of
+  handing the error over bare. All three places a disposal failure is announced
+  from therefore say which dependency failed.
 * `ScopePrintObserver` writes the three new events as `initialize <path>…`,
   `dispose <path>…` and `disposed <path>`. The last of those replaces the
   `progress: <path>` line a release used to print, so anything that reads its

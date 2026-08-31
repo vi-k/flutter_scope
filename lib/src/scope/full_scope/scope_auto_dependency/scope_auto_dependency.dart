@@ -467,47 +467,72 @@ abstract base class ScopeAutoDependencies<T extends ScopeAutoDependencies<T, C>,
 
     final completer = Completer<void>();
 
-    notifyObserver((observer) => observer.onDispose(this));
-    dependencies.dispose().listen(
-      (path) {
-        // Only for a root of the caller's own making, which has no channel to
-        // announce from. A root of the package's own making has already sent
-        // this exit from inside the walk, and reporting it again here would
-        // double every step of a disposal the container drove itself.
-        if (dependencies is! ScopeDependencyMixin) {
-          notifyObserver((observer) => observer.onDisposalProgress(this, path));
-        }
-      },
-      onError: (Object error, StackTrace stackTrace) {
-        // The observer half only for a root of the caller's own making, on the
-        // same terms as the exit above: a root of the package's own making has
-        // announced this failure from inside the walk, where it happened and
-        // beside the entry it ends.
-        if (dependencies is! ScopeDependencyMixin) {
-          notifyObserver(
-            (observer) =>
-                observer.onError(this, ScopePhase.disposal, error, stackTrace),
-          );
-        }
-
-        // Reported through FlutterError too, not only the observer: this
-        // method never re-throws -- the teardown above it goes on whatever
-        // the dependencies say -- so this is the one way out a failure has
-        // when nothing is assigned to `ScopeConfig.observer` at all.
-        FlutterError.reportError(
-          FlutterErrorDetails(
-            exception: error,
-            stack: stackTrace,
-            library: 'scopo',
-            context: ErrorDescription('while disposing of $T'),
+    void reportFailure(Object error, StackTrace stackTrace) {
+      // The observer half only for a root of the caller's own making, on the
+      // same terms as the exit below: a root of the package's own making has
+      // announced this failure from inside the walk, where it happened and
+      // beside the entry it ends.
+      if (dependencies is! ScopeDependencyMixin) {
+        notifyObserver(
+          (observer) => observer.onError(
+            this,
+            ScopePhase.disposal,
+            // Named, the way the two other senders of this hook name theirs:
+            // the observer is told which dependency failed, and `onError` has
+            // no path of its own to tell it with. A foreign root is one step,
+            // so its name is the whole path.
+            ScopeDependencyException(dependencies.name, error, stackTrace),
+            stackTrace,
           ),
         );
-      },
-      onDone: completer.complete,
-      cancelOnError: false,
-    );
+      }
 
-    await completer.future;
+      // Reported through FlutterError too, not only the observer: this
+      // method never re-throws -- the teardown above it goes on whatever
+      // the dependencies say -- so this is the one way out a failure has
+      // when nothing is assigned to `ScopeConfig.observer` at all.
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: error,
+          stack: stackTrace,
+          library: 'scopo',
+          context: ErrorDescription('while disposing of $T'),
+        ),
+      );
+    }
+
+    notifyObserver((observer) => observer.onDispose(this));
+    try {
+      dependencies.dispose().listen(
+        (path) {
+          // Only for a root of the caller's own making, which has no channel
+          // to announce from. A root of the package's own making has already
+          // sent this exit from inside the walk, and reporting it again here
+          // would double every step of a disposal the container drove itself.
+          if (dependencies is! ScopeDependencyMixin) {
+            notifyObserver(
+              (observer) => observer.onDisposalProgress(this, path),
+            );
+          }
+        },
+        onError: reportFailure,
+        onDone: completer.complete,
+        cancelOnError: false,
+      );
+
+      await completer.future;
+      // ignore: avoid_catching_errors
+    } on Object catch (error, stackTrace) {
+      // `dispose()` is a public interface method, and one of the caller's own
+      // making is free to throw before it ever returns a stream -- the
+      // package's own cannot, its `dispose()` being an `async*` whose body
+      // does not run until it is listened to. Such a throw used to leave
+      // through the future this method hands its caller, past the handler
+      // above and past the `onDisposed` below: the entry had been announced,
+      // and nothing ever closed it.
+      reportFailure(error, stackTrace);
+    }
+
     notifyObserver((observer) => observer.onDisposed(this));
   }
 

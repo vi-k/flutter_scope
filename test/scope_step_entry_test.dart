@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:scopo/scopo.dart';
 
@@ -478,6 +479,78 @@ void main() {
       );
     });
 
+    // The neighbour of the throw the container now catches, one level down
+    // and found the way the handoff says to look for one: by running it, not
+    // by reading. A concurrent group asks its arms for their streams from
+    // inside `onListen` of the controller it merges them into, and a throw
+    // there has nowhere to go -- the controller is never closed, so the walk
+    // stopped without an error, without an exit and without an end. The
+    // sequential group makes the same call inside the `try` of its walk and
+    // has always been right.
+    test(
+        'carries a foreign arm of a concurrent group that throws before '
+        'returning its stream', () async {
+      final dependencies = _SyncFailingForeignInConcurrent();
+
+      await dependencies.init(null).drain<void>();
+      observer.events.clear();
+
+      final reported = <Object>[];
+      final previous = FlutterError.onError;
+      FlutterError.onError = (details) => reported.add(details.exception);
+
+      await dependencies.dispose();
+
+      FlutterError.onError = previous;
+
+      const failure =
+          'error _SyncFailingForeignInConcurrent disposal g/foreign: '
+          'Bad state: sync foreign boom';
+
+      expect(
+        observer.events,
+        containsAll([
+          failure,
+          'disposal step _SyncFailingForeignInConcurrent g/own',
+          'disposal progress _SyncFailingForeignInConcurrent g/own',
+        ]),
+        reason: 'the failure ends the foreign arm, and the arm beside it is '
+            'released as if nothing had happened',
+      );
+      expect(
+        observer.events.last,
+        'disposed _SyncFailingForeignInConcurrent',
+        reason: 'the walk reaches its end at all, which is the whole of this '
+            'test: it used to stop here for good',
+      );
+      expect(reported.single, isA<ScopeDependencyException>());
+    });
+
+    // The same throw on the way in, where the merge is the same one. A
+    // sequential group lets it travel the stream to the listener, which is
+    // what the container is waiting on; the concurrent group swallowed it.
+    test('carries a foreign arm that throws before returning its init stream',
+        () async {
+      final dependencies = _SyncFailingInitInConcurrent();
+
+      final failure = await dependencies
+          .init(null)
+          .drain<void>()
+          .then<Object?>((_) => null)
+          .onError<Object>((error, _) => error);
+
+      expect(
+        failure,
+        isA<ScopeDependencyException>(),
+        reason: 'the initialization fails rather than never answering',
+      );
+      expect(
+        observer.events.last,
+        'disposed _SyncFailingInitInConcurrent',
+        reason: 'and the container lets go of the arm that did start',
+      );
+    });
+
     test('says nothing on a second dispose after the walk is over', () async {
       final dependencies = _TwoDisposers();
 
@@ -512,6 +585,122 @@ void main() {
         'disposal step _FailingDisposer storage/db',
         'disposal progress _FailingDisposer storage/db',
       ]);
+    });
+
+    // M1 of the sixth review, where two independent passes arrived at the
+    // same weak point from opposite directions. The failure half of the
+    // disposal channel has three senders -- a leaf of the package's own
+    // making, a foreign child spoken for by the group above it, and a foreign
+    // root spoken for by the container -- and only the first was held by a
+    // test: both of the other two could be deleted whole and the suite stayed
+    // green. The three tests below hold the two that were loose.
+    test('carries the failure of a foreign child, announced by its group',
+        () async {
+      final dependencies = _FailingForeignChild();
+
+      await dependencies.init(null).drain<void>();
+      observer.events.clear();
+
+      final reported = <Object>[];
+      final previous = FlutterError.onError;
+      FlutterError.onError = (details) => reported.add(details.exception);
+
+      await dependencies.dispose();
+
+      // Back before the expectations, not in a tear-down: a handler of our own
+      // collects the `TestFailure` of a failing `expect` too, and the run then
+      // hangs instead of going red.
+      FlutterError.onError = previous;
+
+      const failure = 'error _FailingForeignChild disposal outer/foreign: '
+          'Bad state: foreign boom';
+
+      expect(
+        observer.events,
+        [
+          'dispose _FailingForeignChild',
+          failure,
+          'disposal step _FailingForeignChild outer/own',
+          'disposal progress _FailingForeignChild outer/own',
+          'disposed _FailingForeignChild',
+        ],
+        reason: 'the failure ends the foreign step in place of the exit it '
+            'would have had, and the child below it is still released',
+      );
+      expect(
+        reported.single,
+        isA<ScopeDependencyException>(),
+        reason: 'the container reports the walk it drove, whatever the '
+            'observer heard -- the group above the child names it on the way '
+            'up, and that is what reaches here',
+      );
+    });
+
+    test('carries the failure of a foreign root, announced by the container',
+        () async {
+      final dependencies = _FailingForeignRoot();
+
+      await dependencies.init(null).drain<void>();
+      observer.events.clear();
+
+      final reported = <Object>[];
+      final previous = FlutterError.onError;
+      FlutterError.onError = (details) => reported.add(details.exception);
+
+      await dependencies.dispose();
+
+      FlutterError.onError = previous;
+
+      expect(
+        observer.events,
+        [
+          'dispose _FailingForeignRoot',
+          'error _FailingForeignRoot disposal foreign: Bad state: foreign boom',
+          'disposed _FailingForeignRoot',
+        ],
+        reason: 'a root of the caller own making has no channel to announce '
+            'from, so the container speaks its failure -- naming it, the way '
+            'the other two senders name theirs',
+      );
+      expect(reported.single, isA<StateError>());
+    });
+
+    // The contract half of the same weak point, and the one that was not a
+    // gap in the tests but a gap in the code: `dispose()` is a public
+    // interface method, and a foreign one is free to throw before it ever
+    // returns a stream. The entry was announced by then, and the throw left
+    // through the future handed to the caller -- past `onError`, past
+    // `onDisposed`, and past the comment saying this method never re-throws.
+    test('carries a foreign root that throws before returning its stream',
+        () async {
+      final dependencies = _SyncFailingForeignRoot();
+
+      await dependencies.init(null).drain<void>();
+      observer.events.clear();
+
+      final reported = <Object>[];
+      final previous = FlutterError.onError;
+      FlutterError.onError = (details) => reported.add(details.exception);
+
+      await dependencies.dispose();
+
+      FlutterError.onError = previous;
+
+      const failure = 'error _SyncFailingForeignRoot disposal foreign: '
+          'Bad state: sync foreign boom';
+
+      expect(
+        observer.events,
+        [
+          'dispose _SyncFailingForeignRoot',
+          failure,
+          'disposed _SyncFailingForeignRoot',
+        ],
+        reason: 'a throw that arrives before the stream does travels the same '
+            'channel as one that arrives through it, and closes the pair it '
+            'was opened beside',
+      );
+      expect(reported.single, isA<StateError>());
     });
 
     // Not the design's "a tree built and then disposed of before `init`":
@@ -689,6 +878,76 @@ final class _ForeignDependency implements ScopeDependency {
 
   @override
   String stateToString() => '$state';
+}
+
+/// The same, with a release that fails inside the stream it returned.
+final class _FailingForeignDependency extends _ForeignDependency {
+  @override
+  Stream<String> dispose() async* {
+    throw StateError('foreign boom');
+  }
+}
+
+/// The same, with a release that throws before there is a stream at all —
+/// which the interface allows, and the package's own dependencies cannot do:
+/// their `dispose()` is an `async*`, whose body does not run until it is
+/// listened to.
+final class _SyncFailingForeignDependency extends _ForeignDependency {
+  @override
+  Stream<String> dispose() => throw StateError('sync foreign boom');
+}
+
+final class _FailingForeignRoot
+    extends ScopeAutoDependencies<_FailingForeignRoot, void> {
+  @override
+  ScopeDependency buildDependencies(void context) =>
+      _FailingForeignDependency();
+}
+
+final class _SyncFailingForeignRoot
+    extends ScopeAutoDependencies<_SyncFailingForeignRoot, void> {
+  @override
+  ScopeDependency buildDependencies(void context) =>
+      _SyncFailingForeignDependency();
+}
+
+final class _FailingForeignChild
+    extends ScopeAutoDependencies<_FailingForeignChild, void> {
+  @override
+  ScopeDependency buildDependencies(void context) => sequential('outer', [
+        dep('own', (handle) async {
+          handle.dispose = () async {};
+        }),
+        _FailingForeignDependency(),
+      ]);
+}
+
+/// The same, with an initialization that throws before there is a stream.
+final class _SyncFailingInitForeignDependency extends _ForeignDependency {
+  @override
+  Stream<String> init() => throw StateError('sync foreign init boom');
+}
+
+final class _SyncFailingForeignInConcurrent
+    extends ScopeAutoDependencies<_SyncFailingForeignInConcurrent, void> {
+  @override
+  ScopeDependency buildDependencies(void context) => concurrent('g', [
+        dep('own', (handle) async {
+          handle.dispose = () async {};
+        }),
+        _SyncFailingForeignDependency(),
+      ]);
+}
+
+final class _SyncFailingInitInConcurrent
+    extends ScopeAutoDependencies<_SyncFailingInitInConcurrent, void> {
+  @override
+  ScopeDependency buildDependencies(void context) => concurrent('g', [
+        dep('own', (handle) async {
+          handle.dispose = () async {};
+        }),
+        _SyncFailingInitForeignDependency(),
+      ]);
 }
 
 final class _FakeObservable implements ScopeObservable {
