@@ -62,7 +62,7 @@ abstract base class ScopeAutoDependencies<T extends ScopeAutoDependencies<T, C>,
       // The previous tree is done: its disposal walk reached its end, so
       // nothing it acquired is still held and a new tree can stand where it
       // stood.
-      _ when _disposalIsOver(root) => _root = buildDependencies(context),
+      _ when _disposalIsOver(root) => _root = _rebuildAfterDisposal(context),
       _ => throw StateError(
           '$T has already been initialized (${root.stateToString()}) and has'
           ' not been disposed of. Dispose of it before initializing it again:'
@@ -122,6 +122,58 @@ abstract base class ScopeAutoDependencies<T extends ScopeAutoDependencies<T, C>,
       ? root._isDisposalDone
       : !root.disposalRequired;
 
+  /// Whether an earlier run has already assigned this container's fields.
+  ///
+  /// Only ever goes from `false` to `true`: the branch that sets it is the one
+  /// that builds a tree over a container that has run and been given back, and
+  /// every run after that one takes it too.
+  bool _isRerun = false;
+
+  ScopeDependency _rebuildAfterDisposal(C context) {
+    _isRerun = true;
+
+    return buildDependencies(context);
+  }
+
+  /// [error] with the reason added, where the container knows one the error
+  /// does not carry.
+  ///
+  /// A `late final` field an earlier run assigned throws on the second
+  /// assignment, and what comes out names the dependency and nothing else:
+  /// the reader is shown a `LateInitializationError` from inside their own
+  /// initializer, which reads as a mistake they made there. The container is
+  /// the one that knows this is a second run over the same fields.
+  ///
+  /// **Matching on the text of the error is the only way there is.** `late`
+  /// failures are `LateError` from `dart:_internal`, which a package cannot
+  /// import; both the "already initialized" and the "not initialized" cases
+  /// are that one class, so they cannot be told apart by type either; and
+  /// `LateInitializationError` is not a type at all -- it exists only in the
+  /// message. What makes the match acceptable is its failure mode: a message
+  /// changed by some future SDK costs the hint and nothing else, and the drift
+  /// is caught by a test that runs on the declared floor.
+  Object _explainRerunFailure(Object error) {
+    if (!_isRerun || error is! ScopeDependencyException || error.hint != null) {
+      return error;
+    }
+
+    final text = '${error.error}';
+    if (!text.contains('LateInitializationError') ||
+        !text.contains('has already been initialized')) {
+      return error;
+    }
+
+    return ScopeDependencyException(
+      error.name,
+      error.error,
+      error.stackTrace,
+      hint: 'this is a second `init()` over the same container, and a '
+          '`late final` field an earlier run assigned refuses the second '
+          'assignment. Declare it `late`, or initialize a fresh container. '
+          'The `Scope` topic says what `late final` costs here.',
+    );
+  }
+
   /// Initialize the scope dependencies.
   Stream<ScopeInitState<ScopeAutoDependenciesProgress, T>> init(
     C context,
@@ -169,7 +221,13 @@ abstract base class ScopeAutoDependencies<T extends ScopeAutoDependencies<T, C>,
     _initializing = true;
     try {
       notifyObserver((observer) => observer.onInit(this));
-      yield* dependencies.init().map((path) {
+      // The type argument is spelled out because `handleError` below stands
+      // between this and the `yield*` that used to supply it: without it the
+      // second parameter of `ScopeProgress` is inferred as `ScopeDependencies`
+      // rather than [T].
+      yield* dependencies
+          .init()
+          .map<ScopeInitState<ScopeAutoDependenciesProgress, T>>((path) {
         final step = progressIterator.nextStep();
         notifyObserver(
           (observer) => observer.onProgress(
@@ -178,6 +236,12 @@ abstract base class ScopeAutoDependencies<T extends ScopeAutoDependencies<T, C>,
           ),
         );
         return ScopeProgress(ScopeAutoDependenciesProgress(path, step));
+        // On the stream and not in a `try` around the `yield*`: an error of a
+        // delegated stream goes straight to the listener, and the `catch`
+        // would never run. That is the defect R3 of the post-wave review
+        // found here; this is the channel the error does travel.
+      }).handleError((Object error, StackTrace stackTrace) {
+        Error.throwWithStackTrace(_explainRerunFailure(error), stackTrace);
       });
 
       if (dependencies.isInitialized) {

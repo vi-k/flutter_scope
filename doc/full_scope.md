@@ -126,7 +126,10 @@ run builds the tree afresh and runs every initializer again, over the same
 container, and a `late final` field the first run assigned refuses the second
 assignment. Declare the fields `late` rather than `late final` for a container
 you mean to initialize more than once; a `Scope` builds a container per scope
-and never reaches this, so the fields above stay `final`.
+and never reaches this, so the fields above stay `final`. The package says as
+much where it will be read: a field that refuses the second run fails with the
+reason attached, not with the bare `LateInitializationError` the field itself
+throws.
 
 An `init()` at any other moment — while one is running, or on a container that
 has been initialized and not disposed of — is refused with a `StateError` that

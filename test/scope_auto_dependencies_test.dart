@@ -278,6 +278,90 @@ final class TestAutoDisposeDependencies
   String toString() => '$TestAutoDisposeDependencies';
 }
 
+/// A container written the way the `Scope` topic shows one: `late final`
+/// fields assigned by the initializers. It registers a disposer, because a
+/// second `init()` is allowed only after a disposal that ran to its end.
+final class TestLateFinalDependencies
+    extends ScopeAutoDependencies<TestLateFinalDependencies, void> {
+  int buildCount = 0;
+
+  late final String value;
+
+  @override
+  ScopeDependency buildDependencies(void context) {
+    buildCount++;
+
+    return dep('player', (dep) async {
+      value = 'built';
+      dep.dispose = () {};
+    });
+  }
+
+  @override
+  String toString() => '$TestLateFinalDependencies';
+}
+
+/// The same container with the declaration the topic advises for one meant to
+/// be initialized more than once.
+final class TestLateDependencies
+    extends ScopeAutoDependencies<TestLateDependencies, void> {
+  int buildCount = 0;
+
+  late String value;
+
+  @override
+  ScopeDependency buildDependencies(void context) {
+    buildCount++;
+
+    return dep('player', (dep) async {
+      value = 'built';
+      dep.dispose = () {};
+    });
+  }
+
+  @override
+  String toString() => '$TestLateDependencies';
+}
+
+/// A container whose second run fails for a reason of its own, so that the
+/// hint about `late final` can be shown not to be pinned on it.
+final class TestSecondRunFailsDependencies
+    extends ScopeAutoDependencies<TestSecondRunFailsDependencies, void> {
+  int buildCount = 0;
+
+  @override
+  ScopeDependency buildDependencies(void context) {
+    final run = ++buildCount;
+
+    return dep('player', (dep) async {
+      if (run > 1) {
+        throw Exception('the second run failed on its own');
+      }
+      dep.dispose = () {};
+    });
+  }
+
+  @override
+  String toString() => '$TestSecondRunFailsDependencies';
+}
+
+/// A container whose *first* run trips the same `late final` refusal, because
+/// the field was assigned before `init()` was ever called. The wording of that
+/// failure is identical, and it is not the one the hint explains.
+final class TestPreassignedDependencies
+    extends ScopeAutoDependencies<TestPreassignedDependencies, void> {
+  late final String value;
+
+  @override
+  ScopeDependency buildDependencies(void context) => dep('player', (dep) async {
+        value = 'built';
+        dep.dispose = () {};
+      });
+
+  @override
+  String toString() => '$TestPreassignedDependencies';
+}
+
 /// Копия логики `handleInit()` (см. группу `TestDependencies` ниже),
 /// параметризованная экземпляром зависимостей и `MyFakeAsync`, чтобы её можно
 /// было переиспользовать в других группах тестов этого файла.
@@ -1703,6 +1787,109 @@ void main() {
         );
         expect(dependencies.buildCount, 1);
         expect(identical(dependencies.root, firstRoot), isTrue);
+      });
+    });
+
+    // The `Scope` topic tells the reader that `late final` makes a container
+    // single-use and that one meant to run more than once wants `late`. Both
+    // halves of that promise were held by nothing until here: the suite could
+    // go green over a package that had stopped keeping either.
+    //
+    // The first test holds one thing more -- what the failure says. The
+    // container knows, at the moment a dependency throws, that this is a
+    // second run over fields an earlier one assigned; the bare
+    // `LateInitializationError` reads as a mistake in the caller's own code
+    // and says none of it.
+    test('a late final field refuses the second run, and says why', () {
+      myFakeAsync((async) {
+        final dependencies = TestLateFinalDependencies();
+        handleInitFor(dependencies, async);
+
+        expectDisposed(async, dependencies.dispose());
+
+        final progress = handleInitFor(dependencies, async);
+
+        expect(
+          progress.single,
+          allOf(
+            contains('player: LateInitializationError'),
+            contains('second `init()`'),
+            contains('`late`'),
+          ),
+          reason: 'naming the dependency is not the answer: the reason is '
+              'that this container has run before',
+        );
+        expect(
+          dependencies.buildCount,
+          2,
+          reason: 'the tree was rebuilt -- the refusal is the field, not the '
+              'guard',
+        );
+      });
+    });
+
+    test('a late field lets the container run again', () {
+      myFakeAsync((async) {
+        final dependencies = TestLateDependencies();
+        handleInitFor(dependencies, async);
+
+        expectDisposed(async, dependencies.dispose());
+
+        final progress = handleInitFor(dependencies, async);
+
+        expect(
+          progress,
+          ['player (1/1)', '$TestLateDependencies'],
+          reason: 'this is what the topic promises for a container meant to '
+              'be initialized more than once',
+        );
+        expect(dependencies.value, 'built');
+      });
+    });
+
+    test('a failure of the second run is not blamed on late final', () {
+      myFakeAsync((async) {
+        final dependencies = TestSecondRunFailsDependencies();
+        handleInitFor(dependencies, async);
+
+        expectDisposed(async, dependencies.dispose());
+
+        final progress = handleInitFor(dependencies, async);
+
+        expect(
+          progress.single,
+          contains('the second run failed on its own'),
+        );
+        expect(
+          progress.single,
+          isNot(contains('`late`')),
+          reason: 'the hint explains one failure, and a hint that shows up '
+              'beside the others is one nobody believes',
+        );
+      });
+    });
+
+    // The wording of the failure is the same one the hint is matched on, and
+    // everything the hint would say about it is false: no run of this
+    // container has finished, and the field was not assigned by one. Without
+    // the container asking whether it has run before, the text alone would be
+    // enough to print it.
+    test('a first run tripping the same refusal is not given the hint', () {
+      myFakeAsync((async) {
+        final dependencies = TestPreassignedDependencies()..value = 'by hand';
+
+        final progress = handleInitFor(dependencies, async);
+
+        expect(
+          progress.single,
+          contains('player: LateInitializationError'),
+          reason: 'the failure is the one the hint is matched on',
+        );
+        expect(
+          progress.single,
+          isNot(contains('second `init()`')),
+          reason: 'there was no earlier run to blame it on',
+        );
       });
     });
   });

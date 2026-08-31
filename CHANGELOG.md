@@ -61,6 +61,15 @@
   a mistake in the caller's code rather than as the refusal it should have
   been. A container is still re-initializable after a disposal that ran to its
   end; the `Scope` topic now says what `late final` costs there.
+* Added `ScopeDependencyException.hint`: something the package knows about a
+  failure that the error itself does not say. A container sets one for exactly
+  one case today — the second run over a `late final` field an earlier run
+  assigned. What came out of that was a bare `LateInitializationError` from
+  inside an initializer, naming the dependency and nothing else, and it read
+  as a mistake in the caller's own code rather than as the consequence of
+  running the container twice. The hint names the reason and the way out. It
+  is printed by `toString()` on a line of its own, so anything that reads that
+  text as a format sees one extra line in this one case.
 * Fixed: a second `ScopeDependency.dispose()` arriving while the first was
   still running started a walk of its own, and in a `sequential` group that
   broke the reverse order the group promises. The child the running walk was
