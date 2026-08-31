@@ -1183,6 +1183,73 @@ void main() {
         ),
       );
     });
+
+    // M5 of the sixth review. `close()` from the build of a descendant is a
+    // mistake of the caller's -- the framework refuses `markNeedsBuild()`
+    // there -- but the refusal used to be permanent. The whole run was sealed
+    // into `_closeCompleter`, its synchronous prefix included, and every later
+    // caller joined that failed future: the teardown at unmount was one of
+    // them, so the scope was never disposed of at all. Nothing of it ran --
+    // no `disposeScope`, no cancellation of `initScope`, no
+    // `disposeStateAsync`, no leaving of the `scopeKey` queue -- and the leak
+    // tracker saw what that left behind.
+    testWidgets('a close() refused from a build does not poison the teardown',
+        (tester) async {
+      final closeNow = ValueNotifier(false);
+      addTearDown(closeNow.dispose);
+
+      late final _CloseScopeElement element;
+      Object? refusal;
+
+      await tester.pumpWidget(
+        _app(
+          _CloseScope(
+            init: _becomesReady,
+            // A listener of its own, so the rebuild it asks for starts from
+            // *this* element. A rebuild driven from the root -- which is what
+            // a second `pumpWidget` gives -- has the scope inside the build
+            // target, and the framework allows the call from there.
+            body: ListenableBuilder(
+              listenable: closeNow,
+              builder: (context, child) {
+                if (closeNow.value) {
+                  unawaited(
+                    element.close().onError((error, stackTrace) {
+                      refusal = error;
+                    }),
+                  );
+                }
+
+                return const SizedBox();
+              },
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      element = _scopeOf(tester);
+      closeNow.value = true;
+      await tester.pump();
+
+      expect(
+        refusal,
+        isNotNull,
+        reason: 'the caller is told about its own mistake, and that much was '
+            'never in question',
+      );
+
+      await tester.pumpWidget(_app(const SizedBox(width: 1, height: 1)));
+      await settle(tester, until: () => false);
+
+      expect(
+        element.disposeScopeCount,
+        1,
+        reason: 'the scope leaving the tree runs its teardown all the same: '
+            'what failed above happened before the teardown had begun, so it '
+            'is not the answer every later caller gets',
+      );
+    });
   });
 
   // `_performAsyncInit` hands the cancellation over to `_subscription`, and

@@ -92,6 +92,18 @@
   error, no exit and no end, on the way in as on the way out. Both now answer
   as a stream that fails after its first event does; a `sequential` group
   always did.
+* Fixed: a `close()` the framework refused used to stop the scope from ever
+  being disposed of. `close()` asks for a rebuild before it releases anything,
+  and `markNeedsBuild()` is refused outright while a build is running or while
+  the tree is locked — which is where a `close()` from the build of a
+  descendant, or from the `dispose()` of a neighbouring `State`, makes it. That
+  refusal was sealed into the one future the scope hands every caller of its
+  teardown, so the disposal on the way out of the tree joined it too and
+  nothing ran: not `disposeScope`, not the cancellation of `initScope`, not
+  `disposeStateAsync`, not the release of the `scopeKey` or of the place with
+  the parent. The call is still refused and the caller still hears about it —
+  it is a mistake, and in a release build it goes through, the assertion being
+  a debug one — but the refusal is now answered once instead of for good.
 * `ScopeObserver.onError` for the failed release of a root of your own making
   now names it — a `ScopeDependencyException` carrying the dependency's name,
   the shape the other two senders of that hook already used — instead of
