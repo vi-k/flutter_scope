@@ -249,6 +249,18 @@ abstract base class ScopeAutoDependencies<T extends ScopeAutoDependencies<T, C>,
         notifyObserver((observer) => observer.onReady(this));
       }
     } finally {
+      // Put down first, before the teardown below rather than after it. By
+      // here the run is over -- it failed, or the subscription was cancelled
+      // -- and what follows is the disposal of what it built. Left standing,
+      // it would be the container refusing its own cleanup through the guard
+      // that keeps a *caller* from disposing of a container mid-run.
+      //
+      // The window this opens is closed by the guard behind it: an `init()`
+      // arriving here meets a tree that is neither initialized nor finished
+      // being disposed of, and `_prepareDependencies` refuses it; a
+      // `dispose()` joins the walk this `finally` is already running.
+      _initializing = false;
+
       if (!dependencies.isInitialized) {
         notifyObserver((observer) => observer.onCancelled(this));
 
@@ -291,8 +303,6 @@ abstract base class ScopeAutoDependencies<T extends ScopeAutoDependencies<T, C>,
           await _disposeBounded();
         }
       }
-
-      _initializing = false;
     }
   }
 
@@ -420,6 +430,36 @@ abstract base class ScopeAutoDependencies<T extends ScopeAutoDependencies<T, C>,
       _disposal ??= _runDispose().whenComplete(() => _disposal = null);
 
   Future<void> _runDispose() async {
+    // Before anything is announced, so a refused disposal opens no pair the
+    // observer would wait forever to see closed.
+    //
+    // The fourth diagonal, and the last: a second `init()` during the first is
+    // refused, a second `init()` on a tree not given back is refused, a second
+    // `dispose()` joins the walk already running -- and this one used to go
+    // ahead. A dependency parked inside its initializer has registered nothing
+    // yet, so the walk read it as one with nothing to release, marked it
+    // disposed of and reported success, all before the initialization had
+    // reached `ScopeReady`. The disposer registered a moment later then hung
+    // on a dependency every later walk skips, and the next `init()` -- legal,
+    // because the tree now claims its disposal ran to the end -- built a new
+    // tree over one that was still holding.
+    //
+    // A scope never gets here: it cancels the subscription to `init()` first,
+    // and cancelling disposes of what the run had built. This is for whoever
+    // drives the container by hand, and it tells them to do what the scope
+    // does.
+    if (_initializing) {
+      throw StateError(
+        '$T is initializing right now, and a `dispose()` started here would '
+        'walk a tree whose dependencies have not registered their teardown '
+        'yet: one parked inside its initializer looks like a dependency with '
+        'nothing to release, and what it registers a moment later would never '
+        'be called by anything. Cancel the initialization that is running -- '
+        'cancelling the subscription releases what it had built -- or await '
+        'it before disposing of the container.',
+      );
+    }
+
     final dependencies = _root;
     if (dependencies == null) {
       return;

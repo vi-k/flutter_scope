@@ -473,7 +473,7 @@ fails:
 | `ScopeState.initState` | yes | **no state exists** | yes |
 | `ScopeState.onUnmount` | yes | — | **yes** |
 | `dep.unmount` | yes, every dependency | yes, every dependency | yes, every dependency |
-| `ScopeState.disposeStateAsync` | yes | — | **no** |
+| `ScopeState.disposeStateAsync` | yes | — | **yes** |
 | `dep.dispose` | yes, in reverse | yes, in reverse | yes, in reverse |
 
 On the ordinary path the four run interleaved, state before dependencies in
@@ -490,13 +490,17 @@ never builds it — so there is nothing for `ScopeState.onUnmount` and
 during `initDependencies` in either of them: on the path where it matters most
 they are not there to run.
 
-**When the state's `initStateAsync` failed, the state exists and is unmounted, but
-not disposed of.** `onUnmount()` runs — it is the synchronous half, and a state
-that got as far as `initState()` may already hold a subscription. `disposeStateAsync()`
-does not: it is written against a state that finished initializing, and this one
-did not. It is the same rule the `AsyncScope` topic states for `dispose` there,
-one level down, and it holds for the same reason — only the code that was doing
-the building knows how far it got.
+**When the state's `initStateAsync` failed, the state exists and both halves of
+its teardown run**, in the same order as on the ordinary path. `onUnmount()`
+runs — it is the synchronous half, and a state that got as far as
+`initState()` may already hold a subscription. So does `disposeStateAsync()`: a
+failed initialization is not one that never happened, and an initializer that
+opened a connection and threw on the next line has opened it. Nothing else is
+holding it, either — the scope never becomes ready, so its owner is never
+handed the state. **A disposer therefore has to expect a partially initialized
+state:** a field the `await` never reached is still unset when it runs. That is
+the rule `ScopeController.dispose` has always stated for the controller family,
+and the state layer keeps it too.
 
 **The dependencies are given back on every path**, and on the failing one not
 by the element. The element is handed the container only together with
@@ -512,14 +516,16 @@ leaves the disposal to you. The unmounting still happens: a container held for
 inspection is holding subscriptions, and they should not wait for you to get
 round to it.
 
-Read across the families, that is one rule rather than three, though it is easy
-to read it as three. **A hook you wrote for a finished thing does not run on
-one that never finished; a thing the scope holds on your behalf is given back
-whatever happened.** `ScopeState.disposeStateAsync` here and `dispose` in the
-`AsyncScope` and `AsyncDataScope` topics are the first kind, and they are
-skipped. `dep.dispose` here, and `ScopeController.dispose` in the
-`AsyncControllerScope` topic — where the table says `init()` threw → disposed —
-are the second kind, and they run.
+Read across the families, the line runs between the hooks that release
+something and the hooks that were written about a finished thing. **What
+releases runs whatever happened; what was written about a finished thing does
+not run on one that never finished.** `dep.dispose` here,
+`ScopeController.dispose` in the `AsyncControllerScope` topic — where the table
+says `init()` threw → disposed — and `ScopeState.disposeStateAsync` here are of
+the first kind, and they run. `disposeScope` in the `AsyncScope` and
+`AsyncDataScope` topics is of the second, and it is skipped when the
+initialization of the scope itself never reached `AsyncScopeReady`: release
+what a failing `initScope` took before it throws.
 
 So the rule of thumb is the one from the `AsyncScope` topic, and it applies to
 both halves. Whatever an initialization takes before it fails, that same
@@ -543,9 +549,10 @@ ScopeDependency buildDependencies(BuildContext context) => sequential('', [
     ]);
 ```
 
-The same goes for the state's own half: an `initStateAsync()` that takes something
-and then throws has to release it before it throws, because `disposeStateAsync()`
-will not be called to do it.
+The state's own half is where this differs: `disposeStateAsync()` *is* called
+after an `initStateAsync()` that threw, so the release belongs there rather
+than in front of every `throw`. What it must not do is assume the initializer
+got to the end.
 
 ## Access from the subtree
 

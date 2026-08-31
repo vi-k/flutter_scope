@@ -864,14 +864,72 @@ void main() {
           );
           expect(
             element.createdState!.disposeStateAsyncCount,
-            0,
-            reason: 'an initialization that never happened is not disposed of',
+            1,
+            reason: 'the initializer ran, so the teardown runs too -- what '
+                'it took before it failed has no second owner to give it back',
           );
           expect(
             errors.single,
             isA<StateError>(),
             reason: 'the failure is still reported, not swallowed',
           );
+        },
+      );
+
+      // The half of that the old promise had backwards. "The initialization
+      // failed" is not "the initialization never happened": the initializer
+      // ran, and an initializer that takes a connection, a subscription or a
+      // handle and falls over on the next line has taken it. Nobody else can
+      // give it back -- the state is the only one holding it, and the scope
+      // never becomes ready, so its owner never gets a reference either.
+      //
+      // The controller family next door has always said so out loud:
+      // `ScopeController.dispose` is documented to run "on every path,
+      // including the one where init failed halfway, so it has to expect a
+      // partially initialized controller". This is the state layer brought to
+      // the same rule.
+      testWidgets(
+        'disposes of a state whose initStateAsync failed $kind after taking '
+        'something',
+        (tester) async {
+          final errors = <Object>[];
+          var isClosed = false;
+          late _CloseScopeElement element;
+
+          await runZonedGuarded(
+            () async {
+              await tester.pumpWidget(
+                _app(
+                  _CloseScope(
+                    init: _becomesReady,
+                    failStateInit: true,
+                    failStateInitAsync: isAsync,
+                  ),
+                ),
+              );
+              element = _scopeOf(tester);
+              await settle(tester, until: () => element.createdState != null);
+
+              unawaited(element.close().whenComplete(() => isClosed = true));
+              await settle(tester, until: () => isClosed);
+            },
+            (error, stackTrace) => errors.add(error),
+          );
+
+          expect(
+            element.createdState!.acquired,
+            isTrue,
+            reason: 'the initializer took something before it failed -- '
+                'without that this test proves nothing',
+          );
+          expect(
+            element.createdState!.released,
+            isTrue,
+            reason: 'and it was given back: a teardown skipped here is a leak '
+                'with no second owner to notice it',
+          );
+          expect(isClosed, isTrue);
+          expect(errors.single, isA<StateError>());
         },
       );
     }
@@ -1766,9 +1824,23 @@ final class _CloseScopeState extends LiteScopeCoreState<_CloseScope,
   /// initialization failed is not disposed of.
   int disposeStateAsyncCount = 0;
 
+  /// Whether [initStateAsync] got as far as taking something.
+  ///
+  /// Set before the failure below, so a test can tell "acquired, and then it
+  /// failed" from "it failed having taken nothing" -- two different things
+  /// that used to end the same way.
+  bool acquired = false;
+
+  /// Whether [disposeStateAsync] gave that back.
+  bool released = false;
+
   @override
   FutureOr<void> initStateAsync() {
     if (!params.failStateInit) return null;
+
+    // Taken and working, before the failure below.
+    acquired = true;
+
     if (params.failStateInitAsync) {
       return Future<void>.error(StateError('state initStateAsync failed'));
     }
@@ -1779,6 +1851,7 @@ final class _CloseScopeState extends LiteScopeCoreState<_CloseScope,
   @override
   FutureOr<void> disposeStateAsync() {
     disposeStateAsyncCount++;
+    released = true;
     if (params.disposeGate case final gate?) {
       return gate.future;
     }

@@ -2205,6 +2205,76 @@ void main() {
       timeout: const Timeout(Duration(seconds: 10)),
     );
 
+    // The last unguarded diagonal of the four. Second `init()` during the
+    // first is refused, second `init()` on a tree not given back is refused,
+    // a second `dispose()` joins the walk already running -- and `dispose()`
+    // during an `init()` used to go ahead. It walked a tree whose parked
+    // dependency had registered nothing yet, read it as one with nothing to
+    // release, marked it disposed of and reported success -- before the
+    // initialization had even reached `ScopeReady`. The disposer registered a
+    // moment later was then attached to a dependency every future walk skips.
+    //
+    // Out of reach through a scope, which cancels the init subscription before
+    // it disposes of anything. In reach for whoever drives a container by
+    // hand, which is public, documented and tested -- and "the user left while
+    // init was running, so I called dispose()" is the first thing such an
+    // owner writes.
+    test(
+      'a dispose() while the first init() is still running is refused',
+      () async {
+        final gate = Completer<void>();
+        final log = <String>[];
+        final dependencies = LateRegisteringDependencies(gate, log);
+        addTearDown(() {
+          if (!gate.isCompleted) {
+            gate.complete();
+          }
+        });
+
+        final first = dependencies.init(null).drain<void>();
+        // One turn, so the initializer runs as far as its own `await`. Its
+        // handle is empty at this point: there is nothing to give back yet.
+        await Future<void>.delayed(Duration.zero);
+
+        Object? refused;
+        await dependencies.dispose().catchError((Object error) {
+          refused = error;
+        });
+
+        expect(
+          refused,
+          isA<StateError>(),
+          reason: 'a walk started here cannot see what the parked initializer '
+              'is about to register, so it must not start',
+        );
+        expect(
+          log,
+          ['init slow'],
+          reason: 'and nothing was released, because nothing was taken yet',
+        );
+
+        gate.complete();
+        await first;
+
+        expect(
+          dependencies.root.isDisposed,
+          isFalse,
+          reason: 'the refused walk left no mark: the tree is alive and the '
+              'initialization it interrupted nothing of has finished',
+        );
+
+        await dependencies.dispose();
+
+        expect(
+          log,
+          ['init slow', 'dispose slow'],
+          reason: 'the disposer registered after the await is reached by the '
+              'walk that comes later -- which is the whole point',
+        );
+      },
+      timeout: const Timeout(Duration(seconds: 10)),
+    );
+
     // The same hole one layer down, and reachable without the container:
     // `ScopeDependency` is public and `init()` is on its interface, so a tree
     // driven by hand -- or a `ScopeDependencies` written against the interface
@@ -2518,6 +2588,27 @@ final class SlowInitDependencies
         log.add('init slow');
         dep.dispose = () => log.add('dispose slow');
         await gate.future;
+      });
+}
+
+/// A container whose dependency parks *before* it has anything to give back.
+///
+/// The shape a hand-written initializer takes whenever the acquisition itself
+/// is the slow part -- `final db = await open(); dep.dispose = db.close;`.
+/// While it is parked the handle is empty, so the tree answers "nothing to
+/// release" about a dependency that is about to hold something.
+final class LateRegisteringDependencies
+    extends ScopeAutoDependencies<LateRegisteringDependencies, void> {
+  LateRegisteringDependencies(this.gate, this.log);
+
+  final Completer<void> gate;
+  final List<String> log;
+
+  @override
+  ScopeDependency buildDependencies(void context) => dep('slow', (dep) async {
+        log.add('init slow');
+        await gate.future;
+        dep.dispose = () => log.add('dispose slow');
       });
 }
 

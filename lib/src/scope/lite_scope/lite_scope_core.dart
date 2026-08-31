@@ -440,6 +440,11 @@ abstract base class LiteScopeCoreState<
   void onUnmount() {}
 
   /// Disposes of the scope asynchronously.
+  ///
+  /// Runs on every path the state is created on, including the one where
+  /// [initStateAsync] failed halfway, so it has to expect a partially
+  /// initialized state. An initializer that took something before it threw
+  /// has taken it, and this is the only place left to give it back.
   FutureOr<void> disposeStateAsync() {}
 
   /// Sealed on purpose: put the teardown in [onUnmount] and [disposeStateAsync].
@@ -544,12 +549,14 @@ abstract base class LiteScopeCoreState<
       await _initCompleter.future;
     }
 
-    // Nothing was initialized, so there is nothing to dispose of -- the same
-    // rule `AsyncScopeElementBase` applies to its own `disposeStateAsync`.
-    if (!_initSucceeded) {
-      return;
-    }
-
+    // Unconditionally, and this used to ask `_initSucceeded` first. "The
+    // initialization failed" is not "the initialization never happened":
+    // [initStateAsync] ran, and one that opens a connection and falls over on
+    // the next line has opened it. Nobody else can give that back -- the scope
+    // never becomes ready, so its owner is never handed the state either, and
+    // the release the public API puts in [disposeStateAsync] was the only one
+    // there was. The controller family has always run its `dispose` on every
+    // path for the same reason.
     final result = disposeStateAsync();
     if (result is Future<void>) {
       await result;

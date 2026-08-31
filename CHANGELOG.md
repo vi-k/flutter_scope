@@ -1,5 +1,43 @@
 ## 0.13.0
 
+* **Breaking:** `ScopeState.disposeStateAsync` and `LiteScopeState.disposeStateAsync`
+  now run after an `initStateAsync` that threw, in the same order as after one
+  that succeeded. They used to be skipped, on the reasoning that a hook written
+  about a finished thing does not run on one that never finished — but a failed
+  initialization is not one that never happened. An initializer that opens a
+  connection and throws on the next line has opened it, and nothing else is
+  holding it: the scope never becomes ready, so its owner is never handed the
+  state either, and this hook was the only release there was. **A disposer
+  therefore has to expect a partially initialized state** — a field the `await`
+  never reached is still unset when it runs. This is the rule
+  `ScopeController.dispose` has always stated for the controller family. The
+  `Scope` topic's table and its "what a failure of each leaves behind" section
+  say the new answer; `disposeScope`, at the scope layer rather than the state
+  one, is unchanged and still skipped.
+* **Breaking:** `ScopeAutoDependencies.dispose()` called while an `init()` of
+  the same container is still running is now refused with a `StateError`
+  instead of going ahead. It used to walk a tree whose parked dependency had
+  registered nothing yet, read it as one with nothing to release, mark it
+  disposed of and report success — before the initialization had even reached
+  `ScopeReady`. The disposer that dependency registered a moment later then
+  hung on something every later walk skips, and the next `init()` — legal,
+  because the tree now claimed its disposal had run to the end — built a new
+  tree over one that was still holding. This was the last of the four
+  concurrency diagonals left unguarded; the other three already refuse or join.
+  A scope never reaches it, cancelling its subscription to `init()` first, so
+  this is for whoever drives a container by hand — and the message says to do
+  what the scope does.
+* Fixed: a change to an inherited widget the scope itself depends on — which is
+  every `Theme.of(context)`, `MediaQuery.of(context)` or app-specific lookup
+  made by the code that builds its subtree, the context there being the scope's
+  own element — was lost when it landed in the same frame as a pending
+  `notifyDependents()`. Such a change arrives as `didChangeDependencies()` and a
+  bare `markNeedsBuild()` with no new widget, so the rebuild was taken for a
+  notify-only one: the cached subtree was handed back and the change was gone
+  for good, the framework having delivered it once. A page whose builder reads
+  the theme could sit in the old one, indefinitely, while the rest of the app
+  changed.
+
 * **Breaking:** a dependency container no longer reports its disposal through
   `ScopeObserver.onProgress`. The release of each dependency arrives at the
   new `onDisposalProgress(target, path)` instead, so `onProgress` now means

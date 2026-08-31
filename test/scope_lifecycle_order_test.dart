@@ -201,8 +201,8 @@ void main() {
     });
 
     testWidgets(
-        'unmounts but does not dispose of a state whose initScope '
-        'failed', (tester) async {
+        'disposes of a state whose initStateAsync failed in the same order as '
+        'one that succeeded', (tester) async {
       _DepState.failing = true;
       addTearDown(() => _DepState.failing = false);
 
@@ -221,11 +221,18 @@ void main() {
 
       expect(
         _order,
-        ['state.onUnmount', 'dep.unmount', 'dep.dispose'],
-        reason: 'the state exists and may already hold a subscription, so the '
-            'synchronous half runs; `disposeScope` is written against a state '
-            'that finished initializing and this one did not, so it is '
-            'skipped -- the same rule as for the scope itself, one level down',
+        [
+          'state.onUnmount',
+          'dep.unmount',
+          'state.disposeStateAsync',
+          'dep.dispose',
+        ],
+        reason: 'the same order as the ready path above, and that is the '
+            'point: the state exists, its initializer ran and may have taken '
+            'something before it threw, so both halves of its teardown run. '
+            'They used to be told apart -- the asynchronous half was skipped '
+            'for a state whose initialization failed -- and what that skipped '
+            'was whatever the initializer had already acquired',
       );
     });
 

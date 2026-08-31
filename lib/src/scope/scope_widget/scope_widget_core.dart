@@ -533,6 +533,27 @@ abstract base class ScopeWidgetElementBase<W extends ScopeWidgetCore<W, E>,
     super.update(newWidget);
   }
 
+  /// The other way a rebuild arrives that is not a notification, and it has to
+  /// force the subtree for the same reason [update] does.
+  ///
+  /// The scope's own element is the [BuildContext] handed to whatever builds
+  /// the subtree, so it depends on every inherited widget that code reads --
+  /// `Theme`, `MediaQuery`, a locale, one of the app's own. A change to one of
+  /// those comes down as this call and a bare `markNeedsBuild()`: no new
+  /// widget arrives, so [update] does not run. Landing in the same frame as a
+  /// pending [notifyDependents], such a rebuild was taken for a notify-only
+  /// one -- the cached subtree handed back, `updateChild` skipped -- and the
+  /// change was lost for good, because the framework delivers a dependency
+  /// change once and does not repeat it.
+  ///
+  /// Nothing is rebuilt that was not going to be: this runs only for an
+  /// element that has dependencies and only when one of them changed.
+  @override
+  void didChangeDependencies() {
+    _forceRebuild = true;
+    super.didChangeDependencies();
+  }
+
   /// Keeps the subtree as it is when the dependents only have to be notified
   /// of a change ([notifyDependents]).
   ///

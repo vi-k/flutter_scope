@@ -456,6 +456,57 @@ void main() {
       );
     });
 
+    // The same rule met from the other side, and the side that was missing:
+    // a rebuild the scope did not ask for and the parent did not cause. An
+    // inherited dependency of the scope's *own* element -- which is what a
+    // user's builder subscribes to the moment it calls `Theme.of(context)`,
+    // the context there being this element -- arrives as
+    // `didChangeDependencies()` and a bare `markNeedsBuild()`. No new widget
+    // comes down, so `update()` never runs and `_forceRebuild` is never
+    // raised. Landing in the same frame as a pending notification, that
+    // rebuild was taken for a notify-only one and the change was lost for
+    // good: the framework had already delivered it and does not deliver it
+    // twice.
+    testWidgets(
+      'an inherited change that lands with a notification is not eaten',
+      (tester) async {
+        Future<void> pumpShade(int level) => tester.pumpWidget(
+              Directionality(
+                textDirection: TextDirection.ltr,
+                child: _Shade(level: level, child: const _ShadeScope()),
+              ),
+            );
+
+        await pumpShade(1);
+        expect(find.text('shade:1'), findsOneWidget);
+
+        // Control: the dependency change alone arrives.
+        await pumpShade(2);
+        expect(
+          find.text('shade:2'),
+          findsOneWidget,
+          reason: 'a dependency change on its own has always arrived',
+        );
+
+        // The collision: a notification is pending when the dependency
+        // changes in the same frame.
+        (tester.element(find.byType(_ShadeScope)) as _ShadeScopeElement).bump();
+        await pumpShade(3);
+
+        expect(
+          find.text('shade:3'),
+          findsOneWidget,
+          reason: 'the notification must not swallow the dependency change: '
+              'the framework delivered it once and will not do so again',
+        );
+
+        // And it stays lost without a second chance, so a later frame is not
+        // what makes this pass.
+        await tester.pump();
+        expect(find.text('shade:3'), findsOneWidget);
+      },
+    );
+
     // The other side of the same rule. A notify-only rebuild hands back what
     // the last real build made and leaves the child element alone -- which
     // needs there to have been a real build. When the first one threw, the
@@ -902,4 +953,44 @@ final class _BumperState extends State<_Bumper> {
 
     return const SizedBox.shrink();
   }
+}
+
+/// An inherited widget the scope reads from `buildChild()` -- the way a user's
+/// builder reads `Theme.of(context)`, where the context handed to it is the
+/// scope's own element.
+final class _Shade extends InheritedWidget {
+  const _Shade({required this.level, required super.child});
+
+  final int level;
+
+  static int of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<_Shade>()!.level;
+
+  @override
+  bool updateShouldNotify(_Shade oldWidget) => oldWidget.level != level;
+}
+
+/// Const and parameterless, so the same instance comes down every frame and
+/// `update()` is never the reason this element rebuilds.
+final class _ShadeScope
+    extends ScopeWidgetCore<_ShadeScope, _ShadeScopeElement> {
+  const _ShadeScope();
+
+  @override
+  _ShadeScopeElement createScopeElement() => _ShadeScopeElement(this);
+}
+
+final class _ShadeScopeElement
+    extends ScopeWidgetElementBase<_ShadeScope, _ShadeScopeElement> {
+  _ShadeScopeElement(super.widget);
+
+  int value = 0;
+
+  void bump() {
+    value++;
+    notifyDependents();
+  }
+
+  @override
+  Widget buildChild() => Text('shade:${_Shade.of(this)}');
 }
