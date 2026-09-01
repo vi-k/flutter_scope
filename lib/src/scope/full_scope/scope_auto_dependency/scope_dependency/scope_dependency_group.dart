@@ -403,10 +403,37 @@ extension<T> on Iterable<Stream<T>> {
 
       final subscriptions = <StreamSubscription<T>>[];
 
-      for (final stream in streams) {
-        final subscription =
-            stream.listen(controller.add, onError: controller.addError);
-        subscriptions.add(subscription);
+      try {
+        for (final stream in streams) {
+          final subscription =
+              stream.listen(controller.add, onError: controller.addError);
+          subscriptions.add(subscription);
+        }
+        // ignore: avoid_catching_errors
+      } on Object catch (error, stackTrace) {
+        // The neighbour of the throw caught above, one step later: a `Stream`
+        // of the caller's own making is free to throw from `listen` as well.
+        // The package's own walks cannot -- theirs is the `listen` of an
+        // `async*`, which is the SDK's -- so this, like the other, is about a
+        // dependency written against the interface.
+        //
+        // What was already subscribed is let go of first, and the failure is
+        // answered only once that is done: an arm still running pushes into
+        // `controller.add`, and a controller closed underneath it turns one
+        // failure into two. The arms are cancelled rather than left to finish
+        // because the walk is over either way -- there is no longer a merged
+        // stream for them to arrive on.
+        scheduleMicrotask(() async {
+          await subscriptions.map((s) => s.cancel()).wait;
+          if (controller.isClosed) {
+            return;
+          }
+
+          controller.addError(error, stackTrace);
+          await controller.close();
+        });
+
+        return;
       }
 
       // The onDone handlers are attached only after `subscriptions` is fully

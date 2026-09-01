@@ -120,7 +120,10 @@
   a concurrent group filters its branches by `initializationRequired`, which
   reads `state`, and it does so inside that same merge — so the whole of what
   the group asks a foreign branch before running it is answered as an error
-  now, rather than stopping the walk in silence.
+  now, rather than stopping the walk in silence. So is a `Stream` of your own
+  making that throws from `listen` — the branches in front of it are let go of
+  before the failure is answered, so that an arm still running cannot push into
+  a controller closed underneath it.
 * Fixed: a `close()` the framework refused used to stop the scope from ever
   being disposed of. `close()` asks for a rebuild before it releases anything,
   and `markNeedsBuild()` is refused outright while a build is running or while

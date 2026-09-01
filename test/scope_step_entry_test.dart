@@ -703,6 +703,47 @@ void main() {
       timeout: const Timeout(Duration(seconds: 10)),
     );
 
+    // The neighbour of the one above, one line further into the same method.
+    // The guard there covers the walk of the chain; the branches are listened
+    // to below it, and `listen` on a `Stream` of the caller's own making is
+    // free to throw as well. Standing second, it also asks the harder half:
+    // the branch in front of it is already subscribed, and letting go of what
+    // was made has to happen before the error is answered -- a live arm
+    // pushing into a closed controller is a second failure on top of the
+    // first.
+    test(
+      'carries a foreign branch whose stream refuses to be listened to',
+      () async {
+        final log = <String>[];
+        final group = ScopeDependency.concurrent('g', [
+          ScopeDependency('own', (dep) {
+            log.add('own ran');
+          }),
+          _RefusingStreamForeignDependency(),
+        ]);
+
+        Object? failure;
+        await group
+            .init()
+            .drain<void>()
+            .onError<Object>((error, stackTrace) => failure = error);
+
+        expect(
+          failure,
+          isNotNull,
+          reason: 'a walk that neither ends nor says why is the one outcome '
+              'nobody can act on',
+        );
+        expect(
+          log,
+          ['own ran'],
+          reason: 'the branch in front of it had already been subscribed, and '
+              'letting go of it is what makes the failure answerable',
+        );
+      },
+      timeout: const Timeout(Duration(seconds: 10)),
+    );
+
     test('carries a foreign root that throws before returning its stream',
         () async {
       final dependencies = _SyncFailingForeignRoot();
@@ -910,6 +951,28 @@ final class _ForeignDependency implements ScopeDependency {
 
   @override
   String stateToString() => '$state';
+}
+
+/// A `Stream` that refuses to be listened to.
+///
+/// The package's own walks are `async*` bodies, whose `listen` is the SDK's
+/// and cannot throw; a caller writing a `Stream` of their own is under no such
+/// promise.
+final class _RefusingStream extends Stream<String> {
+  @override
+  StreamSubscription<String> listen(
+    void Function(String event)? onData, {
+    Function? onError,
+    void Function()? onDone,
+    bool? cancelOnError,
+  }) =>
+      throw StateError('foreign stream refuses to be listened to');
+}
+
+/// A dependency of the caller's own making that hands back such a stream.
+final class _RefusingStreamForeignDependency extends _ForeignDependency {
+  @override
+  Stream<String> init() => _RefusingStream();
 }
 
 /// The same, with a `state` that throws when it is read.
