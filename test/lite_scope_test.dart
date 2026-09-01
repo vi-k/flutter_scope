@@ -1305,6 +1305,76 @@ void main() {
             'is not the answer every later caller gets',
       );
     });
+
+    // Info-1 of the post-wave review. The test above takes one of the two
+    // paths out of a refusal -- the tree coming down -- and the review's own
+    // probe took the other, a second `close()` from somewhere the framework
+    // allows it. Probed and working is not pinned, and this is the path a
+    // caller actually retries on: the refusal came from their own build, so
+    // the obvious next move is to call again from outside it.
+    testWidgets('a close() that follows a refused one runs the teardown once',
+        (tester) async {
+      final closeNow = ValueNotifier(false);
+      addTearDown(closeNow.dispose);
+
+      late final _CloseScopeElement element;
+      Object? refusal;
+
+      await tester.pumpWidget(
+        _app(
+          _CloseScope(
+            init: _becomesReady,
+            body: ListenableBuilder(
+              listenable: closeNow,
+              builder: (context, child) {
+                if (closeNow.value) {
+                  unawaited(
+                    element.close().onError((error, stackTrace) {
+                      refusal = error;
+                    }),
+                  );
+                }
+
+                return const SizedBox();
+              },
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      element = _scopeOf(tester);
+      closeNow.value = true;
+      await tester.pump();
+
+      expect(refusal, isNotNull, reason: 'refused, as it must be');
+
+      // Out of the build that was refused, and into the ordinary way of
+      // asking.
+      closeNow.value = false;
+      await tester.pump();
+
+      var isClosed = false;
+      unawaited(element.close().whenComplete(() => isClosed = true));
+      await settle(tester, until: () => isClosed);
+
+      expect(
+        element.disposeScopeCount,
+        1,
+        reason: 'the refusal was not sealed into the memo every later caller '
+            'joins: this one ran the teardown, and ran it whole',
+      );
+
+      await tester.pumpWidget(_app(const SizedBox(width: 1, height: 1)));
+      await settle(tester, until: () => false);
+
+      expect(
+        element.disposeScopeCount,
+        1,
+        reason: 'and the tree coming down after a close that finished does '
+            'not run it a second time',
+      );
+    });
   });
 
   // L17 of the sixth review. The notification arrives late -- a subscription
