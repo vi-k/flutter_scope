@@ -2343,6 +2343,65 @@ void main() {
       timeout: const Timeout(Duration(seconds: 10)),
     );
 
+    // The same door, one step to the side. The guard above stands on
+    // `ScopeAutoDependencies.dispose()`, and the tree it protects is handed
+    // out by `root` -- public, and a tree the `Scope` topic says belongs to
+    // whoever drives one. A walk started there met nothing at all: it found
+    // the parked leaf with an empty handle, marked it as holding nothing, and
+    // every later walk skipped it by `disposalRequired`. Under a group the
+    // loss is final -- the group asks that question and walks past -- so the
+    // disposer registered a moment later is called by nothing, ever.
+    test(
+      'a dispose() started at the public root during init() is refused',
+      () async {
+        final gate = Completer<void>();
+        final log = <String>[];
+        final dependencies = LateRegisteringGroupDependencies(gate, log);
+        addTearDown(() {
+          if (!gate.isCompleted) {
+            gate.complete();
+          }
+        });
+
+        final first = dependencies.init(null).drain<void>();
+        // One turn, so the initializer runs as far as its own `await`.
+        await Future<void>.delayed(Duration.zero);
+
+        Object? refused;
+        await dependencies.root
+            .dispose()
+            .drain<void>()
+            .catchError((Object error) => refused = error);
+
+        expect(
+          refused,
+          isA<StateError>(),
+          reason: 'the walk cannot see what the parked initializer is about '
+              'to register, whichever door it came through',
+        );
+
+        gate.complete();
+        await first;
+
+        expect(
+          dependencies.root.disposalRequired,
+          isTrue,
+          reason: 'the refused walk left no mark: the tree holds what the '
+              'initializer took and says so',
+        );
+
+        await dependencies.dispose();
+
+        expect(
+          log,
+          ['init a', 'release a'],
+          reason: 'and the disposer registered after the await is reached by '
+              'the walk that comes later',
+        );
+      },
+      timeout: const Timeout(Duration(seconds: 10)),
+    );
+
     // The same hole one layer down, and reachable without the container:
     // `ScopeDependency` is public and `init()` is on its interface, so a tree
     // driven by hand -- or a `ScopeDependencies` written against the interface
@@ -2678,6 +2737,28 @@ final class LateRegisteringDependencies
         await gate.future;
         dep.dispose = () => log.add('dispose slow');
       });
+}
+
+/// The same late registration, under a group.
+///
+/// A bare leaf standing as the root loses less: a second `dispose()` finds its
+/// handle and runs it. Under a group the walk asks `disposalRequired` first,
+/// and a leaf marked as holding nothing is never asked again.
+final class LateRegisteringGroupDependencies
+    extends ScopeAutoDependencies<LateRegisteringGroupDependencies, void> {
+  LateRegisteringGroupDependencies(this.gate, this.log);
+
+  final Completer<void> gate;
+  final List<String> log;
+
+  @override
+  ScopeDependency buildDependencies(void context) => sequential('g', [
+        dep('a', (dep) async {
+          log.add('init a');
+          await gate.future;
+          dep.dispose = () => log.add('release a');
+        }),
+      ]);
 }
 
 /// A container that names another one where it should name itself -- the

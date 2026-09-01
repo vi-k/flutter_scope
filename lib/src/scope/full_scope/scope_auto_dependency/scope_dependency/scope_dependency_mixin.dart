@@ -220,6 +220,32 @@ mixin ScopeDependencyMixin implements ScopeDependency, ScopeObservable {
   /// way.
   @override
   Stream<String> dispose() async* {
+    // Before the joiner below and before any mark is written, for the reason
+    // `ScopeAutoDependencies._runDispose` refuses the same thing one level up.
+    // A dependency parked inside its initializer has registered nothing yet,
+    // so the walk reads it as one with nothing to release and marks it as
+    // passed by -- and the group above it then skips it by `disposalRequired`
+    // for as long as it lives. What the initializer registers a moment later
+    // is called by nothing, ever.
+    //
+    // The container's guard stands on the container's own door. This is the
+    // other one: the tree is handed out by `ScopeAutoDependencies.root`, and
+    // a tree belongs to whoever drives one -- public, documented, and it met
+    // no guard at all. Every node between that door and the parked leaf is
+    // initializing too, a group being one for as long as its children are, so
+    // asking here closes the way in wherever it was entered.
+    if (_initializing) {
+      throw StateError(
+        '$wrappedName is initializing right now, and a `dispose()` started '
+        'here would walk a tree whose dependencies have not registered their '
+        'teardown yet: one parked inside its initializer looks like a '
+        'dependency with nothing to release, and what it registers a moment '
+        'later would never be called by anything. Await the initialization '
+        'that is running, or cancel it, and dispose of the tree once it has '
+        'ended.',
+      );
+    }
+
     // Joined rather than repeated, the way `ScopeAutoDependencies.dispose()`
     // joins its own one level up -- and for a heavier reason than tidiness.
     //

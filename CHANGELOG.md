@@ -18,19 +18,25 @@
   only be known inside the initializer that was doing the taking —
   `disposeScope` does the whole teardown of a finished scope and stays free of
   that question.
-* **Breaking:** `ScopeAutoDependencies.dispose()` called while an `init()` of
-  the same container is still running is now refused with a `StateError`
-  instead of going ahead. It used to walk a tree whose parked dependency had
-  registered nothing yet, read it as one with nothing to release, mark it
-  disposed of and report success — before the initialization had even reached
-  `ScopeReady`. The disposer that dependency registered a moment later then
-  hung on something every later walk skips, and the next `init()` — legal,
-  because the tree now claimed its disposal had run to the end — built a new
-  tree over one that was still holding. This was the last of the four
+* **Breaking:** `ScopeAutoDependencies.dispose()` and
+  `ScopeDependency.dispose()` called while an `init()` of the same tree is
+  still running are now refused with a `StateError` instead of going ahead.
+  They used to walk a tree whose parked dependency had registered nothing yet,
+  read it as one with nothing to release, mark it disposed of and report
+  success — before the initialization had even reached `ScopeReady`. The
+  disposer that dependency registered a moment later then hung on something
+  every later walk skips, and the next `init()` — legal, because the tree now
+  claimed its disposal had run to the end — built a new tree over one that was
+  still holding. This was the last of the four
   concurrency diagonals left unguarded; the other three already refuse or join.
   A scope never reaches it, cancelling its subscription to `init()` first, so
   this is for whoever drives a container by hand — and the message says to do
-  what the scope does.
+  what the scope does. The guard stands on both doors because the tree has two:
+  the container hands its tree out through `ScopeAutoDependencies.root`, and a
+  walk started there — or on any node of a tree driven by hand — met nothing at
+  all and lost the same dependency in the same way. Every node between that
+  door and the parked leaf is initializing too, a group being one for as long
+  as its children are, so the walk is refused wherever it was entered.
 * Fixed: a change to an inherited widget the scope itself depends on — which is
   every `Theme.of(context)`, `MediaQuery.of(context)` or app-specific lookup
   made by the code that builds its subtree, the context there being the scope's
