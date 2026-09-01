@@ -13,12 +13,25 @@ import 'package:test/test.dart';
 /// survived in a place that was not.
 void main() {
   /// Every Markdown file that ships or mirrors one that does.
+  ///
+  /// The samples are in here as well, and they were the omission that made
+  /// this list a hand-written one again: `example/**` goes into the archive
+  /// and its README is the Example tab on pub.dev, so a stale fragment there
+  /// is read by as many people as one in a topic. `CHANGELOG.md` ships too.
+  /// What is skipped under `example` is what is not published from it --
+  /// build output and the tool's own cache.
   Iterable<File> publishedMarkdown() => <FileSystemEntity>[
         File('README.md'),
+        File('CHANGELOG.md'),
         File('ide/README.md'),
         ...Directory('doc').listSync(),
+        ...Directory('example').listSync(recursive: true),
         ...Directory('docs/ru').listSync(recursive: true),
-      ].whereType<File>().where((file) => file.path.endsWith('.md'));
+      ].whereType<File>().where((file) => file.path.endsWith('.md')).where(
+            (file) =>
+                !file.path.contains('/build/') &&
+                !file.path.contains('/.dart_tool/'),
+          );
 
 // The command that copies the templates out of pub-cache takes the newest
 // version it finds there, and it takes it with `sort`. A plain `sort` is
@@ -51,6 +64,49 @@ void main() {
       reason: 'a plain `sort` is lexicographic: it puts `scopo-0.9.6` after '
           '`scopo-0.13.0`, and the copy then comes from a version with no '
           '`ide/` in it',
+    );
+  });
+
+  // The other half of the same renaming, and the half the check above cannot
+  // see. `dispose:` is a real parameter -- of `ScopeModel` and
+  // `ScopeNotifier` -- so it cannot be asked about everywhere, which is why
+  // the check above asks only about `init:`. In the two asynchronous topics it
+  // is the name the parameter lost in 2026-08-18, and a fragment that drifts
+  // back to it there compiles nowhere.
+  test('the asynchronous topics call their teardown by its own name', () {
+    final topics = [
+      for (final file in publishedMarkdown())
+        if (RegExp(r'async_(data_)?scope\.md$').hasMatch(file.path)) file,
+    ];
+
+    expect(
+      topics,
+      hasLength(4),
+      reason: 'a check over nothing passes for nothing: two topics and the '
+          'Russian mirror of each',
+    );
+
+    final stale = [
+      for (final file in topics)
+        for (final (index, line) in file.readAsLinesSync().indexed)
+          if (RegExp(r'(^|[\s(,])dispose:').hasMatch(line))
+            '${file.path}:${index + 1}: ${line.trim()}',
+    ];
+
+    expect(
+      stale,
+      isEmpty,
+      reason: 'these two take `disposeScope:` and `disposeData:`; a reader who '
+          "copies `dispose:` gets \"The named parameter 'dispose' isn't "
+          'defined"',
+    );
+
+    final text = topics.map((file) => file.readAsStringSync()).join();
+    expect(
+      RegExp('disposeScope:').hasMatch(text) &&
+          RegExp('disposeData:').hasMatch(text),
+      isTrue,
+      reason: 'and both names they should be using are in these files',
     );
   });
 
