@@ -317,11 +317,9 @@ abstract base class ScopeState<W extends Scope<W, D, S>,
   // Overriding block
   //
 
-  /// Initializes the scope asynchronously.
   @override
   FutureOr<void> initStateAsync() {}
 
-  /// Disposes the scope asynchronously.
   @override
   FutureOr<void> disposeStateAsync() {}
 

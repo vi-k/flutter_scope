@@ -17,7 +17,13 @@
   `initScope` failed needs is a *partial* teardown, and which part that is can
   only be known inside the initializer that was doing the taking —
   `disposeScope` does the whole teardown of a finished scope and stays free of
-  that question.
+  that question. The rule now stands on the page of every hook it governs: the
+  three states that gather `initStateAsync` and `disposeStateAsync` into an
+  overriding block each gave them a one-line doc of their own, and a doc comment
+  on an override replaces the inherited text rather than adding to it — so the
+  contract was on `LiteScopeCoreState`, the one class of the four nobody is told
+  to extend. The `LiteScope` topic states it beside the teardown pair as well;
+  the `Scope` topic already did.
 * **Breaking:** `ScopeAutoDependencies.dispose()` and
   `ScopeDependency.dispose()` called while an `init()` of the same tree is
   still running are now refused with a `StateError` instead of going ahead.

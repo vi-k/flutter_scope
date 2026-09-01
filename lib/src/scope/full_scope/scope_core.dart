@@ -340,11 +340,9 @@ abstract base class ScopeCoreState<
   // Overriding block
   //
 
-  /// Initializes the scope asynchronously.
   @override
   FutureOr<void> initStateAsync() {}
 
-  /// Disposes the scope asynchronously.
   @override
   FutureOr<void> disposeStateAsync() {}
 

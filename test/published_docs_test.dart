@@ -54,6 +54,61 @@ void main() {
     );
   });
 
+  // A subclass that re-declares an inherited member and gives it a one-line
+  // doc of its own does not add a line to the page: it replaces the whole
+  // inherited text with that line. `LiteScopeState`, `ScopeCoreState` and
+  // `ScopeState` each re-declare `initStateAsync` and `disposeStateAsync` to
+  // gather them into their overriding block, and each carried "Initializes the
+  // scope asynchronously." So the rule a disposer has to know -- that it runs
+  // after an `initStateAsync` that threw and must therefore expect a partially
+  // initialized state, the breaking change of 0.13.0 -- stood on the page of
+  // `LiteScopeCoreState` alone, which is the one class of the four nobody is
+  // told to extend. Left without a doc comment the override inherits the base
+  // text, and `public_member_api_docs` does not ask for one on an override.
+  test('the overriding blocks inherit their contract rather than shadow it',
+      () {
+    final declaration =
+        RegExp(r'^\s*FutureOr<void> (initStateAsync|disposeStateAsync)\(\)');
+
+    final overrides = <String>[];
+    final shadowed = <String>[];
+
+    for (final entity in Directory('lib').listSync(recursive: true)) {
+      if (entity is! File || !entity.path.endsWith('.dart')) {
+        continue;
+      }
+
+      final lines = entity.readAsLinesSync();
+      for (final (index, line) in lines.indexed) {
+        if (!declaration.hasMatch(line) ||
+            index < 1 ||
+            lines[index - 1].trim() != '@override') {
+          continue;
+        }
+
+        final place = '${entity.path}:${index + 1}: ${line.trim()}';
+        overrides.add(place);
+        if (index >= 2 && lines[index - 2].trim().startsWith('///')) {
+          shadowed.add(place);
+        }
+      }
+    }
+
+    expect(
+      overrides,
+      hasLength(6),
+      reason: 'a check over nothing passes for nothing: three classes '
+          're-declare both hooks, and the two base declarations carry no '
+          '`@override`',
+    );
+    expect(
+      shadowed,
+      isEmpty,
+      reason: 'a doc comment on an override replaces the inherited text on the '
+          'page rather than adding to it, and the contract lives in the base',
+    );
+  });
+
   // `init:` is a parameter of nothing in this package. `AsyncScope` takes
   // `initScope:`, `AsyncDataScope` takes `initData:`, and both have since the
   // renaming of 2026-08-18; `ScopeModel` and `ScopeNotifier` take `create:`

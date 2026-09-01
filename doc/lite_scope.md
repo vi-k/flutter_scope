@@ -87,6 +87,16 @@ Future<void> disposeStateAsync() => _connection.close();   // may take its time
 way the scope goes. The `BuildContext` is gone by the time it runs on a removed
 scope, so it may only touch what the state holds in its own fields.
 
+**Both halves run after an `initStateAsync()` that threw**, in the same order as
+after one that succeeded — so a disposer has to expect a partially initialized
+state: a field the `await` never reached is still unset when it runs. A failed
+initialization is not one that never happened. An initializer that opened a
+connection and threw on the next line has opened it, and nothing else is holding
+it: the scope never becomes ready, so its owner is never handed the state
+either, and this hook is the only release there is. Release therefore belongs
+here rather than in front of every `throw` — what it must not do is assume the
+initializer got to the end.
+
 ## Two initializations
 
 There are two phases, and they are not the same thing.

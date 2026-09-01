@@ -330,11 +330,9 @@ abstract base class LiteScopeState<W extends LiteScope<W, S>,
   // Overriding block
   //
 
-  /// Initializes the scope asynchronously.
   @override
   FutureOr<void> initStateAsync() {}
 
-  /// Disposes of the scope asynchronously.
   @override
   FutureOr<void> disposeStateAsync() {}
 
