@@ -126,6 +126,52 @@ void main() {
     final declaration =
         RegExp(r'^\s*FutureOr<void> (initStateAsync|disposeStateAsync)\(\)');
 
+    // Walks up from the declaration, past however many annotations stand
+    // between it and whatever is above them. Asking only the line directly
+    // above -- which is what stood here first -- read `@protected` over
+    // `@override` as "not an override" and a doc over `@protected` as "no
+    // doc": both halves of the check went blind at once, and the count that
+    // guards against an empty sample was satisfied by the same miscount.
+    ({bool isOverride, bool isShadowed}) above(List<String> lines, int index) {
+      var line = index - 1;
+      var isOverride = false;
+
+      while (line >= 0 && lines[line].trimLeft().startsWith('@')) {
+        isOverride |= lines[line].trim() == '@override';
+        line--;
+      }
+
+      return (
+        isOverride: isOverride,
+        isShadowed:
+            isOverride && line >= 0 && lines[line].trim().startsWith('///'),
+      );
+    }
+
+    // The form the check has to see, whether or not `lib/` holds one today.
+    // A sample rather than a fixture in `lib/`: this is about the reading, and
+    // adding an annotation to the package to be read would be changing the
+    // package to suit its test.
+    const separated = [
+      '  /// Disposes of the scope asynchronously.',
+      '  @protected',
+      '  @override',
+      '  FutureOr<void> disposeStateAsync() {}',
+    ];
+    final read = above(separated, 3);
+    expect(
+      read.isOverride,
+      isTrue,
+      reason: 'an annotation between `@override` and the declaration does not '
+          'stop it from being an override',
+    );
+    expect(
+      read.isShadowed,
+      isTrue,
+      reason: 'nor does it stop the doc above from replacing the inherited '
+          'text on the page, which is the whole of what this asks',
+    );
+
     final overrides = <String>[];
     final shadowed = <String>[];
 
@@ -136,15 +182,18 @@ void main() {
 
       final lines = entity.readAsLinesSync();
       for (final (index, line) in lines.indexed) {
-        if (!declaration.hasMatch(line) ||
-            index < 1 ||
-            lines[index - 1].trim() != '@override') {
+        if (!declaration.hasMatch(line)) {
+          continue;
+        }
+
+        final read = above(lines, index);
+        if (!read.isOverride) {
           continue;
         }
 
         final place = '${entity.path}:${index + 1}: ${line.trim()}';
         overrides.add(place);
-        if (index >= 2 && lines[index - 2].trim().startsWith('///')) {
+        if (read.isShadowed) {
           shadowed.add(place);
         }
       }
