@@ -42,7 +42,11 @@
   walk started there — or on any node of a tree driven by hand — met nothing at
   all and lost the same dependency in the same way. Every node between that
   door and the parked leaf is initializing too, a group being one for as long
-  as its children are, so the walk is refused wherever it was entered.
+  as its children are, so the walk is refused wherever it was entered. What the
+  message says about the cancellation now depends on `autoDisposeOnError`: with
+  the opt-out the cancellation unmounts and stops — keeping the half-built tree
+  is the point of turning it off — so it sends the caller back for the
+  `dispose()` afterwards instead of promising that cancelling is enough.
 * Fixed: a change to an inherited widget the scope itself depends on — which is
   every `Theme.of(context)`, `MediaQuery.of(context)` or app-specific lookup
   made by the code that builds its subtree, the context there being the scope's

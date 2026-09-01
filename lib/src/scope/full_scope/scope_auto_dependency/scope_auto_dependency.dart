@@ -448,15 +448,28 @@ abstract base class ScopeAutoDependencies<T extends ScopeAutoDependencies<T, C>,
     // and cancelling disposes of what the run had built. This is for whoever
     // drives the container by hand, and it tells them to do what the scope
     // does.
+    //
+    // What the cancellation then amounts to depends on [autoDisposeOnError],
+    // so the message asks rather than assumes. With the opt-out the
+    // cancellation unmounts and stops -- keeping the half-built tree is the
+    // whole point of turning it off -- and a caller who followed the flat
+    // "cancelling releases what it had built" was left holding everything the
+    // run had taken, in the one mode where the extra step matters most.
     if (_initializing) {
+      final afterCancelling = autoDisposeOnError
+          ? 'cancelling the subscription releases what it had built'
+          : 'cancelling the subscription unmounts what it had built and '
+              'leaves the rest of it standing, this container having turned '
+              '`autoDisposeOnError` off, so dispose of it once the '
+              'cancellation has come back';
+
       throw StateError(
         '$T is initializing right now, and a `dispose()` started here would '
         'walk a tree whose dependencies have not registered their teardown '
         'yet: one parked inside its initializer looks like a dependency with '
         'nothing to release, and what it registers a moment later would never '
         'be called by anything. Cancel the initialization that is running -- '
-        'cancelling the subscription releases what it had built -- or await '
-        'it before disposing of the container.',
+        '$afterCancelling -- or await it before disposing of the container.',
       );
     }
 

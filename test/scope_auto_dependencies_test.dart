@@ -2343,6 +2343,71 @@ void main() {
       timeout: const Timeout(Duration(seconds: 10)),
     );
 
+    // L2 of the post-wave review. The refusal tells the caller to cancel the
+    // initialization, and said flatly that cancelling "releases what it had
+    // built". That is the default. A container with `autoDisposeOnError`
+    // turned off is promised the opposite -- the half-built tree is kept for
+    // inspection, and the cancellation unmounts and stops there -- so the
+    // caller who follows this message to the letter, in the one mode where the
+    // extra step matters most, is left holding everything the run had taken.
+    // The fact itself is pinned elsewhere (`scope_removed_while_initializing`,
+    // "keeps the half-built tree when asked to keep it"); what is checked here
+    // is that the message knows about it.
+    test(
+      'the refusal says what cancelling does in the mode it is refusing in',
+      () async {
+        final gate = Completer<void>();
+        final log = <String>[];
+        final kept = KeptOnErrorDependencies(gate, log);
+        final released = LateRegisteringDependencies(gate, log);
+        addTearDown(() {
+          if (!gate.isCompleted) {
+            gate.complete();
+          }
+        });
+
+        final first = kept.init(null).drain<void>();
+        final second = released.init(null).drain<void>();
+        await Future<void>.delayed(Duration.zero);
+
+        Object? refusedKept;
+        await kept.dispose().catchError((Object error) => refusedKept = error);
+        Object? refusedReleased;
+        await released
+            .dispose()
+            .catchError((Object error) => refusedReleased = error);
+
+        expect(
+          refusedKept,
+          isA<StateError>().having(
+            (error) => error.message,
+            'sends the opted-out caller back for a second `dispose()`',
+            allOf(
+              contains('autoDisposeOnError'),
+              contains('dispose of it once the cancellation has come back'),
+            ),
+          ),
+          reason: 'cancelling unmounts and keeps the tree here, so the '
+              'cancellation on its own is not the teardown',
+        );
+        expect(
+          refusedReleased,
+          isA<StateError>().having(
+            (error) => error.message,
+            'tells the default caller that cancelling is enough',
+            contains('releases what it had built'),
+          ),
+        );
+
+        gate.complete();
+        await first;
+        await second;
+        await kept.dispose();
+        await released.dispose();
+      },
+      timeout: const Timeout(Duration(seconds: 10)),
+    );
+
     // The same door, one step to the side. The guard above stands on
     // `ScopeAutoDependencies.dispose()`, and the tree it protects is handed
     // out by `root` -- public, and a tree the `Scope` topic says belongs to
@@ -2730,6 +2795,29 @@ final class LateRegisteringDependencies
 
   final Completer<void> gate;
   final List<String> log;
+
+  @override
+  ScopeDependency buildDependencies(void context) => dep('slow', (dep) async {
+        log.add('init slow');
+        await gate.future;
+        dep.dispose = () => log.add('dispose slow');
+      });
+}
+
+/// The same late registration, in a container that keeps its half-built tree.
+///
+/// `autoDisposeOnError` off is the documented opt-out: a cancelled or failed
+/// initialization unmounts and stops, and what it built is left standing for
+/// its owner to look at and then dispose of.
+final class KeptOnErrorDependencies
+    extends ScopeAutoDependencies<KeptOnErrorDependencies, void> {
+  KeptOnErrorDependencies(this.gate, this.log);
+
+  final Completer<void> gate;
+  final List<String> log;
+
+  @override
+  bool get autoDisposeOnError => false;
 
   @override
   ScopeDependency buildDependencies(void context) => dep('slow', (dep) async {
