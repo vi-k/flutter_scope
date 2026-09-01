@@ -365,7 +365,37 @@ extension<T> on Iterable<Stream<T>> {
       // when it is made rather than when it is listened to would begin twice,
       // and that is too quiet a failure to leave hanging on which operation
       // happens to be last.
-      final streams = toList(growable: false);
+      final List<Stream<T>> streams;
+      try {
+        streams = toList(growable: false);
+        // ignore: avoid_catching_errors
+      } on Object catch (error, stackTrace) {
+        // Walking the chain runs whatever the caller put in it. For the
+        // initialization that is `initializationRequired`, an extension getter
+        // over `state` — a field read for the package's own dependencies, and
+        // anything at all for one of the caller's own making, which the
+        // interface allows. A throw that escapes `onListen` is told to nobody
+        // and closes nothing: the walk stopped for good, with no error, no
+        // exit and no end, and the sibling branches were left holding whatever
+        // they had taken. It is the same shape `_guarded` answers around
+        // `dep.init()` itself, one step earlier in the same expression.
+        //
+        // Answered on the stream, and from a microtask because this controller
+        // is `sync: true`: an event added from inside `onListen` reaches a
+        // subscription that `listen` has not returned yet.
+        scheduleMicrotask(() {
+          if (controller.isClosed) {
+            return;
+          }
+
+          controller
+            ..addError(error, stackTrace)
+            ..close(); // ignore: discarded_futures
+        });
+
+        return;
+      }
+
       if (streams.isEmpty) {
         controller.close(); // ignore: discarded_futures
         return;

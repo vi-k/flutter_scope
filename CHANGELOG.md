@@ -116,7 +116,11 @@
   is told to nobody and closes nothing, so the walk stopped for good with no
   error, no exit and no end, on the way in as on the way out. Both now answer
   as a stream that fails after its first event does; a `sequential` group
-  always did.
+  always did. The same holds for a throw from the dependency's `state` getter:
+  a concurrent group filters its branches by `initializationRequired`, which
+  reads `state`, and it does so inside that same merge — so the whole of what
+  the group asks a foreign branch before running it is answered as an error
+  now, rather than stopping the walk in silence.
 * Fixed: a `close()` the framework refused used to stop the scope from ever
   being disposed of. `close()` asks for a rebuild before it releases anything,
   and `markNeedsBuild()` is refused outright while a build is running or while

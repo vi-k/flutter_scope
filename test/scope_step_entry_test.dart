@@ -671,6 +671,38 @@ void main() {
     // returns a stream. The entry was announced by then, and the throw left
     // through the future handed to the caller -- past `onError`, past
     // `onDisposed`, and past the comment saying this method never re-throws.
+    // The remainder of `f377aea`, left open in the handoff and closed here.
+    // The guard `_guarded` stands around `dep.init()`, and the filter in front
+    // of it — `where((dep) => dep.initializationRequired)` — is walked inside
+    // `onListen` of the merged stream, where a throw is told to nobody and
+    // closes nothing. So a branch of the caller's own making whose `state`
+    // getter throws stopped the walk for good: no error, no exit, no end, and
+    // the sibling branch left holding whatever it had taken.
+    test(
+      'carries a foreign branch whose state getter throws',
+      () async {
+        final group = ScopeDependency.concurrent('g', [
+          _StateThrowingForeignDependency(),
+          ScopeDependency('own', (dep) {}),
+        ]);
+
+        Object? failure;
+        await group
+            .init()
+            .drain<void>()
+            .onError<Object>((error, stackTrace) => failure = error);
+
+        expect(
+          failure,
+          isNotNull,
+          reason: 'the walk cannot go on without knowing which branches to '
+              'run, and a walk that neither ends nor says why is the one '
+              'outcome nobody can act on',
+        );
+      },
+      timeout: const Timeout(Duration(seconds: 10)),
+    );
+
     test('carries a foreign root that throws before returning its stream',
         () async {
       final dependencies = _SyncFailingForeignRoot();
@@ -878,6 +910,18 @@ final class _ForeignDependency implements ScopeDependency {
 
   @override
   String stateToString() => '$state';
+}
+
+/// The same, with a `state` that throws when it is read.
+///
+/// `initializationRequired` is an extension getter over `state`, so this is how
+/// a dependency of the caller's own making throws from the predicate a
+/// concurrent group filters its branches with — a place the package's own
+/// dependencies cannot throw from, `state` being a field read for them.
+final class _StateThrowingForeignDependency extends _ForeignDependency {
+  @override
+  ScopeDependencyState get state =>
+      throw StateError('foreign state getter boom');
 }
 
 /// The same, with a release that fails inside the stream it returned.
