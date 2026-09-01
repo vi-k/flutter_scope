@@ -314,6 +314,68 @@ void main() {
       expect(seen, [1, 2, 3], reason: 'and it goes on from there');
     });
 
+    // The other half of the same reentrancy, and the half that decides how the
+    // rollback is written rather than whether there is one. Both deliveries
+    // fail here: the nested one puts back what it found -- which is the value
+    // the outer one had just written -- and the outer one still has to put
+    // back its own. A generation counter, which is the shape the finding
+    // proposed, would see the generation move and leave `1` standing: a value
+    // the listener never received, and the next notification carrying it
+    // filtered out as already delivered. Counting the deliveries that came
+    // back says "none of them", and the value goes to where it started.
+    test('two deliveries that both failed leave the value they started from',
+        () {
+      final notifier = _Model();
+      addTearDown(notifier.dispose);
+      final seen = <int>[];
+      final refused = <int>{};
+
+      final subscription = notifier.select(
+        (model) => model.value,
+        (model, value) {
+          seen.add(value);
+          if (refused.add(value)) {
+            if (value == 1) {
+              // `ChangeNotifier` catches what a listener throws, so the nested
+              // failure comes back here rather than tearing through this call.
+              model.value = 2;
+            }
+
+            throw StateError('the listener of the caller failed at $value');
+          }
+        },
+      );
+      addTearDown(subscription.cancel);
+
+      final reported = <Object>[];
+      final previous = FlutterError.onError;
+      FlutterError.onError = (details) => reported.add(details.exception);
+
+      notifier.value = 1;
+
+      FlutterError.onError = previous;
+
+      expect(seen, [1, 2], reason: 'both were attempted, in that order');
+      expect(reported, hasLength(2), reason: 'and both failed');
+      expect(
+        subscription.value,
+        0,
+        reason: 'neither of them got through, so neither value is this '
+            "subscription's -- and 1 least of all: the nested delivery put it "
+            'back on its way out, and nobody ever received it',
+      );
+
+      notifier.touch();
+
+      expect(
+        seen,
+        [1, 2, 2],
+        reason: 'the value the model has held all along is still a change as '
+            'far as this subscription is concerned',
+      );
+      expect(subscription.value, 2, reason: 'received this time');
+    });
+
     // L1 of the Fable half of the post-wave review. The guard exists in
     // `select` and nothing held it: taken away, the whole suite stayed green,
     // while `CHANGELOG.md` promises the behaviour for 0.13.0. A
