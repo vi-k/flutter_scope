@@ -263,6 +263,93 @@ void main() {
       expect(subscription.value, 1, reason: 'received this time');
     });
 
+    // L1 of the post-wave review. The value is written before the listener
+    // runs so that a listener which notifies again does not start a walk of
+    // its own -- and put back if that listener throws. Put back
+    // unconditionally, it also erased a nested delivery that had *succeeded*
+    // in the meantime: the model said `2`, the subscription said the value it
+    // had started from, and the next notification carrying `2` was filtered
+    // out as already delivered.
+    test('a delivery that succeeded inside a failing one is kept', () {
+      final notifier = _Model();
+      addTearDown(notifier.dispose);
+      final seen = <int>[];
+      var refuse = true;
+
+      final subscription = notifier.select(
+        (model) => model.value,
+        (model, value) {
+          seen.add(value);
+          if (refuse) {
+            refuse = false;
+            // Reentrant, and it goes all the way through: the nested delivery
+            // hands `2` over and comes back before this one fails.
+            model.value = 2;
+
+            throw StateError('the listener of the caller failed');
+          }
+        },
+      );
+      addTearDown(subscription.cancel);
+
+      final reported = <Object>[];
+      final previous = FlutterError.onError;
+      FlutterError.onError = (details) => reported.add(details.exception);
+
+      notifier.value = 1;
+
+      FlutterError.onError = previous;
+
+      expect(seen, [1, 2], reason: 'both deliveries happened, in that order');
+      expect(reported.single, isA<StateError>());
+      expect(
+        subscription.value,
+        2,
+        reason: 'the failure of the outer delivery is no reason to take back '
+            'the inner one, which the listener did receive -- and the model '
+            'says 2, so a subscription saying anything else is behind it',
+      );
+
+      notifier.value = 3;
+      expect(seen, [1, 2, 3], reason: 'and it goes on from there');
+    });
+
+    // L1 of the Fable half of the post-wave review. The guard exists in
+    // `select` and nothing held it: taken away, the whole suite stayed green,
+    // while `CHANGELOG.md` promises the behaviour for 0.13.0. A
+    // `ChangeNotifier` cannot reach it -- it dispatches over the live list --
+    // so the fixture is a `Listenable` of the kind the interface allows.
+    test('a listener taken back before the walk reached it is not called', () {
+      final listenable = _StaleDispatchListenable();
+      var calls = 0;
+
+      final subscription = listenable.select(
+        (source) => source.value,
+        (source, value) => calls++,
+      );
+
+      // The walk starts, over the list as it stands now.
+      final walk = listenable.snapshot();
+
+      subscription.cancel();
+      listenable
+        ..value = 1
+        ..dispatchOver(walk);
+
+      expect(
+        calls,
+        0,
+        reason: 'the subscription was taken back before this reached it, and '
+            'a listener called after that is not something to hand to the '
+            'caller',
+      );
+      expect(
+        subscription.value,
+        0,
+        reason: 'nor does the subscription go on tracking the value',
+      );
+    });
+
     test('compare decides what counts as a change', () {
       final notifier = _Model();
       addTearDown(notifier.dispose);
@@ -743,6 +830,31 @@ final class _RefusingListenable implements Listenable {
   @override
   void removeListener(VoidCallback listener) =>
       throw StateError('this listenable keeps its listeners');
+}
+
+/// A `Listenable` that hands its listeners to a walk taken before the walk
+/// runs, which is something the interface allows and `ChangeNotifier` never
+/// does: a listener taken back mid-walk is still called by it.
+final class _StaleDispatchListenable implements Listenable {
+  final _listeners = <VoidCallback>[];
+
+  int value = 0;
+
+  @override
+  void addListener(VoidCallback listener) => _listeners.add(listener);
+
+  @override
+  void removeListener(VoidCallback listener) => _listeners.remove(listener);
+
+  /// The listeners as they stand, for a walk to be started over later.
+  List<VoidCallback> snapshot() => List.of(_listeners);
+
+  /// Calls everyone [snapshot] found, whatever has happened since.
+  void dispatchOver(List<VoidCallback> walk) {
+    for (final listener in walk) {
+      listener();
+    }
+  }
 }
 
 /// A value type: two boxes holding the same number are equal, and a new one is

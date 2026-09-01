@@ -186,6 +186,14 @@
   raises in debug and does nothing in release — the two builds disagreed about
   what the widget showed from then on. The value is taken back when the
   listener fails, and the next notification is a change again.
+* Fixed: `Listenable.select` took the value back over a delivery that had
+  already succeeded. A listener is free to notify again from inside its own
+  call, and the nested delivery hands a newer value over before the outer one
+  comes back — so an outer listener that then threw rolled in the value it had
+  started from, over the top of one the listener had received. The subscription
+  said one thing and the model another, and the next notification carrying the
+  newer value was filtered out as already delivered. The value is now put back
+  only when nothing got through while the failing listener was running.
 * Fixed: `StateAsNotifier.addListener` built a fresh notifier when it was
   called from the tail of its own `State.dispose()` — `mounted` stays true for
   the whole of that call, so the guard was open while the mixin had already

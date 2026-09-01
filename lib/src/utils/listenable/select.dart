@@ -42,6 +42,19 @@ extension ListenableSelectExtension<L extends Listenable> on L {
   }) {
     late final ListenableSelectSubscription<T> subscription;
 
+    // How many deliveries have come back without throwing.
+    //
+    // A listener is free to notify again from inside its own call, and the
+    // nested delivery that follows writes a newer value and hands it over
+    // before this one comes back. Rolling the previous value in
+    // unconditionally then threw away a delivery that had *succeeded*: the
+    // model said `2`, the subscription said the value it had started from, and
+    // the next notification carrying `2` was filtered out as already
+    // delivered. Counted rather than compared with what stands there now,
+    // because comparing means calling the caller's `compare` from inside the
+    // failure path, where a second throw would replace the first.
+    var deliveries = 0;
+
     void handle() {
       // A `Listenable` of the caller's own is free to dispatch over a copy of
       // its list taken before `cancel()` removed this one from it, and then
@@ -65,12 +78,20 @@ extension ListenableSelectExtension<L extends Listenable> on L {
         // which raises in debug and does nothing in release, so this was a
         // widget stuck on an old value in debug alone.
         final previous = subscription._value;
+        final delivered = deliveries;
         subscription._value = newValue;
         try {
           listener(this, newValue);
+          deliveries++;
           // ignore: avoid_catching_errors
         } on Object {
-          subscription._value = previous;
+          // Only when nothing got through while this call was running. A
+          // nested delivery that succeeded owns the value now; one that failed
+          // has already put back what it found, which is the value this call
+          // wrote -- so this call still puts back its own.
+          if (deliveries == delivered) {
+            subscription._value = previous;
+          }
 
           rethrow;
         }
