@@ -33,7 +33,18 @@ mixin ScopeDependencyMixin implements ScopeDependency, ScopeObservable {
   /// initialized" is the true thing to say about it, and it is not what this
   /// state means.
   void _markNothingToDispose() {
-    if (_isDisposalDone) {
+    // A dependency that is initializing right now holds nothing *yet*, which
+    // is not the same as holding nothing. The guard on `dispose()` asks
+    // `_initializing` of the node a walk starts from, and that is the whole
+    // answer only while one caller drives the tree: a group whose child was
+    // initialized around it carries no such flag of its own, passes the guard,
+    // and used to write the parked child off here for good -- every later walk
+    // then skipped it by `disposalRequired`, and what the initializer
+    // registered a moment later was released by nothing. Refused here as well,
+    // the walk still passes such a child by, because there is genuinely
+    // nothing to run for it; what it no longer does is decide that on the
+    // child's behalf for the rest of its life.
+    if (_isDisposalDone || _initializing) {
       return;
     }
 

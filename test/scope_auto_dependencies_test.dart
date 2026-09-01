@@ -2467,6 +2467,66 @@ void main() {
       timeout: const Timeout(Duration(seconds: 10)),
     );
 
+    // The last diagonal of the same family, and the one the guard above cannot
+    // see. It asks `_initializing` of the node the walk starts from, and a
+    // group whose child was initialized *around* it carries no such flag: it
+    // passes the guard, finds the parked child with an empty handle, and marks
+    // it as holding nothing for good. Driving one tree two ways at once is
+    // what it takes, and the init side already refuses that mixture -- the
+    // group calls the parked child again and gets its own `StateError`. The
+    // disposal side did not.
+    test(
+      'a group does not write off a child that is initializing around it',
+      () async {
+        final gate = Completer<void>();
+        final log = <String>[];
+        addTearDown(() {
+          if (!gate.isCompleted) {
+            gate.complete();
+          }
+        });
+
+        final leaf = ScopeDependency('a', (dep) async {
+          log.add('init a');
+          await gate.future;
+          dep.dispose = () => log.add('release a');
+        });
+        final group = ScopeDependency.sequential('g', [leaf]);
+
+        // Straight at the child, around the group that holds it.
+        final first = leaf.init().drain<void>();
+        await Future<void>.delayed(Duration.zero);
+
+        await group.dispose().drain<void>();
+
+        expect(
+          log,
+          ['init a'],
+          reason: 'nothing was released, because nothing was taken yet',
+        );
+
+        gate.complete();
+        await first;
+
+        expect(
+          leaf.disposalRequired,
+          isTrue,
+          reason: 'the walk that found an empty handle wrote nothing down: the '
+              'disposer registered a moment later is still owed',
+        );
+
+        await group.dispose().drain<void>();
+
+        expect(
+          log,
+          ['init a', 'release a'],
+          reason: 'and the walk that comes later reaches it -- the loss is '
+              'recoverable, which is the whole of what this asks',
+        );
+      },
+      timeout: const Timeout(Duration(seconds: 10)),
+    );
+
     // The same hole one layer down, and reachable without the container:
     // `ScopeDependency` is public and `init()` is on its interface, so a tree
     // driven by hand -- or a `ScopeDependencies` written against the interface

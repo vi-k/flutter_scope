@@ -42,7 +42,13 @@
   walk started there — or on any node of a tree driven by hand — met nothing at
   all and lost the same dependency in the same way. Every node between that
   door and the parked leaf is initializing too, a group being one for as long
-  as its children are, so the walk is refused wherever it was entered. What the
+  as its children are, so the walk is refused wherever it was entered. The last
+  way in is not a door but a side street: a group whose child was initialized
+  *around* it carries no `_initializing` of its own, passes the guard, and used
+  to write that child off as holding nothing for good. It no longer does — the
+  walk still passes such a child by, because there is genuinely nothing to run
+  for it, but the disposer it registers a moment later is reached by the walk
+  that comes next. What the
   message says about the cancellation now depends on `autoDisposeOnError`: with
   the opt-out the cancellation unmounts and stops — keeping the half-built tree
   is the point of turning it off — so it sends the caller back for the
