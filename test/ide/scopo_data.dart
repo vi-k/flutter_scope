@@ -53,11 +53,8 @@ final class DbScope extends AsyncDataScopeBase<DbScope, Database> {
   // `AsyncDataScopeBase.select` is there if the state is what you need.
 
   @override
-  Stream<AsyncDataScopeInitState<Object, Database>> initData(
-    BuildContext context,
-  ) async* {
-    yield AsyncDataScopeReady(await Database.open());
-  }
+  Future<Database> initData(BuildContext context, ScopeInitContext ctx) =>
+      ctx.wait(Database.open);
 
   @override
   FutureOr<void> disposeData(Database data) => data.close();

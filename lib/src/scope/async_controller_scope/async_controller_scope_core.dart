@@ -95,7 +95,7 @@ abstract base class AsyncControllerScopeElementBase<
   /// away silently. The hook to write is [createController].
   @nonVirtual
   @override
-  Stream<AsyncDataScopeInitState<Object, C>> initDataAsync() async* {
+  Future<C> initDataAsync(ScopeInitContext ctx) async {
     final controller = _controller = createController(this);
 
     // The family promises "a controller created, initialized and released on
@@ -118,29 +118,33 @@ abstract base class AsyncControllerScopeElementBase<
 
     try {
       await controller.performInit();
-
-      yield AsyncDataScopeReady(controller);
-    } finally {
-      // The criterion is the one `_performAsyncDispose` uses to decide whether
-      // to call `disposeScope`, and it is that one on purpose: the controller
-      // has to be released exactly once, so the flag that releases it here and
-      // the flag that releases it there must be the same fact rather than two
-      // facts that agree.
+      // ignore: avoid_catching_errors
+    } on Object {
+      // On the way out, and no longer in a `finally` asking whether the scope
+      // took the controller over.
       //
-      // A flag set beside the `yield` above -- what the `AsyncScope`,
-      // `AsyncDataScope` and `Scope` topics teach for an initialization written
-      // by hand -- would agree today, and that is not a coincidence worth
-      // relying on twice over: the statement after a `yield` runs when the
-      // stream asks for the next event, which is after the scope has taken the
-      // one it was given, and a cancellation at the `yield` ends the body
-      // without running it. The suite stands in the narrowest state where the
-      // two could disagree -- registered, but with the ready branch still held
-      // back by `pauseAfterInitialization` -- and they do not
-      // (`scope_removed_while_initializing_test.dart`).
-      if (!_initSucceeded) {
-        await _releaseController(controller);
-      }
+      // That question used to be asked of `_initSucceeded`, the same flag
+      // `_performAsyncDispose` reads -- one fact rather than two that agree --
+      // and the answer was right because of where the asking stood: the
+      // statement after a `yield` runs when the stream is asked for its next
+      // event, which is after the scope has accepted the one it was given. A
+      // `return` inverts that. The body finishes first and the acceptance
+      // comes after, so the same `finally` would find the flag still false and
+      // release a controller that is running behind the ready branch
+      // (`async_controller_scope_test.dart` stands in that gap, widened by
+      // `pauseAfterInitialization`).
+      //
+      // What is left are the two paths where the controller really is still
+      // this body's to give back: `performInit` threw, which is here, and the
+      // cancellation, where the value never reaches the scope and
+      // `releaseLateValue` hands it to `disposeData` -- which is
+      // `performDispose` for this family. A controller that was handed over is
+      // released by the teardown, exactly once, as before.
+      await _releaseController(controller);
+      rethrow;
     }
+
+    return controller;
   }
 
   /// Releases [controller] when the initialization never handed it over.
@@ -233,6 +237,19 @@ abstract base class AsyncControllerScopeElementBase<
   /// its ready state, and forgetting it leaks exactly what this family
   /// exists to keep hold of.
   @mustCallSuper
+  @override
+  FutureOr<void> disposeData(C data) => data.performDispose();
+
+  /// The whole promise of the family, kept on the latest path there is.
+  ///
+  /// The default gives a late value back only while the scope still exists,
+  /// which is right for a value the scope was merely holding. A controller is
+  /// not that: it is running, and this family promises it is released on every
+  /// path, so [_releaseController] is written to work with nothing left around
+  /// it -- an unbounded wait, because an abandoned release can hold nothing up.
+  @override
+  Future<void> releaseLateData(C data) => _releaseController(data);
+
   @override
   FutureOr<void> disposeScope() => _controller?.performDispose();
 }

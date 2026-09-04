@@ -1209,11 +1209,8 @@ final class _AsyncData extends AsyncDataScopeBase<_AsyncData, String> {
       : super(child: const SizedBox.shrink());
 
   @override
-  Stream<AsyncDataScopeInitState<Object, String>> initData(
-    BuildContext context,
-  ) async* {
-    yield AsyncDataScopeReady('data');
-  }
+  Future<String> initData(BuildContext context, ScopeInitContext ctx) async =>
+      'data';
 
   @override
   void onUnmount(String? data) => throw StateError('onUnmount failed');

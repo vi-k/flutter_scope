@@ -151,6 +151,37 @@ void main() {
 
     // The hole this family exists to close: a controller whose `init` threw is
     // holding whatever it took before the failure, and the scope never saw it.
+    // The zero-width gap the family used to cross by accident. The flag that
+    // says "the scope took the controller over" is set by the engine when it
+    // accepts the ready event, and the wrapper used to ask about it from a
+    // `finally` that ran after the `yield` -- that is, after the acceptance.
+    // With a `return` the same `finally` runs before it, so a wrapper written
+    // the old way tears down a controller that is running behind the ready
+    // branch. `pauseAfterInitialization` widens the gap to something a test
+    // can stand in.
+    testWidgets(
+      'does not tear down a controller that the scope took over',
+      (tester) async {
+        final controller = _TestController();
+
+        await tester.pumpWidget(
+          _Host(
+            controller: controller,
+            pauseAfterInitialization: const Duration(milliseconds: 50),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(
+          controller.calls,
+          ['init'],
+          reason: 'the controller initialized and the scope is holding it; '
+              'nothing has released it',
+        );
+        expect(find.text('ready'), findsOneWidget);
+      },
+    );
+
     testWidgets('disposes of a controller whose init failed', (tester) async {
       final controller = _TestController(failOnInit: true);
 
@@ -469,11 +500,13 @@ final class _Host extends StatelessWidget {
   final _TestController controller;
   final Duration? disposeScopeTimeout;
   final Duration? initCancellationTimeout;
+  final Duration? pauseAfterInitialization;
 
   const _Host({
     required this.controller,
     this.disposeScopeTimeout,
     this.initCancellationTimeout,
+    this.pauseAfterInitialization,
   });
 
   @override
@@ -483,6 +516,7 @@ final class _Host extends StatelessWidget {
           controller: controller,
           disposeScopeTimeout: disposeScopeTimeout,
           initCancellationTimeout: initCancellationTimeout,
+          pauseAfterInitialization: pauseAfterInitialization,
         ),
       );
 }
@@ -496,6 +530,7 @@ final class _TestScope
     required this.controller,
     super.disposeScopeTimeout,
     super.initCancellationTimeout,
+    super.pauseAfterInitialization,
   });
 
   @override

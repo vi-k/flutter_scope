@@ -469,11 +469,11 @@ Widget _asyncDataScope(_Case c) => AsyncDataScope<String>(
       waitForChildrenTimeout: c.waitForChildrenTimeout,
       onWaitForChildrenTimeout: c.onWaitForChildrenTimeout,
       pauseAfterInitialization: c.pauseAfterInitialization,
-      initData: (context) async* {
+      initData: (context, ctx) async {
         if (c.initGate case final gate?) {
           await gate.future;
         }
-        yield AsyncDataScopeReady(c.label);
+        return c.label;
       },
       disposeData: (data) async {
         if (c.disposeGate case final gate?) {

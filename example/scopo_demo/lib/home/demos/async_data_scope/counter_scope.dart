@@ -27,36 +27,40 @@ final class CounterModel with ChangeNotifier {
     notifyListeners();
   }
 
-  static Stream<AsyncDataScopeInitState<Progress, CounterModel>> init({
+  static Future<CounterModel> init(
+    ScopeInitContext ctx, {
     required Object debugSource,
     required String debugName,
-  }) async* {
+  }) async {
     console.log(debugSource, '$debugName: initialize');
 
-    var isInitialized = false;
     final iterator = ProgressIterator(steps);
 
     try {
-      yield AsyncDataScopeProgress(iterator.currentStep);
+      ctx.progress(iterator.currentStep);
       for (var i = 0; i < steps; i++) {
-        await Future<void>.delayed(const Duration(milliseconds: 100));
-        yield AsyncDataScopeProgress(iterator.nextStep());
+        // Through the context rather than a bare `await`: the wait ends the
+        // moment the scope gives up, instead of running the demo out to its
+        // last step for a screen that is already gone.
+        await ctx.wait(
+          () => Future<void>.delayed(const Duration(milliseconds: 100)),
+        );
+        ctx.progress(iterator.nextStep());
       }
 
-      yield AsyncDataScopeReady(
-        CounterModel._(
-          debugSource: debugSource,
-          debugName: debugName,
-        ),
+      final model = CounterModel._(
+        debugSource: debugSource,
+        debugName: debugName,
       );
-
-      isInitialized = true;
       console.log(debugSource, '$debugName: initialized');
-    } finally {
-      if (!isInitialized) {
-        // An interrupted initialization never yielded a ready model to dispose.
-        console.log(debugSource, '$debugName: cancelled');
-      }
+
+      return model;
+    } on ScopeInitCancelled {
+      // The cancellation arrives as a throw, so it can be told from a failure
+      // by its type -- and the model was never built, so there is nothing to
+      // dispose of, only something to say.
+      console.log(debugSource, '$debugName: cancelled');
+      rethrow;
     }
   }
 
@@ -98,10 +102,9 @@ final class CounterScope
       ).data;
 
   @override
-  Stream<AsyncDataScopeInitState<Progress, CounterModel>> initData(
-    BuildContext context,
-  ) =>
+  Future<CounterModel> initData(BuildContext context, ScopeInitContext ctx) =>
       CounterModel.init(
+        ctx,
         debugSource: debugSource,
         debugName: debugName,
       );

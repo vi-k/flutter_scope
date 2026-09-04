@@ -99,7 +99,7 @@ abstract base class AsyncDataScopeBase<W extends AsyncDataScopeBase<W, T>,
   void onMount(BuildContext context) {}
 
   /// The initialization, ending with the value.
-  Stream<AsyncDataScopeInitState<Object, T>> initData(BuildContext context);
+  Future<T> initData(BuildContext context, ScopeInitContext ctx);
 
   /// Called synchronously when the scope leaves the tree.
   ///
@@ -217,8 +217,7 @@ final class _AsyncDataScopeElement<W extends AsyncDataScopeBase<W, T>,
   }
 
   @override
-  Stream<AsyncDataScopeInitState<Object, T>> initDataAsync() =>
-      widget.initData(this);
+  Future<T> initDataAsync(ScopeInitContext ctx) => widget.initData(this, ctx);
 
   @override
   void onUnmount() {
@@ -227,7 +226,10 @@ final class _AsyncDataScopeElement<W extends AsyncDataScopeBase<W, T>,
   }
 
   @override
-  FutureOr<void> disposeScope() => widget.disposeData(data);
+  FutureOr<void> disposeData(T data) => widget.disposeData(data);
+
+  @override
+  FutureOr<void> disposeScope() => disposeData(data);
 
   @override
   Widget buildOnState(AsyncScopeState state) => switch (state) {

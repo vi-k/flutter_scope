@@ -142,34 +142,30 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
         // This family has no value to hand back, but a body that finished
         // after the cancellation has taken whatever it took, and
         // [disposeScope] is the only thing that gives it back.
-        releaseLateValue: (_) async => releaseAfterCancellation(),
+        releaseLateValue: (_) async {
+          if (canReleaseAfterCancellation) {
+            await disposeScope();
+          }
+        },
       );
 
-  /// Releases what an initialization produced after the scope gave up on it.
+  /// Whether there is still a scope to release a late value with.
   ///
-  /// The release is [disposeScope], and the one thing it needs is a scope that
-  /// still exists. A teardown that gave up on a cancellation it could not wait
-  /// for -- an expired `initCancellationTimeout` -- runs to its end while the
-  /// body is still going, and by then the element has handed back everything
-  /// it was holding, the widget included. `disposeScope` is the widget's, so
-  /// on that path there is nothing left to release with, and saying so out
-  /// loud is the whole of what can be done.
+  /// Every release a family has -- [disposeScope] here, `disposeData` and the
+  /// container's `dispose` below -- is the widget's, and a teardown that gave
+  /// up on a cancellation it could not wait for (an expired
+  /// `initCancellationTimeout`) runs to its end while the body is still going.
+  /// By then the element has handed back everything it held, the widget
+  /// included, and there is nothing left to release with.
+  ///
+  /// A `false` here is passed over in silence, and that is deliberate:
+  /// reaching this point means the teardown gave up on a wait it has already
+  /// reported, and a second report of the same event says nothing new while
+  /// failing every widget test that deliberately leaves an initialization
+  /// hanging. What the body took on that path stays taken; the way not to end
+  /// up here is to give the body something to stop at.
   @protected
-  Future<void> releaseAfterCancellation() async {
-    // Quietly, and that is deliberate. Reaching here means the teardown gave
-    // up on a wait it had already reported -- an expired
-    // `initCancellationTimeout` is announced through `onError` and
-    // `FlutterError.reportError` where it happens -- and a second report of
-    // the same event says nothing new while failing every widget test that
-    // deliberately leaves an initialization hanging. What the body took on
-    // that path stays taken; the way not to end up here is to give the body
-    // something to stop at.
-    if (_disposalFinished) {
-      return;
-    }
-
-    await disposeScope();
-  }
+  bool get canReleaseAfterCancellation => !_disposalFinished;
 
   /// The initialization; ready at once by default.
   ///

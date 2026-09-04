@@ -68,7 +68,7 @@ abstract base class AsyncDataScopeElementBase<
   Duration? get pauseAfterInitialization => null;
 
   /// The initialization, ending with the value.
-  Stream<AsyncDataScopeInitState<Object, T>> initDataAsync();
+  Future<T> initDataAsync(ScopeInitContext ctx);
 
   @override
   FutureOr<void> disposeScope() {}
@@ -114,28 +114,48 @@ abstract base class AsyncDataScopeElementBase<
   /// for good, and the analyzer would say nothing about it.
   @nonVirtual
   @override
-  Stream<AsyncScopeInitState> initScope() => initDataAsync().map(
-        (state) {
-          switch (state) {
-            case AsyncDataScopeProgress(:final progress):
-              return AsyncScopeProgress(progress);
-            case AsyncDataScopeReady(:final data):
-              // Refused here rather than one layer up. This `map` runs as the
-              // event goes past and `asyncMap` only after it, so the check for
-              // a second initialization up there arrived to find the value
-              // already replaced: the model stayed as it was, the dependents
-              // heard nothing, `data` handed out the newcomer, and the value
-              // the scope had been given was left with nobody to release it.
-              if (_hasData) {
-                throw StateError('$W already initialized');
-              }
-
-              _data = data;
-              _hasData = true;
-              return AsyncScopeReady();
+  Stream<AsyncScopeInitState> initScope() =>
+      _runScopeInit<AsyncScopeInitState, T>(
+        body: initDataAsync,
+        progressState: AsyncScopeProgress.new,
+        readyState: (data) {
+          // Refused here rather than one layer up. This runs as the event is
+          // built and the `asyncMap` above only after it has gone past, so
+          // the check for a second initialization up there arrived to find
+          // the value already replaced: the model stayed as it was, the
+          // dependents heard nothing, `data` handed out the newcomer, and the
+          // value the scope had been given was left with nobody to release
+          // it.
+          if (_hasData) {
+            throw StateError('$W already initialized');
           }
+
+          _data = data;
+          _hasData = true;
+
+          return AsyncScopeReady();
         },
+        releaseLateValue: releaseLateData,
       );
+
+  /// Releases the value the initialization produced; awaited.
+  @protected
+  FutureOr<void> disposeData(T data);
+
+  /// Releases a value the body produced after the scope had given up.
+  ///
+  /// It never reached [data], so the release takes it directly rather than
+  /// through [disposeScope], which reads the field — and it happens only
+  /// while there is still a scope to release it with. A family that promises
+  /// more than that overrides this: `AsyncControllerScope` releases its
+  /// controller on every path there is, including this one, and has its own
+  /// release written for exactly that.
+  @protected
+  Future<void> releaseLateData(T data) async {
+    if (canReleaseAfterCancellation) {
+      await disposeData(data);
+    }
+  }
 
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {

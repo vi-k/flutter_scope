@@ -25,6 +25,17 @@
   It now goes to `disposeScope`. The one path where it cannot is a teardown
   that has already finished — an `initCancellationTimeout` it gave up on —
   because the scope no longer has a widget to read the hook from.
+* **Breaking:** `AsyncDataScope.initData` is a `Future<T>` too, and the value
+  is what it returns. `AsyncDataScopeInitState`, `AsyncDataScopeProgress` and
+  `AsyncDataScopeReady` are gone with the form that needed them.
+* **Breaking:** `AsyncControllerScope` releases its controller on the failure
+  path and on the cancellation, rather than from a `finally` that asked
+  whether the scope had taken it over. That question had a right answer only
+  because of where it was asked: the statement after a `yield` runs once the
+  engine has accepted the event, and a `return` inverts that order — the same
+  `finally` would now tear down a controller that is running behind the ready
+  branch. The family's promise is unchanged: created, initialized and released
+  on every path, including the one where `init` wakes up after the teardown.
 * `AsyncScopeProgress` and `AsyncScopeReady` stay: they are states of the
   model, read through `state` and matched in `buildOnState`, and only their
   second job — being the language an initialization was written in — is over.

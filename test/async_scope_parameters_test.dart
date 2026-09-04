@@ -163,8 +163,7 @@ void main() {
           textDirection: TextDirection.ltr,
           child: AsyncDataScope<String>(
             pauseAfterInitialization: const Duration(seconds: 1),
-            initData: (context) =>
-                Stream.value(AsyncDataScopeReady<Object, String>('value')),
+            initData: (context, ctx) async => 'value',
             disposeData: (data) {},
             progressBuilder: (context, progress) => const Text('init'),
             errorBuilder: (context, error, stackTrace, progress) =>
@@ -209,9 +208,7 @@ void main() {
                       waitForChildrenTimeout: const Duration(days: 1),
                       onWaitForChildrenTimeout: () {},
                       pauseAfterInitialization: const Duration(milliseconds: 1),
-                      initData: (context) => Stream.value(
-                        AsyncDataScopeReady<Object, String>('value'),
-                      ),
+                      initData: (context, ctx) async => 'value',
                       disposeData: (data) => hang.future,
                       progressBuilder: (context, progress) =>
                           const Text('init'),

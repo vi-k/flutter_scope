@@ -10,9 +10,8 @@ final class AsyncDataScope<T extends Object?>
   final void Function(BuildContext context)? _onMount;
 
   /// What [initData] was given.
-  final Stream<AsyncDataScopeInitState<Object, T>> Function(
-    BuildContext context,
-  ) _initData;
+  final Future<T> Function(BuildContext context, ScopeInitContext ctx)
+      _initData;
 
   /// What [onUnmount] was given, if anything.
   final void Function(T? data)? _onUnmount;
@@ -62,9 +61,8 @@ final class AsyncDataScope<T extends Object?>
     super.onWaitForChildrenTimeout,
     super.pauseAfterInitialization,
     void Function(BuildContext context)? onMount,
-    required Stream<AsyncDataScopeInitState<Object, T>> Function(
-      BuildContext context,
-    ) initData,
+    required Future<T> Function(BuildContext context, ScopeInitContext ctx)
+        initData,
     void Function(T? data)? onUnmount,
     required FutureOr<void> Function(T data) disposeData,
     this.waitingBuilder,
@@ -80,8 +78,8 @@ final class AsyncDataScope<T extends Object?>
   void onMount(BuildContext context) => _onMount?.call(context);
 
   @override
-  Stream<AsyncDataScopeInitState<Object, T>> initData(BuildContext context) =>
-      _initData(context);
+  Future<T> initData(BuildContext context, ScopeInitContext ctx) =>
+      _initData(context, ctx);
 
   @override
   void onUnmount(T? data) => _onUnmount?.call(data);

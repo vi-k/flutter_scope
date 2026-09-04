@@ -16,11 +16,11 @@ void main() {
 
         await tester.pumpWidget(
           _Host(
-            init: (context) async* {
-              yield AsyncDataScopeProgress('opening');
+            init: (context, ctx) async {
+              ctx.progress('opening');
               await gate.future;
 
-              yield AsyncDataScopeReady(_Database('main'));
+              return _Database('main');
             },
           ),
         );
@@ -50,8 +50,7 @@ void main() {
     testWidgets('select reads one part of the value', (tester) async {
       await tester.pumpWidget(
         _Host(
-          init: (context) =>
-              Stream.value(AsyncDataScopeReady(_Database('main'))),
+          init: (context, ctx) async => _Database('main'),
         ),
       );
       await tester.pumpAndSettle();
@@ -59,13 +58,49 @@ void main() {
       expect(find.text('selected: main'), findsOneWidget);
     });
 
+    // The half a generator cannot do at all: a body that asks the context
+    // nothing cannot be stopped, so its value arrives for a scope that is
+    // already gone. Inside a generator that value stayed with a body nobody
+    // would resume; here the scope still has it, and the only thing left to
+    // do with it is to release it.
+    testWidgets(
+      'a value that arrives after the cancellation is handed to dispose',
+      (tester) async {
+        final disposed = <_Database>[];
+        final database = _Database('main');
+        final gate = Completer<void>();
+
+        await tester.pumpWidget(
+          _Host(
+            init: (context, ctx) async {
+              await gate.future;
+
+              return database;
+            },
+            dispose: disposed.add,
+          ),
+        );
+        await tester.pump();
+
+        await tester.pumpWidget(const SizedBox.shrink());
+        gate.complete();
+        await settle(tester, until: () => disposed.isNotEmpty);
+
+        expect(
+          disposed,
+          [same(database)],
+          reason: 'the value the body produced too late is still released',
+        );
+      },
+    );
+
     testWidgets('hands the data it produced to dispose', (tester) async {
       final disposed = <_Database>[];
       final database = _Database('main');
 
       await tester.pumpWidget(
         _Host(
-          init: (context) => Stream.value(AsyncDataScopeReady(database)),
+          init: (context, ctx) async => database,
           dispose: disposed.add,
         ),
       );
@@ -89,8 +124,8 @@ void main() {
       (tester) async {
         await tester.pumpWidget(
           _Host(
-            init: (context) async* {
-              yield AsyncDataScopeProgress('opening');
+            init: (context, ctx) async {
+              ctx.progress('opening');
 
               throw StateError('could not open');
             },
@@ -112,48 +147,6 @@ void main() {
     // second `ready` therefore replaced the value before anything could refuse
     // it -- the model stayed as it was, the dependents heard nothing, and the
     // first value was left with nobody to release it.
-    testWidgets('a second ready neither replaces the value nor strands it',
-        (tester) async {
-      final gate = Completer<void>();
-      final disposed = <_Database>[];
-      final first = _Database('first');
-      final second = _Database('second');
-
-      await tester.pumpWidget(
-        _Host(
-          init: (context) async* {
-            yield AsyncDataScopeReady(first);
-            await gate.future;
-
-            yield AsyncDataScopeReady(second);
-          },
-          dispose: disposed.add,
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      expect(find.text('ready: first'), findsOneWidget);
-
-      gate.complete();
-      await tester.pumpAndSettle();
-
-      expect(
-        tester.takeException(),
-        isA<StateError>(),
-        reason: 'a second ready is a mistake in the initialization, and the '
-            'scope says so instead of quietly acting on it',
-      );
-      expect(find.text('ready: first'), findsOneWidget);
-
-      await tester.pumpWidget(const SizedBox.shrink());
-      await settle(tester, until: () => disposed.isNotEmpty);
-
-      expect(
-        disposed,
-        [same(first)],
-        reason: 'what is released is what the scope was given and handed on',
-      );
-    });
 
     testWidgets(
       'nothing is disposed of when the data never arrived',
@@ -162,8 +155,8 @@ void main() {
 
         await tester.pumpWidget(
           _Host(
-            init: (context) async* {
-              yield AsyncDataScopeProgress('opening');
+            init: (context, ctx) async {
+              ctx.progress('opening');
 
               throw StateError('could not open');
             },
@@ -193,10 +186,10 @@ void main() {
 
       await tester.pumpWidget(
         _NullableHost(
-          init: (context) async* {
+          init: (context, ctx) async {
             await gate.future;
 
-            yield AsyncDataScopeReady(null);
+            return null;
           },
           onInitializing: (data) => seen = data,
         ),
@@ -220,7 +213,7 @@ void main() {
 
       await tester.pumpWidget(
         _NullableHost(
-          init: (context) => Stream.value(AsyncDataScopeReady(null)),
+          init: (context, ctx) async => null,
           onReady: (data) => seen = data,
         ),
       );
@@ -243,10 +236,10 @@ void main() {
 
       await tester.pumpWidget(
         _NullableHost(
-          init: (context) async* {
+          init: (context, ctx) async {
             await gate.future;
 
-            yield AsyncDataScopeReady(null);
+            return null;
           },
           onInitializingHasData: seen.add,
           onReadyHasData: seen.add,
@@ -271,8 +264,9 @@ final class _Database {
 }
 
 final class _Host extends StatelessWidget {
-  final Stream<AsyncDataScopeInitState<Object, _Database>> Function(
+  final Future<_Database> Function(
     BuildContext context,
+    ScopeInitContext ctx,
   ) init;
   final void Function(_Database data)? dispose;
 
@@ -305,8 +299,9 @@ final class _Host extends StatelessWidget {
 /// the scope can be looked up from — the builders are called with the scope's
 /// own element, and a lookup walks the ancestors.
 final class _NullableHost extends StatelessWidget {
-  final Stream<AsyncDataScopeInitState<Object, String?>> Function(
+  final Future<String?> Function(
     BuildContext context,
+    ScopeInitContext ctx,
   ) init;
   final void Function(Object? data)? onInitializing;
   final void Function(Object? data)? onReady;

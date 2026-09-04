@@ -49,10 +49,10 @@ void main() {
           textDirection: TextDirection.ltr,
           child: AsyncDataScope<String>(
             onMount: (context) => order.add('onMount'),
-            initData: (context) {
+            initData: (context, ctx) async {
               order.add('init');
 
-              return Stream.value(AsyncDataScopeReady('data'));
+              return 'data';
             },
             disposeData: (data) {},
             progressBuilder: (context, progress) => const SizedBox.shrink(),
