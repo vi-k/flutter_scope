@@ -131,7 +131,8 @@ README-примере появляется лишь оттого, что пол�
 | `Scope.initDependencies` | `Stream<ScopeInitState<P, D>> Function(BuildContext)` | `Future<D> Function(BuildContext, ScopeInitContext)` |
 | `ScopeDependencies.init` — соглашение README, а не член интерфейса | `static Stream<ScopeInitState<P, D>> init()` | `static Future<D> init(ScopeInitContext ctx)` |
 | `ScopeAutoDependencies.init` | `Stream<ScopeInitState<ScopeAutoDependenciesProgress, T>>` | `Future<T>` |
-| `AsyncControllerScope`, `LiteScope` | — | форма, которую пишет пользователь, не меняется: там уже `Future`. Внутренние обёртки переписываются |
+| `LiteScope.initScope` | `Stream<AsyncScopeInitState> Function()`, по умолчанию готов сразу | `Future<void> Function(BuildContext, ScopeInitContext)`, по умолчанию пустое тело |
+| `AsyncControllerScope` | — | форма, которую пишет пользователь, не меняется: `ScopeController.init` уже `Future`. Внутренняя обёртка переписывается, и в ней меняется порядок — см. ниже |
 
 Конец тела — это `Ready`. Отдельного способа сказать «я закончил» больше нет, и
 сказать «закончил» не закончившись тоже нельзя.
@@ -171,6 +172,22 @@ README-примере появляется лишь оттого, что пол�
 
 Значение, которое тело вернуло **до** отмены, идёт обычным путём — движок уже
 умеет это, ничего нового.
+
+## Второй узел: контроллерное семейство
+
+`AsyncControllerScopeCore.initDataAsync` сегодня отдаёт контроллер через
+`yield`, а в `finally` спрашивает `_initSucceeded` — флаг, который движок
+ставит, **приняв** это событие. Порядок держится на том, что оператор после
+`yield` выполняется, когда стрим просят о следующем событии, то есть уже после
+приёма; в самом коде об этом стоит абзац.
+
+С `return` порядок переворачивается: `finally` выполнится **до** того, как
+адаптер вообще отдаст значение движку, и увидит `_initSucceeded == false` —
+то есть разрушит контроллер, который на самом деле уехал в готовую ветку.
+Поэтому обёртка переписывается не механически: освобождение переносится на
+ветку отказа и отмены, а контроллер, произведённый после отмены, освобождает
+адаптер общим правилом позднего значения. Тест, который стоит ровно в этом
+зазоре, — `scope_removed_while_initializing_test.dart`.
 
 ## Узел риска
 
