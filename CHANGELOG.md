@@ -79,10 +79,11 @@
   really performed. Nothing is left holding: a dependency that registered a
   disposer is released whatever its state says.
 * Gone with the stream, and unmissed: the diagnostic for an initialization that
-  ended without ever being ready (a body returns or throws, so there is no
-  third way to end), the guard against a second ready state, and the guard
-  against a failure arriving after one — the ready state is settled after the
-  body returns, so nothing of the initialization can arrive behind it.
+  ended without ever being ready — a body cannot end saying nothing, where a
+  stream could simply close having said neither `Ready` nor an error — plus the
+  guard against a second ready state, and the guard against a failure arriving
+  after one, since the ready state is settled after the body returns. None of
+  this is about cancellation, which is still there and arrives as a throw.
 * `AsyncScopeProgress` and `AsyncScopeReady` stay: they are states of the
   model, read through `state` and matched in `buildOnState`, and only their
   second job — being the language an initialization was written in — is over.
