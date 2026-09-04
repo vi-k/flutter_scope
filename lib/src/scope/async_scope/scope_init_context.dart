@@ -91,6 +91,37 @@ final class ScopeInitHandle {
     _context._onProgress = onProgress;
   }
 
+  /// A handle over a context that [parent] takes with it when it is
+  /// cancelled, and that can be cancelled on its own without touching
+  /// [parent].
+  ///
+  /// This is what a group of concurrent branches gives its arms: the first arm
+  /// to fail gives up on its siblings without giving up on the initialization
+  /// they all belong to.
+  ///
+  /// A child made under a context that is already cancelled is cancelled from
+  /// the start — there is nothing for it to run. Cancelling a child takes it
+  /// off [parent], so a group that ends does not leave its arm behind on a
+  /// context that outlives it.
+  factory ScopeInitHandle.childOf(
+    ScopeInitContext parent, {
+    void Function(Object progress)? onProgress,
+  }) {
+    final child = ScopeInitHandle(onProgress: onProgress);
+    if (parent.isCancelled) {
+      child.cancel();
+
+      return child;
+    }
+
+    child._detachFromParent = parent.onCancel(child.cancel);
+
+    return child;
+  }
+
+  /// Takes this handle off its parent; `null` for a handle with no parent.
+  void Function()? _detachFromParent;
+
   /// The context to hand to the initialization.
   ScopeInitContext get context => _context;
 
@@ -102,7 +133,13 @@ final class ScopeInitHandle {
   /// Every member of [context] throws [ScopeInitCancelled] from here on, and
   /// the callbacks registered through [ScopeInitContext.onCancel] run now.
   /// Calling it twice does nothing the second time.
-  void cancel() => _context._cancel();
+  void cancel() {
+    final detach = _detachFromParent;
+    _detachFromParent = null;
+    detach?.call();
+
+    _context._cancel();
+  }
 }
 
 final class _ScopeInitContext implements ScopeInitContext {
@@ -206,122 +243,4 @@ final class _ScopeInitContext implements ScopeInitContext {
       }
     }
   }
-}
-
-/// Turns an initialization written as a `Future` into the stream the scope
-/// engine consumes.
-///
-/// [progressState] and [readyState] build the two events of the family this
-/// runs for; [releaseLateValue] is given a value that arrived after the scope
-/// had already given up — the body could not be stopped, and what it produced
-/// still has to be let go of.
-Stream<S> _runScopeInit<S extends Object, T>({
-  required Future<T> Function(ScopeInitContext ctx) body,
-  required S Function(Object progress) progressState,
-  required S Function(T value) readyState,
-  required FutureOr<void> Function(T value) releaseLateValue,
-}) {
-  final ctx = _ScopeInitContext();
-  late final StreamController<S> controller;
-
-  /// The body, while it runs. What a cancellation waits for.
-  Future<void>? running;
-
-  void report(Object error, StackTrace stackTrace, String what) {
-    FlutterError.reportError(
-      FlutterErrorDetails(
-        exception: error,
-        stack: stackTrace,
-        library: 'scopo',
-        context: ErrorDescription(what),
-      ),
-    );
-  }
-
-  Future<void> run() async {
-    try {
-      final value = await body(ctx);
-
-      // The half a generator cannot do at all. A body that never asks the
-      // context anything cannot be stopped, so its value can arrive for a
-      // scope that is already gone -- and inside a generator that value is
-      // simply lost, held by a body nobody will resume. Here it is still in
-      // hand, and the only thing left to do with it is to release it.
-      if (ctx.isCancelled) {
-        try {
-          await releaseLateValue(value);
-          // ignore: avoid_catching_errors
-        } on Object catch (error, stackTrace) {
-          report(
-              error,
-              stackTrace,
-              'while releasing a value that the '
-              'initialization produced after it had been cancelled');
-        }
-
-        return;
-      }
-
-      controller.add(readyState(value));
-      // Closed and not waited for, and this is load-bearing. `close()` comes
-      // back only once `done` has been delivered, and delivering `done` takes
-      // the listener off -- which calls `onCancel` below, which waits for this
-      // very body. Awaiting the close here is therefore a deadlock with
-      // itself: the body waits for the close, the close waits for the
-      // cancellation, and the cancellation waits for the body. Nothing else
-      // announces it, either: the scope goes on showing its loading branch,
-      // and the teardown gives up on the initialization only when
-      // `initCancellationTimeout` expires.
-      unawaited(controller.close());
-    } on ScopeInitCancelled {
-      // How a cancelled body unwinds, and the expected way out: the scope
-      // asked for the cancellation and is waiting for exactly this.
-      // ignore: avoid_catching_errors
-    } on Object catch (error, stackTrace) {
-      // A failure that arrives after the cancellation has nowhere to go: the
-      // subscription is gone, and `addError` on a controller nobody listens to
-      // is dropped in silence. Reported instead, the way the engine reports
-      // the failures it cannot hand to a caller.
-      if (ctx.isCancelled) {
-        report(error, stackTrace, 'in an initialization that was cancelled');
-
-        return;
-      }
-
-      controller.addError(error, stackTrace);
-      // Not waited for, for the reason the successful close above is not.
-      unawaited(controller.close());
-    }
-  }
-
-  controller = StreamController<S>(
-    onListen: () {
-      // Set here rather than at construction: the body starts on subscription,
-      // so there is nothing to report before this point.
-      ctx._onProgress = (progress) {
-        // A progress call can outlive the body -- a helper it left running
-        // still holds the context -- and `add` after `close` throws. The
-        // stream is over by then and there is nothing to report to.
-        if (!controller.isClosed) {
-          controller.add(progressState(progress));
-        }
-      };
-      // Not discarded: it is kept in `running`, which is what the
-      // cancellation below waits for. The lint reads the call and not where
-      // its future goes.
-      // ignore: discarded_futures
-      running = run();
-    },
-    // Synchronous, and that is what makes this work: the body is told the
-    // moment `cancel()` is called, rather than when it next reaches a `yield`.
-    // The future returned here is what `cancel()` waits for, so the scope's
-    // `initCancellationTimeout` bounds the body itself.
-    onCancel: () {
-      ctx._cancel();
-
-      return running;
-    },
-  );
-
-  return controller.stream;
 }

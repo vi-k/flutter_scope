@@ -8,7 +8,6 @@ import '../environment/scope_config.dart';
 import '../utils/is_building.dart';
 import '../utils/progress_iterator/progress_iterator.dart';
 import '../utils/screenshot_replacer.dart';
-import '../utils/stream/run_stream_guarded.dart';
 import 'async_scope/scope_coordination.dart';
 
 part 'base/base.dart';

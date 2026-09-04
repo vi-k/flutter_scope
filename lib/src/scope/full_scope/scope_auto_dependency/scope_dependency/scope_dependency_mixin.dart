@@ -140,10 +140,13 @@ mixin ScopeDependencyMixin implements ScopeDependency, ScopeObservable {
   }
 
   /// The initialization step itself, run and accounted for by [init].
-  Stream<String> _runInit();
+  Future<void> _runInit(
+    ScopeInitContext ctx,
+    void Function(String path) onStep,
+  );
 
   /// The release step itself, run and accounted for by [dispose].
-  Stream<String> _runDispose();
+  Future<void> _runDispose(void Function(String path) onStep);
 
   /// Automates the initialization process.
   ///
@@ -163,7 +166,10 @@ mixin ScopeDependencyMixin implements ScopeDependency, ScopeObservable {
   /// such error is kept in the state, on the assumption that one dependency
   /// has no reason to report several.
   @override
-  Stream<String> init() async* {
+  Future<void> init(
+    ScopeInitContext ctx,
+    void Function(String path) onStep,
+  ) async {
     assert(_state is ScopeDependencyInitial);
 
     // [_state] cannot answer this: it stays [ScopeDependencyInitial] for the
@@ -194,12 +200,32 @@ mixin ScopeDependencyMixin implements ScopeDependency, ScopeObservable {
     _isDisposalDone = false;
 
     try {
-      yield* runStreamGuarded(
-        _runInit,
-        _handleInitializationPostCancelError,
-        debugName: name,
-        observable: this,
-      ).handleError(_handleInitializationError);
+      try {
+        await _runInit(ctx, onStep);
+        // ignore: avoid_catching_errors
+      } on ScopeInitCancelled {
+        // The walk was told to stop, which is not a failure and is not this
+        // node's to record: the `finally` below writes
+        // [ScopeDependencyCancelled] for exactly this, and the caller that
+        // asked for the cancellation is the one waiting for the throw.
+        rethrow;
+        // ignore: avoid_catching_errors
+      } on Object catch (error, stackTrace) {
+        if (ctx.isCancelled) {
+          // Raised while the walk was already unwinding. It has nowhere to go
+          // -- the caller is waiting for the cancellation, not for this -- so
+          // it is recorded and reported here, and the cancellation goes on.
+          // This is the failure `runStreamGuarded` used to catch as its
+          // post-cancel error, and the only one that channel ever carried.
+          _handleInitializationPostCancelError(error, stackTrace);
+
+          throw const ScopeInitCancelled();
+        }
+
+        // Records the failure on this node and passes it upwards wrapped in a
+        // [ScopeDependencyException] that carries the path.
+        _handleInitializationError(error, stackTrace);
+      }
       if (_state is! ScopeDependencyFailed) {
         _state = const ScopeDependencyInitialized();
       }
@@ -230,7 +256,7 @@ mixin ScopeDependencyMixin implements ScopeDependency, ScopeObservable {
   /// (`_ScopeDependencyImpl.disposalRequired`). The groups now behave the same
   /// way.
   @override
-  Stream<String> dispose() async* {
+  Future<void> dispose(void Function(String path) onStep) async {
     // Before the joiner below and before any mark is written, for the reason
     // `ScopeAutoDependencies._runDispose` refuses the same thing one level up.
     // A dependency parked inside its initializer has registered nothing yet,
@@ -325,12 +351,14 @@ mixin ScopeDependencyMixin implements ScopeDependency, ScopeObservable {
     var walkEnded = false;
 
     try {
-      yield* runStreamGuarded(
-        _runDispose,
-        _handleDisposalPostCancelError,
-        debugName: name,
-        observable: this,
-      ).handleError(_handleDisposalError);
+      try {
+        await _runDispose(onStep);
+        // ignore: avoid_catching_errors
+      } on Object catch (error, stackTrace) {
+        // Records the failure on this node and passes it upwards, the way the
+        // initialization above does.
+        _handleDisposalError(error, stackTrace);
+      }
       walkEnded = true;
       _state = switch (_state) {
         final _ScopeDependencyWithErrors state when state.hasErrors => state,
@@ -355,11 +383,10 @@ mixin ScopeDependencyMixin implements ScopeDependency, ScopeObservable {
         inFlight.complete();
       }
 
-      // Catch the cancellation.
+      // A walk that ended is a tree that is disposed of. A walk that did not
+      // is one that threw, and the state it left says so already.
       if (walkEnded) {
         _isDisposalDone = true;
-      } else if (_state is ScopeDependencyInitialized) {
-        _state = ScopeDependencyDisposalCancelled();
       }
     }
   }
@@ -483,14 +510,6 @@ mixin ScopeDependencyMixin implements ScopeDependency, ScopeObservable {
       error, //
       stackTrace,
       ScopeDependencyCancelled.new,
-    );
-  }
-
-  void _handleDisposalPostCancelError(Object error, StackTrace stackTrace) {
-    _handlePostCancelError(
-      error, //
-      stackTrace,
-      ScopeDependencyDisposalCancelled.new,
     );
   }
 }

@@ -35,10 +35,10 @@ What the scope shows, and what it calls, in order:
 
 | Phase                                                     | Builder                                                                       |
 | --------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| waiting for `scopeKey` and for the first event of the stream | `buildOnWaiting` — may return `null`, then `buildOnProgress(context, null)` |
+| waiting for `scopeKey` and for the first step | `buildOnWaiting` — may return `null`, then `buildOnProgress(context, null)` |
 | the body reported progress                                | `buildOnProgress(context, progress)`                                      |
 | the body returned the container                           | `wrapState` around the `build` of the state from `createState`                 |
-| the stream failed                                         | `buildOnError(context, error, stackTrace, progress)`                          |
+| the body threw                                            | `buildOnError(context, error, stackTrace, progress)`                          |
 | `close()` is running                                      | `buildOnClosing`, over a frozen screenshot of the ready subtree when one can be taken |
 
 `wrapState` wraps the ready branch only, so a widget that every branch needs (a
@@ -84,7 +84,7 @@ passing them around: `ScopeInitCallback`, `ScopeWaitingBuilder`,
 
 ## ScopeAutoDependencies
 
-Writing the stream by hand stops scaling as soon as the dependencies have an
+Writing the body by hand stops scaling as soon as the dependencies have an
 order, some of them can be built in parallel, and each has its own teardown.
 `ScopeAutoDependencies` is the ready-made implementation: describe the tree once
 in `buildDependencies`, and its `init` walks the tree, reports progress per
@@ -170,21 +170,21 @@ The **second** is what `buildDependencies` receives: `void` for the container
 above, which needs nothing from the outside; declare `BuildContext` instead when
 a dependency has to read something from the tree.
 
-Wiring the container into the scope is one call, and
-`ScopeAutoDependenciesStream` is the alias for the resulting stream type:
+Wiring the container into the scope is one call:
 
 ```dart
 @override
-ScopeAutoDependenciesStream<HomeDependencies> initDependencies(
+Future<HomeDependencies> initDependencies(
   BuildContext context,
+  ScopeInitContext ctx,
 ) =>
-    HomeDependencies().init(null);
+    HomeDependencies().init(null, ctx);
 ```
 
 With a `BuildContext` container, forward the `context` of `initDependencies`
 instead of `null`.
 
-Every event of that stream carries a `ScopeAutoDependenciesProgress`: `path` —
+Every step the container reports carries a `ScopeAutoDependenciesProgress`: `path` —
 the path of the dependency that has just been initialized — `name`, the last
 segment of that path, which is the name the dependency was declared with, plus
 the step counter of a `ProgressIterator` (`number`, `total`, and `value` as a
@@ -315,8 +315,8 @@ real error rather than a propagated `ScopeDependencyException`. Each dependency
 also carries a `ScopeDependencyState` — `ScopeDependencyInitial`,
 `ScopeDependencyInitialized`, `ScopeDependencyFailed`,
 `ScopeDependencyCancelled`, `ScopeDependencyDisposed`,
-`ScopeDependencyNoDisposalRequired`, `ScopeDependencyDisposalFailed`,
-`ScopeDependencyDisposalCancelled` — and the `isInitialized`, `isFailed`,
+`ScopeDependencyNoDisposalRequired`, `ScopeDependencyDisposalFailed` — and
+the `isInitialized`, `isFailed`,
 `isCancelled` and `isDisposed` shorthands of `ScopeDependencyExtension`.
 
 `ScopeDependencyNoDisposalRequired` is the state of a dependency that set no
@@ -324,12 +324,10 @@ also carries a `ScopeDependencyState` — `ScopeDependencyInitial`,
 this is what it says afterwards. It is a `ScopeDependencyDisposed`, so
 `isDisposed` covers both.
 
-`ScopeDependencyDisposalCancelled` is the one state a scope never produces on its
-own — nothing in the package cancels a teardown walk halfway. It belongs to
-whoever drives one: `dispose()` is a stream, and a caller who listens to it
-and cancels the subscription before it is done leaves the dependencies it had not
-reached still initialized, and the one it stopped on saying `disposal cancelled`.
-Reading it therefore means reading about a teardown of your own.
+A teardown walk always runs to its end. It used to be interruptible — the walk
+was a stream, and a caller who drove one could stop listening halfway — and
+that possibility went with the stream: leaving half a tree still holding what
+it took is the shape this package exists to close, not one to offer.
 
 ## Dependency paths
 
@@ -381,9 +379,8 @@ An empty `name` means the anonymous root dependency itself failed.
 
 The group that saw the failure stops requiring initialization and switches to
 `ScopeDependencyFailed`, keeping the failure it saw — one of them, even when a
-`concurrent` group had several children fail in the same instant: the stream a
-group runs its children in is guarded, and a guarded stream closes on the first
-error. Every dependency keeps its own errors, and
+`concurrent` group had several children fail at once: the first failure
+cancels the arms beside it, so the group keeps the one that ended it. Every dependency keeps its own errors, and
 `flattenDependenciesWithErrors()` walks the tree for them. The `stateToString()`
 of a group summarizes what it holds: the failed child by name, and any error that
 is not itself a `ScopeDependencyException` listed as unresolved.

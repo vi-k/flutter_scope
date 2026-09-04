@@ -151,28 +151,6 @@ final class ScopeDependencyDisposalFailed extends ScopeDependencyAnyFailed {
 /// subscription before it is done leaves what it had not reached still
 /// initialized, and the dependency it stopped on in this state.
 ///
-/// {@category Scope}
-final class ScopeDependencyDisposalCancelled
-    extends ScopeDependencyAnyCancelled {
-  /// Creates the state of a dependency whose disposal was cancelled.
-  ScopeDependencyDisposalCancelled([super.error, super.stackTrace]);
-
-  const ScopeDependencyDisposalCancelled._(super._errors) : super._();
-
-  @override
-  String get description => count == 0
-      ? 'disposal cancelled'
-      : 'disposal cancelled with ${count == 1 ? 'error' : 'errors'}';
-
-  @override
-  ScopeDependencyDisposalCancelled addError(
-    Object error,
-    StackTrace stackTrace,
-  ) =>
-      ScopeDependencyDisposalCancelled._(
-        _errors.withAdded(AsyncError(error, stackTrace)),
-      );
-}
 
 /// {@category Scope}
 final class ScopeDependencyDisposed extends ScopeDependencyAnySuccess {

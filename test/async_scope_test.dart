@@ -161,6 +161,48 @@ void main() {
     );
   });
 
+  // A body is done the moment it throws, so the guard that keeps a failed
+  // initialization from being painted over is never asked by the body itself.
+  // What can still ask it is something the body left running: a helper that
+  // reports a step after the body has already fallen over.
+  group('AsyncScope initialization left with a helper running', () {
+    testWidgets('a failed initialization is not painted over by a late step',
+        (tester) async {
+      late ScopeInitContext captured;
+
+      await tester.pumpWidget(
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: _LateStepScope(onStarted: (ctx) => captured = ctx),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final scope =
+          tester.element(find.byType(_LateStepScope)) as _LateStepScopeElement;
+
+      expect(scope.state, isA<AsyncScopeError>());
+
+      // The helper the body left behind, reporting a step for a scope that
+      // has already failed.
+      captured.progress('too late');
+      await tester.pumpAndSettle();
+
+      expect(
+        scope.state,
+        isA<AsyncScopeError>(),
+        reason: 'a scope whose initialization failed does not go back to '
+            'showing progress because something is still talking',
+      );
+      expect(
+        (scope.error as StateError).message,
+        'init failed',
+        reason: 'and the failure it shows is still the one that happened',
+      );
+      expect(scope.disposeCount, 0, reason: 'nothing was ever acquired');
+    });
+  });
+
   // Both tests below cover the same defect: `_performAsyncInit()` runs on a
   // discarded future, so a failure raised *before* `_subscription` is assigned
   // used to leave `_initCompleter` unsettled forever -- nothing else on that
@@ -529,11 +571,18 @@ void main() {
           reason: 'an initialization that never happened is not disposed of',
         );
         expect(
-          errors.single,
-          isA<StateError>(),
-          reason: 'the failure is still reported, not swallowed',
+          errors,
+          isEmpty,
+          reason: 'a body that throws before its first await is a failed '
+              'initialization like any other, not an error escaping into the '
+              'zone the mount ran in -- which is what a stream that threw '
+              'while it was being built used to be',
         );
-        expect(tester.takeException(), isNull);
+        expect(
+          child.state,
+          isA<AsyncScopeError>(),
+          reason: 'and the scope shows it, which is the half the user sees',
+        );
       },
     );
 
@@ -703,41 +752,6 @@ void main() {
   // The assertions are about effects, never about timings: what proves the
   // defect is which error the app receives, which state the scope is left in,
   // and whether `disposeScope()` still runs.
-  // A stream that ends without ever yielding `AsyncScopeReady` is a mistake
-  // in the initialization, and it used to be a silent one: the model stayed
-  // `AsyncScopeWaiting`, the scope went on showing its loading branch for
-  // good, and the only trace of it was a diagnostic line nobody had turned
-  // on. A body cannot make that mistake any more — it returns or it throws —
-  // but the engine still takes a stream from anything that overrides
-  // `initScope()`, so the diagnostic is still reachable and still needed.
-  testWidgets(
-    'a stream that ends without a ready state shows the error branch',
-    (tester) async {
-      await tester.pumpWidget(
-        const Directionality(
-          textDirection: TextDirection.ltr,
-          child: _EmptyStreamScope(),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      expect(find.textContaining('error: '), findsOneWidget);
-      expect(
-        find.text('init'),
-        findsNothing,
-        reason: 'the loading branch is not what a scope that will never load '
-            'should be left showing',
-      );
-
-      await tester.pumpWidget(
-        const Directionality(
-          textDirection: TextDirection.ltr,
-          child: SizedBox.shrink(),
-        ),
-      );
-      await settle(tester, until: () => false);
-    },
-  );
 
   group('the model of a scope', () {
     testWidgets('is one object rather than a wrapper made on every read',
@@ -969,191 +983,6 @@ void main() {
       },
     );
   });
-
-  // Every error path in the suite is an `async*` that throws, and such a
-  // stream is done the moment it does: nothing can arrive after the failure,
-  // so the two guards that keep a failed initialization from coming alive were
-  // never asked. A `StreamController` is the shape that can ask them.
-  group('AsyncScope initialization driven from a StreamController', () {
-    testWidgets('a failed initialization does not come alive on a later ready',
-        (tester) async {
-      final controller = StreamController<AsyncScopeInitState>();
-      addTearDown(() async {
-        if (!controller.isClosed) {
-          await controller.close();
-        }
-      });
-
-      await tester.pumpWidget(
-        Directionality(
-          textDirection: TextDirection.ltr,
-          child: _ControllerScope(controller),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      final scope = tester.element(find.byType(_ControllerScope))
-          as _ControllerScopeElement;
-
-      // Events of a single-subscription controller made in the body of a
-      // widget test are not delivered by `pumpAndSettle` alone.
-      await tester.runAsync(() async {
-        controller.addError(StateError('init failed'));
-        await Future<void>.delayed(Duration.zero);
-      });
-      await tester.pumpAndSettle();
-
-      expect(scope.state, isA<AsyncScopeError>());
-
-      await tester.runAsync(() async {
-        controller.add(AsyncScopeReady());
-        await Future<void>.delayed(Duration.zero);
-      });
-      await tester.pumpAndSettle();
-
-      expect(
-        scope.state,
-        isA<AsyncScopeError>(),
-        reason: 'a scope whose initialization failed does not become ready '
-            'because the source went on talking',
-      );
-      expect(
-        (scope.error as StateError).message,
-        'init failed',
-        reason: 'and the failure it shows is still the one that happened: the '
-            'subscription was cancelled on the error, so the event after it '
-            'was never even looked at',
-      );
-      expect(scope.disposeCount, 0, reason: 'nothing was ever acquired');
-    });
-  });
-
-  group('AsyncScope initialization that fails after the ready state', () {
-    testWidgets(
-      'reports the failure raised after the ready state instead of a '
-      'double-completed init completer, and leaves the scope ready',
-      (tester) async {
-        late _ErrorAfterReadyScopeElement scope;
-
-        // `_performAsyncInit()`'s subscription callbacks run in the zone the
-        // mount ran in, so a failure raised there surfaces as an uncaught
-        // error of that zone and `flutter_test`'s own `handleUncaughtError`
-        // would end the test on the spot. A guarded child zone catches it
-        // first. Nothing inside that zone may throw -- an assertion that
-        // fails there is swallowed by the zone's error handler and the test
-        // hangs instead of failing -- so every `expect` is made once it is
-        // gone.
-        final zoneErrors = <Object>[];
-        await runZonedGuarded(
-          () async {
-            await tester.pumpWidget(
-              const Directionality(
-                textDirection: TextDirection.ltr,
-                child: _ErrorAfterReadyScope(),
-              ),
-            );
-            await tester.pumpAndSettle();
-
-            scope = tester.element(find.byType(_ErrorAfterReadyScope))
-                as _ErrorAfterReadyScopeElement;
-          },
-          (error, stackTrace) => zoneErrors.add(error),
-        );
-
-        expect(
-          zoneErrors,
-          isEmpty,
-          reason: 'completing the init completer twice must not raise on top '
-              'of the failure being reported',
-        );
-
-        final exception = tester.takeException();
-        expect(
-          exception,
-          isA<StateError>(),
-          reason: 'the failure the stream raised is what reaches the app',
-        );
-        expect((exception! as StateError).message, 'failed after ready');
-        expect(
-          scope.state,
-          isA<AsyncScopeReady>(),
-          reason: 'a scope that did initialize must not be flipped into the '
-              'error state -- `buildOnError` would replace the widgets that '
-              'are already on screen',
-        );
-
-        await tester.pumpWidget(
-          const Directionality(
-            textDirection: TextDirection.ltr,
-            child: SizedBox.shrink(),
-          ),
-        );
-        await settle(tester, until: () => scope.disposeCount > 0);
-
-        expect(
-          scope.disposeCount,
-          1,
-          reason: 'the initialization succeeded, so what it acquired is still '
-              'released exactly once',
-        );
-      },
-    );
-
-    testWidgets(
-      'reports a second ready state as the already-initialized diagnostic',
-      (tester) async {
-        late _TwiceReadyScopeElement scope;
-
-        final zoneErrors = <Object>[];
-        await runZonedGuarded(
-          () async {
-            await tester.pumpWidget(
-              const Directionality(
-                textDirection: TextDirection.ltr,
-                child: _TwiceReadyScope(),
-              ),
-            );
-            await tester.pumpAndSettle();
-
-            scope = tester.element(find.byType(_TwiceReadyScope))
-                as _TwiceReadyScopeElement;
-          },
-          (error, stackTrace) => zoneErrors.add(error),
-        );
-
-        expect(
-          zoneErrors,
-          isEmpty,
-          reason: "the package's own diagnostic must not turn into a `Bad "
-              'state: Future already completed` crash',
-        );
-
-        final exception = tester.takeException();
-        expect(exception, isA<StateError>());
-        expect(
-          (exception! as StateError).message,
-          '$_TwiceReadyScope already initialized',
-          reason: 'the second ready state is caught even though it arrives '
-              'before the post-frame callback that applies the first one',
-        );
-        expect(scope.state, isA<AsyncScopeReady>());
-
-        await tester.pumpWidget(
-          const Directionality(
-            textDirection: TextDirection.ltr,
-            child: SizedBox.shrink(),
-          ),
-        );
-        await settle(tester, until: () => scope.disposeCount > 0);
-
-        expect(
-          scope.disposeCount,
-          1,
-          reason: 'the ready branch ran once, so the disposal runs once',
-        );
-      },
-    );
-  });
 }
 
 /// the budget runs out.
@@ -1193,36 +1022,6 @@ final class _MovableScopeElement
   Widget buildOnState(AsyncScopeState state) => const SizedBox.shrink();
 }
 
-/// Feeds the engine a stream that ends without a ready state.
-///
-/// The form a body is written in cannot do this any more — a body either
-/// returns or throws — but the engine still eats a stream, and anything that
-/// overrides [AsyncScopeElementBase.initScope] can hand it one. That is what
-/// keeps the diagnostic reachable, and this is the only way in.
-final class _EmptyStreamScope
-    extends AsyncScopeCore<_EmptyStreamScope, _EmptyStreamScopeElement> {
-  const _EmptyStreamScope();
-
-  @override
-  _EmptyStreamScopeElement createScopeElement() =>
-      _EmptyStreamScopeElement(this);
-}
-
-final class _EmptyStreamScopeElement
-    extends AsyncScopeElementBase<_EmptyStreamScope, _EmptyStreamScopeElement> {
-  _EmptyStreamScopeElement(super.widget);
-
-  @override
-  Stream<AsyncScopeInitState> initScope() =>
-      const Stream<AsyncScopeInitState>.empty();
-
-  @override
-  Widget buildOnState(AsyncScopeState state) => switch (state) {
-        AsyncScopeError(:final error) => Text('error: $error'),
-        _ => const Text('init'),
-      };
-}
-
 /// A scope whose initialization raises *while it is being cancelled*: the
 /// `finally` of its generator throws, and an `async*` generator delivers that
 /// failure through the `cancel()` future — the one `_performAsyncDispose`
@@ -1241,15 +1040,14 @@ final class _RaisingOnCancelScopeElement extends AsyncScopeElementBase<
   _RaisingOnCancelScopeElement(super.widget);
 
   @override
-  Stream<AsyncScopeInitState> initScope() async* {
+  Future<void> initScopeAsync(ScopeInitContext ctx) async {
     try {
-      yield AsyncScopeProgress('step');
+      ctx.progress('step');
       // Short enough for the disposal to catch the generator here, and
       // bounded, so the cancellation can finish: a generator parked on a
       // future that never completes can never be cancelled at all, which is
       // a different problem from the one this scope is about.
       await Future<void>.delayed(const Duration(milliseconds: 10));
-      yield AsyncScopeReady();
     } finally {
       // The `finally` is where a cancelled generator resumes, so throwing
       // here is the whole point of this fixture: it is how a failure reaches
@@ -1395,9 +1193,8 @@ final class _SyncInitAsyncScopeElement extends AsyncScopeElementBase<
   }
 
   @override
-  Stream<AsyncScopeInitState> initScope() {
+  Future<void> initScopeAsync(ScopeInitContext ctx) async {
     asyncInitStarts++;
-    return Stream.value(AsyncScopeReady());
   }
 
   @override
@@ -1437,7 +1234,7 @@ final class _FailingInitScopeElement
   // Deliberately not `async*`: the point is a plain user error raised while
   // the stream is being built, before there is anything to subscribe to.
   @override
-  Stream<AsyncScopeInitState> initScope() =>
+  Future<void> initScopeAsync(ScopeInitContext ctx) =>
       throw StateError('initScope failed');
 
   @override
@@ -1449,91 +1246,30 @@ final class _FailingInitScopeElement
   Widget buildOnState(AsyncScopeState state) => const SizedBox.shrink();
 }
 
-/// A scope whose `initScope()` raises *after* it has reached
-/// [AsyncScopeReady] -- the shape of a stream that keeps working once the
-/// scope is usable and then fails.
-final class _ErrorAfterReadyScope extends AsyncScopeCore<_ErrorAfterReadyScope,
-    _ErrorAfterReadyScopeElement> {
-  const _ErrorAfterReadyScope();
+/// A scope whose body fails and leaves its context behind, so a step can
+/// still be reported for a scope that is already in `AsyncScopeError`.
+final class _LateStepScope
+    extends AsyncScopeCore<_LateStepScope, _LateStepScopeElement> {
+  final void Function(ScopeInitContext ctx) onStarted;
+
+  const _LateStepScope({required this.onStarted});
 
   @override
-  _ErrorAfterReadyScopeElement createScopeElement() =>
-      _ErrorAfterReadyScopeElement(this);
+  _LateStepScopeElement createScopeElement() => _LateStepScopeElement(this);
 }
 
-final class _ErrorAfterReadyScopeElement extends AsyncScopeElementBase<
-    _ErrorAfterReadyScope, _ErrorAfterReadyScopeElement> {
+final class _LateStepScopeElement
+    extends AsyncScopeElementBase<_LateStepScope, _LateStepScopeElement> {
+  _LateStepScopeElement(super.widget);
+
   int disposeCount = 0;
 
-  _ErrorAfterReadyScopeElement(super.widget);
-
   @override
-  Stream<AsyncScopeInitState> initScope() async* {
-    yield AsyncScopeReady();
-    throw StateError('failed after ready');
+  Future<void> initScopeAsync(ScopeInitContext ctx) async {
+    widget.onStarted(ctx);
+
+    throw StateError('init failed');
   }
-
-  @override
-  FutureOr<void> disposeScope() {
-    disposeCount++;
-  }
-
-  @override
-  Widget buildOnState(AsyncScopeState state) => const SizedBox.shrink();
-}
-
-/// A scope whose `initScope()` emits [AsyncScopeReady] twice, both events
-/// arriving before the post-frame callback that applies the first one to the
-/// model -- the case the `already initialized` diagnostic exists for.
-final class _TwiceReadyScope
-    extends AsyncScopeCore<_TwiceReadyScope, _TwiceReadyScopeElement> {
-  const _TwiceReadyScope();
-
-  @override
-  _TwiceReadyScopeElement createScopeElement() => _TwiceReadyScopeElement(this);
-}
-
-final class _TwiceReadyScopeElement
-    extends AsyncScopeElementBase<_TwiceReadyScope, _TwiceReadyScopeElement> {
-  int disposeCount = 0;
-
-  _TwiceReadyScopeElement(super.widget);
-
-  @override
-  Stream<AsyncScopeInitState> initScope() async* {
-    yield AsyncScopeReady();
-    yield AsyncScopeReady();
-  }
-
-  @override
-  FutureOr<void> disposeScope() {
-    disposeCount++;
-  }
-
-  @override
-  Widget buildOnState(AsyncScopeState state) => const SizedBox.shrink();
-}
-
-/// A scope whose `initScope()` comes from a [StreamController], so a failure
-/// does not close the source and an event can arrive after it.
-final class _ControllerScope
-    extends AsyncScopeCore<_ControllerScope, _ControllerScopeElement> {
-  final StreamController<AsyncScopeInitState> controller;
-
-  const _ControllerScope(this.controller);
-
-  @override
-  _ControllerScopeElement createScopeElement() => _ControllerScopeElement(this);
-}
-
-final class _ControllerScopeElement
-    extends AsyncScopeElementBase<_ControllerScope, _ControllerScopeElement> {
-  int disposeCount = 0;
-
-  _ControllerScopeElement(super.widget);
-
-  @override
-  Stream<AsyncScopeInitState> initScope() => widget.controller.stream;
 
   @override
   FutureOr<void> disposeScope() {

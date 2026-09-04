@@ -108,11 +108,11 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
   /// Called when the wait for the `scopeKey` expires.
   void onScopeKeyTimeout() {}
 
-  /// How long to wait for [initScope] to be cancelled; `null` takes the
+  /// How long to wait for [initScopeAsync] to be cancelled; `null` takes the
   /// default.
   Duration? get initCancellationTimeout => null;
 
-  /// Called when the wait for the cancellation of [initScope] expires.
+  /// Called when the wait for the cancellation of [initScopeAsync] expires.
   void onInitCancellationTimeout() {}
 
   /// How long to wait for [disposeScope]; `null` takes the default.
@@ -127,27 +127,183 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
   /// Called when the wait for the child scopes expires.
   void onWaitForChildrenTimeout() {}
 
-  /// Where the body is turned into the stream the engine consumes.
+  /// Reports one step of the initialization.
   ///
-  /// The hook to write is [initScopeAsync]. This one is overridden by the
-  /// families that produce a value — `AsyncDataScope` and `Scope` build the
-  /// same stream and catch the value on its way past — and by anything that
-  /// drives the engine with a stream of its own, which is what keeps the
-  /// engine's own diagnostics reachable.
-  Stream<AsyncScopeInitState> initScope() =>
-      _runScopeInit<AsyncScopeInitState, void>(
-        body: initScopeAsync,
-        progressState: AsyncScopeProgress.new,
-        readyState: (_) => AsyncScopeReady(),
-        // This family has no value to hand back, but a body that finished
-        // after the cancellation has taken whatever it took, and
-        // [disposeScope] is the only thing that gives it back.
-        releaseLateValue: (_) async {
-          if (canReleaseAfterCancellation) {
-            await disposeScope();
-          }
-        },
+  /// The guards are the ones the stream's `asyncMap` carried: a step that
+  /// arrives once the scope is ready has nowhere to go, and one that arrives
+  /// for a model already holding a failure must not paint over it.
+  void _onInitStep(Object progress) {
+    if (_initSucceeded || !mounted || _isDisposing) {
+      return;
+    }
+    if (_model.state case AsyncScopeError()) {
+      return;
+    }
+
+    notifyObserver((observer) => observer.onProgress(this, progress));
+    _model.update(AsyncScopeProgress(progress));
+  }
+
+  /// Runs the body and settles the scope on what it did.
+  Future<void> _runInitBody(ScopeInitHandle handle) async {
+    try {
+      await runInitBody(handle.context);
+
+      // A body that came back for a scope which had already given up settles
+      // nothing: the teardown is running, and what the body produced has been
+      // released by `runInitBody` above.
+      if (!handle.isCancelled) {
+        _settleReady();
+      }
+      // ignore: avoid_catching_errors
+    } on ScopeInitCancelled {
+      // The ordinary end of a cancelled initialization: the teardown asked
+      // for it and is waiting for exactly this.
+      // ignore: avoid_catching_errors
+    } on Object catch (error, stackTrace) {
+      // Raised while the body was unwinding from a cancellation. The scope is
+      // on its way out and its model is about to go with it, so there is
+      // nobody to show this to -- it is reported instead, which is what the
+      // teardown did with the same failure when it arrived through
+      // `cancel()`. Abandoning the teardown over it would leave the scope
+      // registered with its parent and its `scopeKey` unreleased.
+      if (handle.isCancelled) {
+        notifyObserver(
+          (observer) => observer.onError(
+            this,
+            ScopePhase.initializationCancellation,
+            error,
+            stackTrace,
+          ),
+        );
+        FlutterError.reportError(
+          FlutterErrorDetails(
+            exception: error,
+            stack: stackTrace,
+            library: 'scopo',
+          ),
+        );
+
+        return;
+      }
+
+      _settleFailure(error, stackTrace);
+    }
+  }
+
+  /// Applies the ready state, in its own frame.
+  void _settleReady() {
+    // `_initSucceeded`, not `_model.state`: the model only becomes
+    // [AsyncScopeReady] inside the post-frame (or delayed) callback scheduled
+    // below, so a second settlement arriving before that callback runs would
+    // slip past a check on the model and initialize the scope all over again.
+    if (_initSucceeded) {
+      return;
+    }
+
+    // Before the pause below rather than inside it, so a suite that turns
+    // every pause off does not also turn off the one thing that says this
+    // value is wrong.
+    assert(
+      !(pauseAfterInitialization?.isNegative ?? false),
+      'ScopeTimeout.none is not accepted by pauseAfterInitialization, and '
+      'neither is any other negative Duration ($pauseAfterInitialization). A '
+      'pause is a stretch of time to hold the ready branch back for, not a '
+      'limit on a wait, so "wait as long as it takes" has nothing to say '
+      'about one -- and the marker is a negative Duration, which a timer '
+      'reads as no pause at all. Give a Duration that is not negative, or '
+      'leave the parameter out to show the ready branch as soon as it is '
+      'built.',
+    );
+
+    final state = AsyncScopeReady();
+
+    if (pauseAfterInitialization case final pauseAfterInitialization?
+        when ScopeConfig.pauseAfterInitializationEnabled) {
+      _pauseTimer = Timer(pauseAfterInitialization, () {
+        _pauseTimer = null;
+        // The `_isDisposing` half is unreachable, and kept anyway:
+        // `_performAsyncDispose` sets that flag and cancels this timer in the
+        // next statement, with nothing in between. Left in as the guard of
+        // the callback beside it, which is a post-frame one and cannot be
+        // cancelled at all -- a mutation that removes this half is therefore
+        // not caught by any test, and cannot be.
+        if (mounted && !_isDisposing) {
+          _model.update(state);
+        }
+      });
+    } else {
+      // Give the last progress value a chance to be displayed.
+      SchedulerBinding.instance
+        ..scheduleFrame()
+        ..addPostFrameCallback((_) {
+          if (!mounted || _isDisposing) return;
+          _model.update(state);
+        });
+    }
+
+    _initSucceeded = true;
+    notifyObserver((observer) => observer.onReady(this));
+    if (!_initCompleter.isCompleted) {
+      _initCompleter.complete();
+    }
+  }
+
+  /// Settles a failure the body raised.
+  void _settleFailure(Object error, StackTrace stackTrace) {
+    notifyObserver(
+      (observer) => observer.onError(
+        this,
+        ScopePhase.initialization,
+        error,
+        stackTrace,
+      ),
+    );
+
+    // No guard for "the scope is already ready" here, and that is a property
+    // of the form rather than an omission: the ready state is settled *after*
+    // the body returns, so a failure of the initialization cannot arrive
+    // behind it. A stream could keep talking once it had said `Ready`, which
+    // is what this branch used to be for.
+    if (mounted && !_isDisposing) {
+      _model.update(
+        AsyncScopeError(
+          error,
+          stackTrace,
+          progress: switch (_model.state) {
+            AsyncScopeProgress(:final progress) => progress,
+            _ => null,
+          },
+        ),
       );
+    }
+
+    if (!_initCompleter.isCompleted) {
+      _initCompleter.complete();
+    }
+  }
+
+  /// Runs the body of the initialization and settles what it produced.
+  ///
+  /// The families that produce a value override this: they await their own
+  /// hook, catch the value on its way past, and give it back when it turns
+  /// out to have arrived for a scope that had already given up. What is
+  /// common to all of them is here — a body of this family produces nothing,
+  /// so the only thing it can have taken is whatever [disposeScope] releases.
+  @protected
+  Future<void> runInitBody(ScopeInitContext ctx) async {
+    await initScopeAsync(ctx);
+
+    if (ctx.isCancelled && canReleaseAfterCancellation) {
+      await disposeScope();
+    }
+  }
+
+  /// The initialization; ready at once by default.
+  ///
+  /// Reports its steps through [ScopeInitContext.progress] and returns when
+  /// the scope is ready.
+  Future<void> initScopeAsync(ScopeInitContext ctx) async {}
 
   /// Whether there is still a scope to release a late value with.
   ///
@@ -167,13 +323,7 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
   @protected
   bool get canReleaseAfterCancellation => !_disposalFinished;
 
-  /// The initialization; ready at once by default.
-  ///
-  /// Reports its steps through [ScopeInitContext.progress] and returns when
-  /// the scope is ready.
-  Future<void> initScopeAsync(ScopeInitContext ctx) async {}
-
-  /// Releases what [initScope] acquired; awaited.
+  /// Releases what [initScopeAsync] acquired; awaited.
   FutureOr<void> disposeScope() {}
 
   /// Whether [disposeScope] bounds the stages behind it itself.
@@ -231,14 +381,19 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
   String get debugLabel => _debugLabel ?? super.debugLabel;
   String? _debugLabel;
 
-  // ignore: cancel_subscriptions
-  StreamSubscription<void>? _subscription;
+  /// The handle over the initialization, while there is one.
+  ///
+  /// What the teardown cancels, in place of the subscription it used to.
+  ScopeInitHandle? _initHandle;
+
+  /// The run of the body, while it runs. What a cancellation waits for.
+  Future<void>? _initRunning;
 
   /// Disposal may begin before the end of asynchronous initialization.
   /// Therefore, we use [_initCompleter] for synchronization.
   final _initCompleter = Completer<void>();
 
-  /// Whether [initScope] has definitively completed successfully (reached
+  /// Whether [initScopeAsync] has definitively completed successfully (reached
   /// [AsyncScopeReady]).
   ///
   /// This is tracked separately from `model.state`, because the
@@ -247,7 +402,7 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
   /// `mounted`-guarded delayed callback, for [pauseAfterInitialization]):
   /// if the element is removed from the tree before that callback runs,
   /// `model.state` never becomes [AsyncScopeReady], even though
-  /// [initScope] itself already succeeded and may have acquired resources
+  /// [initScopeAsync] itself already succeeded and may have acquired resources
   /// that [disposeScope] must release. [_performAsyncDispose] uses this
   /// flag instead of `model.state` to decide whether [disposeScope] must
   /// run, so that scenario doesn't leak.
@@ -765,180 +920,12 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
       }
 
       notifyObserver((observer) => observer.onInit(this));
-      _subscription = initScope().asyncMap((state) {
-        // `_initSucceeded`, not `_model.state`: the model only becomes
-        // `AsyncScopeReady` inside the post-frame (or delayed) callback
-        // scheduled below, so a second `AsyncScopeReady` that arrives before
-        // that callback runs would slip past a check on the model and
-        // initialize the scope all over again -- a second `_initSucceeded`, a
-        // second pending update, and a second `_initCompleter.complete()`.
-        if (_initSucceeded) {
-          throw StateError('$W already initialized');
-        }
-        // A second guard on the same invariant as `cancelOnError: true`
-        // above, and the two are mutually redundant on purpose: each one makes
-        // the other unreachable, so no test can kill both -- removing either
-        // alone leaves the suite green. Kept because they answer for different
-        // things. `cancelOnError` stops the source, which is what closes the
-        // door on a stream the package owns; this one closes it on a model
-        // that already holds a failure, whichever way the event got here.
-        if (_model.state case AsyncScopeError()) {
-          throw StateError('$W initialization failed');
-        }
-
-        switch (state) {
-          case AsyncScopeProgress():
-            notifyObserver(
-              (observer) => observer.onProgress(this, state.progress),
-            );
-            _model.update(state);
-          case AsyncScopeReady():
-            // Before the switch below rather than inside it, so a suite that
-            // turns every pause off does not also turn off the one thing that
-            // says this value is wrong.
-            assert(
-              !(pauseAfterInitialization?.isNegative ?? false),
-              'ScopeTimeout.none is not accepted by pauseAfterInitialization, '
-              'and neither is any other negative Duration '
-              '($pauseAfterInitialization). A pause is a stretch of time to '
-              'hold the ready branch back for, not a limit on a wait, so '
-              '"wait as long as it takes" has nothing to say about one -- and '
-              'the marker is a negative Duration, which a timer reads as no '
-              'pause at all. Give a Duration that is not negative, or leave '
-              'the parameter out to show the ready branch as soon as it is '
-              'built.',
-            );
-
-            if (pauseAfterInitialization case final pauseAfterInitialization?
-                when ScopeConfig.pauseAfterInitializationEnabled) {
-              _pauseTimer = Timer(pauseAfterInitialization, () {
-                _pauseTimer = null;
-                // The `_isDisposing` half is unreachable, and kept anyway:
-                // `_performAsyncDispose` sets that flag and cancels this
-                // timer in the next statement, with nothing in between, and
-                // the only code that can arm a new one is the subscription
-                // that the same teardown cancels before its first `await`.
-                // Left in as the guard of the callback beside it, which is a
-                // post-frame one and cannot be cancelled at all -- a mutation
-                // that removes this half is therefore not caught by any test,
-                // and cannot be.
-                if (mounted && !_isDisposing) {
-                  _model.update(state);
-                }
-              });
-            } else {
-              // Give the last progress value a chance to be displayed.
-              SchedulerBinding.instance
-                ..scheduleFrame()
-                ..addPostFrameCallback((_) {
-                  if (!mounted || _isDisposing) return;
-                  _model.update(state);
-                });
-            }
-            _initSucceeded = true;
-            notifyObserver((observer) => observer.onReady(this));
-            if (!_initCompleter.isCompleted) {
-              _initCompleter.complete();
-            }
-        }
-      }).listen(
-        (_) {},
-        onError: (Object error, StackTrace stackTrace) {
-          notifyObserver(
-            (observer) => observer.onError(
-              this,
-              ScopePhase.initialization,
-              error,
-              stackTrace,
-            ),
-          );
-
-          // A failure that arrives *after* [AsyncScopeReady] -- a stream that
-          // keeps working once the scope is usable and then raises, or the
-          // `already initialized` diagnostic above -- reaches a scope that is
-          // initialized: [disposeScope] will have to release what
-          // [initScope] acquired, and the widgets built for the ready state
-          // are the ones on screen. Flipping the model into [AsyncScopeError]
-          // now would swap them for `buildOnError` behind the user's back,
-          // and completing [_initCompleter] a second time would raise `Bad
-          // state: Future already completed` *on top of* the failure being
-          // reported -- which is how the real one used to get lost. The
-          // failure is reported instead, and the scope is left as it is.
-          if (_initSucceeded) {
-            FlutterError.reportError(
-              FlutterErrorDetails(
-                exception: error,
-                stack: stackTrace,
-                library: 'scopo',
-              ),
-            );
-
-            return;
-          }
-
-          _model.update(
-            AsyncScopeError(
-              error,
-              stackTrace,
-              progress: switch (_model.state) {
-                AsyncScopeProgress(:final progress) => progress,
-                _ => null,
-              },
-            ),
-          );
-
-          if (!_initCompleter.isCompleted) {
-            _initCompleter.complete();
-          }
-        },
-        onDone: () {
-          if (_initSucceeded) {
-            return;
-          }
-
-          // A stream that ends without ever yielding [AsyncScopeReady] has
-          // initialized nothing and has nothing further coming, and that used
-          // to be the quietest way for a scope to fail: the model stayed
-          // [AsyncScopeWaiting], the loading branch stayed on screen for good,
-          // and the only trace was a diagnostic line nobody had turned on. It
-          // is the same silence the synchronous failure below was fixed for --
-          // and the comment there names it in the same words.
-          final error = StateError(
-            '$W was initialized by a stream that ended without '
-            'AsyncScopeReady. That is how an `initScope` says it is done, so '
-            'a stream ending without it leaves the scope nothing to show and '
-            'nothing to release.',
-          );
-          notifyObserver(
-            (observer) => observer.onError(
-              this,
-              ScopePhase.initialization,
-              error,
-              null,
-            ),
-          );
-
-          // Before the model, and before anything that could throw:
-          // `_performAsyncDispose` parks on this completer, and a failure on
-          // the way to the model would otherwise leave the whole teardown
-          // waiting for an initialization that is long over.
-          if (!_initCompleter.isCompleted) {
-            _initCompleter.complete();
-          }
-
-          _model.update(
-            AsyncScopeError(
-              error,
-              StackTrace.current,
-              progress: switch (_model.state) {
-                AsyncScopeProgress(:final progress) => progress,
-                _ => null,
-              },
-            ),
-          );
-        },
-        cancelOnError: true,
-      );
+      // Run, not subscribed to. The body is an ordinary `Future`, its
+      // progress arrives through the context, and the two things a stream
+      // gave for free -- serialised events and `cancelOnError` -- are not
+      // needed for something that reports synchronously and ends once.
+      final handle = _initHandle = ScopeInitHandle(onProgress: _onInitStep);
+      _initRunning = _runInitBody(handle);
     } on Object catch (error, stackTrace) {
       // `_initSucceeded` stays false: nothing was initialized, so nothing is
       // disposed of either.
@@ -1305,29 +1292,29 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
     }
 
     // Cancel the initialization if it has not finished yet.
-    if (_subscription case final subscription?) {
-      // A generator runs its `finally` when it is cancelled, and a failure
-      // raised there -- or by anything else the cancellation drives -- is
-      // delivered through this future. Letting it out would abandon the
-      // disposal right here, before any of the releasing below has run: the
-      // scope would never unregister from its parent, which then waits out
-      // its whole `waitForChildrenTimeout` on a scope that is already gone,
-      // and never release its `scopeKey`, so every later scope on that key
-      // would queue behind an entry nobody completes. The failure is
-      // reported and the disposal goes on -- the same trade the rest of this
-      // file makes for the failures it cannot hand to a caller.
+    if (_initHandle case final handle?) {
+      // A body unwinds through its own `finally`s, and a failure raised there
+      // -- or by anything else the cancellation drives -- comes back through
+      // the future below. Letting it out would abandon the disposal right
+      // here, before any of the releasing below has run: the scope would
+      // never unregister from its parent, which then waits out its whole
+      // `waitForChildrenTimeout` on a scope that is already gone, and never
+      // release its `scopeKey`, so every later scope on that key would queue
+      // behind an entry nobody completes. The failure is reported and the
+      // disposal goes on -- the same trade the rest of this file makes for
+      // the failures it cannot hand to a caller.
       //
       // Waiting forever leads to exactly the same place, and needs no failure
-      // to get there. Cancelling an `async*` means resuming its body and
-      // letting it run out; a body suspended on a future that never completes
-      // is never resumed, so the cancellation never finishes. The wait is
-      // therefore bounded: when the limit expires the expiry is reported, the
-      // initialization is left where it stands, and the disposal goes on to
-      // give back what the scope was holding. What the generator itself holds
-      // stays held -- it is parked on somebody else's future, and no scope can
-      // complete that one for it.
+      // to get there: a body parked on somebody else's future is not
+      // interrupted by anything, and one that asks the context nothing is
+      // never told. The wait is therefore bounded: when the limit expires the
+      // expiry is reported, the initialization is left where it stands, and
+      // the disposal goes on to give back what the scope was holding. What
+      // the body itself holds stays held -- no scope can complete somebody
+      // else's future for it.
       try {
-        final cancelled = subscription.cancel();
+        handle.cancel();
+        final cancelled = _initRunning ?? Future<void>.value();
         final limit = resolveCancellationTimeout(
           initCancellationTimeout,
           ScopeConfig.defaultInitCancellationTimeout,

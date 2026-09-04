@@ -1,6 +1,6 @@
 # Scope
 
-> Перевод `doc/full_scope.md` (blob `014412b82eaf8238025117f44d9cd2bd38662400`).
+> Перевод `doc/full_scope.md` (blob `72749c1ebb038c159500e33ca22bdfb7de06aacb`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 `Scope` — основной строительный блок пакета: виджет, который владеет контейнером
@@ -36,10 +36,10 @@
 
 | Фаза | Билдер |
 | --- | --- |
-| ожидание `scopeKey` и первого события потока | `buildOnWaiting` — может вернуть `null`, тогда `buildOnProgress(context, null)` |
+| ожидание `scopeKey` и первого шага | `buildOnWaiting` — может вернуть `null`, тогда `buildOnProgress(context, null)` |
 | тело сообщило о прогрессе | `buildOnProgress(context, progress)` |
 | тело вернуло контейнер | `wrapState` вокруг `build` состояния из `createState` |
-| поток упал | `buildOnError(context, error, stackTrace, progress)` |
+| тело бросило | `buildOnError(context, error, stackTrace, progress)` |
 | работает `close()` | `buildOnClosing` поверх замороженного снимка готового поддерева, если снимок удалось снять |
 
 `wrapState` оборачивает только готовую ветку, поэтому виджет, нужный всем веткам
@@ -86,7 +86,7 @@ final class AppDependencies implements ScopeDependencies {
 
 ## ScopeAutoDependencies
 
-Писать поток руками перестаёт масштабироваться, как только у зависимостей
+Писать тело руками перестаёт масштабироваться, как только у зависимостей
 появляется порядок, часть из них можно строить параллельно, и у каждой свой
 разбор. `ScopeAutoDependencies` — готовая реализация: опишите дерево один раз в
 `buildDependencies`, а его `init` обойдёт дерево, отчитается о прогрессе по
@@ -172,21 +172,22 @@ final class HomeDependencies
 выше, которому снаружи ничего не нужно; объявляйте `BuildContext`, когда
 зависимости надо что-то прочитать из дерева.
 
-Подключение контейнера к скоупу — один вызов, а
-`ScopeAutoDependenciesStream` — псевдоним для типа получающегося потока:
+Подключение контейнера к скоупу — один вызов:
 
 ```dart
 @override
-ScopeAutoDependenciesStream<HomeDependencies> initDependencies(
+Future<HomeDependencies> initDependencies(
   BuildContext context,
+  ScopeInitContext ctx,
 ) =>
-    HomeDependencies().init(null);
+    HomeDependencies().init(null, ctx);
 ```
 
 Для контейнера с `BuildContext` пробрасывайте `context` из `initDependencies`
 вместо `null`.
 
-Каждое событие этого потока несёт `ScopeAutoDependenciesProgress`: `path` — путь
+Каждый шаг, о котором сообщает контейнер, несёт
+`ScopeAutoDependenciesProgress`: `path` — путь
 только что инициализированной зависимости, `name` — последний сегмент этого
 пути, то есть имя, с которым зависимость объявлена, плюс счётчик шагов
 `ProgressIterator` (`number`, `total` и `value` как доля от 0 до 1). Именно
@@ -319,8 +320,8 @@ static Future<AppDependencies> init(ScopeInitContext ctx) async {
 `ScopeDependencyState` — `ScopeDependencyInitial`,
 `ScopeDependencyInitialized`, `ScopeDependencyFailed`,
 `ScopeDependencyCancelled`, `ScopeDependencyDisposed`,
-`ScopeDependencyNoDisposalRequired`, `ScopeDependencyDisposalFailed`,
-`ScopeDependencyDisposalCancelled` — и сокращения `isInitialized`, `isFailed`,
+`ScopeDependencyNoDisposalRequired`, `ScopeDependencyDisposalFailed` — и
+сокращения `isInitialized`, `isFailed`,
 `isCancelled`, `isDisposed` из `ScopeDependencyExtension`.
 
 `ScopeDependencyNoDisposalRequired` — состояние зависимости, которая не задала
@@ -328,13 +329,10 @@ static Future<AppDependencies> init(ScopeInitContext ctx) async {
 говорит после. Это `ScopeDependencyDisposed`, так что `isDisposed` покрывает оба
 случая.
 
-`ScopeDependencyDisposalCancelled` — единственное состояние, которого скоуп сам
-не производит: разбор на полпути в пакете никто не отменяет. Оно принадлежит
-тому, кто разбор ведёт сам: `dispose()` — это поток, и вызывающий, который на
-него подписался и отменил подписку раньше конца, оставляет неразобранные
-зависимости инициализированными, а та, на которой он остановился, говорит
-«disposal cancelled». То есть читать это состояние — значит читать про свой
-собственный разбор.
+Обход разбора всегда доходит до конца. Раньше его можно было прервать — обход
+был потоком, и тот, кто его вёл, мог перестать слушать на полпути, — и эта
+возможность ушла вместе с потоком: оставить полдерева держащим взятое — ровно
+та беда, которую этот пакет закрывает, а не предлагает.
 
 ## Пути зависимостей
 
@@ -385,9 +383,9 @@ concurrent1/sequential1/dep3: Exception: no network
 
 Группа, увидевшая провал, перестаёт требовать инициализации и переходит в
 `ScopeDependencyFailed`, сохраняя увиденный отказ — один, даже если у
-`concurrent`-группы упало в один момент несколько детей: поток, в котором группа
-запускает своих детей, охраняемый, а охраняемый поток закрывается на первой
-ошибке. Свои ошибки хранит каждая зависимость, и
+`concurrent`-группы упало сразу несколько детей: первый отказ отменяет ветки
+рядом, так что группа хранит тот, который её и закончил. Свои ошибки хранит
+каждая зависимость, и
 `flattenDependenciesWithErrors()` обходит за ними дерево. `stateToString()`
 группы подводит итог тому, что она держит: упавший ребёнок по имени и всякая
 ошибка, которая сама не является `ScopeDependencyException`, — списком

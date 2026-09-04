@@ -172,29 +172,25 @@ abstract base class ScopeElementBase<
 
   @nonVirtual
   @override
-  Stream<AsyncScopeInitState> initScope() =>
-      _runScopeInit<AsyncScopeInitState, D>(
-        body: initDependencies,
-        progressState: AsyncScopeProgress.new,
-        readyState: (dependencies) {
-          // Refused here rather than one layer up, which is where the
-          // neighbouring `AsyncDataScope` refuses the same thing and says so
-          // in the same words. This runs as the event is built and the
-          // `asyncMap` above only after it has gone past, so the check for a
-          // second initialization up there arrived to find the field already
-          // replaced: the model stayed as it was, the dependents heard
-          // nothing, and the container the scope had actually been using was
-          // left with nobody to unmount or dispose of it.
-          if (_dependencies != null) {
-            throw StateError('$W already initialized');
-          }
+  Future<void> runInitBody(ScopeInitContext ctx) async {
+    final dependencies = await initDependencies(ctx);
 
-          _dependencies = dependencies;
+    // The container the body built after the scope had given up: it never
+    // reaches the field, so this is the only pass that can let go of it.
+    if (ctx.isCancelled) {
+      await releaseLateDependencies(dependencies);
 
-          return AsyncScopeReady();
-        },
-        releaseLateValue: releaseLateDependencies,
-      );
+      return;
+    }
+
+    // Refused here rather than one layer up, which is where the neighbouring
+    // `AsyncDataScope` refuses the same thing and says so in the same words.
+    if (_dependencies != null) {
+      throw StateError('$W already initialized');
+    }
+
+    _dependencies = dependencies;
+  }
 
   /// Lets go of a container the body built after the scope had given up.
   ///

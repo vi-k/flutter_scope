@@ -213,65 +213,28 @@ abstract base class ScopeAutoDependencies<T extends ScopeAutoDependencies<T, C>,
     final progressIterator = ProgressIterator(dependencies.count);
 
     _initializing = true;
-    // Declared out here because the `finally` waits for it: what the
-    // cancellation starts inside the `try` is finished after it.
-    Future<void>? walkStopped;
     try {
       notifyObserver((observer) => observer.onInit(this));
 
-      // The walk of the tree is still a stream -- that half of the package has
-      // not moved -- so this is where the two forms meet. The body waits on
-      // [walked]; the subscription feeds it.
-      final walked = Completer<void>();
-      final subscription = dependencies.init().listen(
-        (path) {
+      // An ordinary call now, with the cancellation travelling inside `ctx`
+      // rather than as the cancellation of a subscription: the walk stops
+      // where it next asks, and a failure comes back the way any failure
+      // does. The `handleError` that used to stand here was for the one
+      // channel a delegated stream had -- the defect R3 of the post-wave
+      // review -- and there is no delegated stream left to have it.
+      try {
+        await dependencies.init(ctx, (path) {
           final step = progressIterator.nextStep();
           final progress = ScopeAutoDependenciesProgress(path, step);
           notifyObserver((observer) => observer.onProgress(this, progress));
           ctx.progress(progress);
-        },
-        // Through the subscription and not through a `try` around the walk: an
-        // error of a delegated stream goes to the listener, and a `catch`
-        // would never run. That is the defect R3 of the post-wave review found
-        // here; this is the channel the error does travel.
-        onError: (Object error, StackTrace stackTrace) {
-          if (!walked.isCompleted) {
-            walked.completeError(
-              _explainRerunFailure(error),
-              stackTrace,
-            );
-          }
-        },
-        onDone: () {
-          if (!walked.isCompleted) {
-            walked.complete();
-          }
-        },
-        cancelOnError: true,
-      );
-
-      // What the cancellation used to do by itself. A cancelled `async*` took
-      // the subscription of its `yield*` with it; a body has to hand the
-      // cancellation on, and this is where it does. The wait ends here rather
-      // than in the walk, which goes on unwinding whatever it was in the
-      // middle of -- and the `finally` below is what waits for the result of
-      // that unwinding.
-      final unregister = ctx.onCancel(() {
-        // Kept rather than awaited: `onCancel` is synchronous, and what it
-        // starts here is finished by the `finally` below. Waiting matters --
-        // the walk unwinds through its own `finally`s, and a teardown that
-        // began before those had run met a tree that was still initializing
-        // and refused to dispose of itself.
-        walkStopped = subscription.cancel();
-        if (!walked.isCompleted) {
-          walked.completeError(const ScopeInitCancelled(), StackTrace.current);
-        }
-      });
-
-      try {
-        await walked.future;
-      } finally {
-        unregister();
+        });
+        // ignore: avoid_catching_errors
+      } on ScopeInitCancelled {
+        rethrow;
+        // ignore: avoid_catching_errors
+      } on Object catch (error, stackTrace) {
+        Error.throwWithStackTrace(_explainRerunFailure(error), stackTrace);
       }
 
       if (!dependencies.isInitialized) {
@@ -296,15 +259,6 @@ abstract base class ScopeAutoDependencies<T extends ScopeAutoDependencies<T, C>,
       // being disposed of, and `_prepareDependencies` refuses it; a
       // `dispose()` joins the walk this `finally` is already running.
       _initializing = false;
-
-      // Before anything is released: the walk was told to stop, and until it
-      // has, the tree is still initializing -- and a tree that is initializing
-      // refuses to be disposed of, by the guard that keeps a caller from
-      // disposing of a container mid-run. The old form got this for free,
-      // because cancelling the stream is what ended the generator.
-      if (walkStopped case final stopped?) {
-        await stopped;
-      }
 
       if (!dependencies.isInitialized) {
         notifyObserver((observer) => observer.onCancelled(this));
@@ -523,8 +477,6 @@ abstract base class ScopeAutoDependencies<T extends ScopeAutoDependencies<T, C>,
       return;
     }
 
-    final completer = Completer<void>();
-
     void reportFailure(Object error, StackTrace stackTrace) {
       // The observer half only for a root of the caller's own making, on the
       // same terms as the exit below: a root of the package's own making has
@@ -561,24 +513,17 @@ abstract base class ScopeAutoDependencies<T extends ScopeAutoDependencies<T, C>,
 
     notifyObserver((observer) => observer.onDispose(this));
     try {
-      dependencies.dispose().listen(
-        (path) {
-          // Only for a root of the caller's own making, which has no channel
-          // to announce from. A root of the package's own making has already
-          // sent this exit from inside the walk, and reporting it again here
-          // would double every step of a disposal the container drove itself.
-          if (dependencies is! ScopeDependencyMixin) {
-            notifyObserver(
-              (observer) => observer.onDisposalProgress(this, path),
-            );
-          }
-        },
-        onError: reportFailure,
-        onDone: completer.complete,
-        cancelOnError: false,
-      );
-
-      await completer.future;
+      await dependencies.dispose((path) {
+        // Only for a root of the caller's own making, which has no channel
+        // to announce from. A root of the package's own making has already
+        // sent this exit from inside the walk, and reporting it again here
+        // would double every step of a disposal the container drove itself.
+        if (dependencies is! ScopeDependencyMixin) {
+          notifyObserver(
+            (observer) => observer.onDisposalProgress(this, path),
+          );
+        }
+      });
       // ignore: avoid_catching_errors
     } on Object catch (error, stackTrace) {
       // `dispose()` is a public interface method, and one of the caller's own

@@ -59,6 +59,30 @@
   ending it *was* stopping the walk — and a body has to do it deliberately;
   without the wait the teardown met a tree that was still initializing and
   refused to release anything.
+* **Breaking:** `ScopeDependency.init` and `ScopeDependency.dispose` are
+  `Future`s too, and report the path of each step through a callback:
+  `init(ScopeInitContext ctx, void Function(String path) onStep)` and
+  `dispose(void Function(String path) onStep)`. There is no stream left
+  anywhere in an initialization — not in the engine, which now runs the body
+  itself, and not in the dependency tree, which used to walk as a
+  `Stream<String>`.
+* **Breaking:** a teardown walk of a dependency tree always runs to its end,
+  and `ScopeDependencyDisposalCancelled` is gone with the possibility of
+  stopping one. It was never something the package did: it existed because the
+  walk was a stream, and a caller who drove one could stop listening. Leaving
+  half a tree still holding what it took is the shape this package exists to
+  close.
+* A `concurrent` group cancels the arms beside a failing one a microtask later
+  than it used to. The merge that ran them was a synchronous stream, so a
+  sibling never got to finish a step it had already begun; a future always
+  reports asynchronously, so now it can — and the step it reports is one it
+  really performed. Nothing is left holding: a dependency that registered a
+  disposer is released whatever its state says.
+* Gone with the stream, and unmissed: the diagnostic for an initialization that
+  ended without ever being ready (a body returns or throws, so there is no
+  third way to end), the guard against a second ready state, and the guard
+  against a failure arriving after one — the ready state is settled after the
+  body returns, so nothing of the initialization can arrive behind it.
 * `AsyncScopeProgress` and `AsyncScopeReady` stay: they are states of the
   model, read through `state` and matched in `buildOnState`, and only their
   second job — being the language an initialization was written in — is over.

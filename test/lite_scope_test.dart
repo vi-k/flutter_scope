@@ -16,7 +16,7 @@ void main() {
     // `buildOnState()` -- so in any other state nothing can release it and
     // `close()` waits forever.
     for (final (state, init, body)
-        in <(String, Stream<AsyncScopeInitState> Function(), String)>[
+        in <(String, Future<void> Function(ScopeInitContext), String)>[
       ('waiting', _neverEmits, 'waiting'),
       ('initializing', _emitsProgressOnly, 'initializing'),
       ('error', _failsImmediately, 'error'),
@@ -820,7 +820,7 @@ void main() {
                 textDirection: TextDirection.ltr,
                 child: AsyncScopeCoordinator(
                   child: _CloseScope(
-                    init: () => _neverEmitsUntilCancelled(gate),
+                    init: _neverEmitsUntilCancelled(gate),
                     testKey: key,
                   ),
                 ),
@@ -1461,10 +1461,10 @@ void main() {
         var initCount = 0;
         final element = _mountInEnterWindow(
           tester,
-          init: () {
+          init: (ctx) {
             initCount++;
 
-            return _becomesReady();
+            return _becomesReady(ctx);
           },
         );
 
@@ -1492,10 +1492,10 @@ void main() {
         var initCount = 0;
         final element = _mountInEnterWindow(
           tester,
-          init: () {
+          init: (ctx) {
             initCount++;
 
-            return _becomesReady();
+            return _becomesReady(ctx);
           },
         );
 
@@ -1842,7 +1842,7 @@ _CloseScopeElement _scopeOf(WidgetTester tester) =>
 /// its next `await` therefore happens while `_subscription` is still `null`.
 _CloseScopeElement _mountInEnterWindow(
   WidgetTester tester, {
-  required Stream<AsyncScopeInitState> Function() init,
+  required Future<void> Function(ScopeInitContext ctx) init,
 }) {
   final binding = tester.binding;
   binding.attachRootWidget(
@@ -1860,10 +1860,12 @@ _CloseScopeElement _mountInEnterWindow(
   return _scopeOf(tester);
 }
 
-/// Keeps the scope in [AsyncScopeWaiting]: nothing is ever emitted, and the
-/// stream stays open until the scope cancels it.
-Stream<AsyncScopeInitState> _neverEmits() =>
-    Stream<AsyncScopeInitState>.multi((_) {});
+/// Keeps the scope in [AsyncScopeWaiting]: nothing is ever reported, and the
+/// body never comes back on its own.
+Future<void> _neverEmits(ScopeInitContext ctx) =>
+    // Through the context, so the cancellation ends the wait at once -- what
+    // a stream that emits nothing and cancels immediately used to do.
+    ctx.wait(() => Completer<void>().future);
 
 /// Like [_neverEmits], but the cancellation the disposal awaits does not
 /// finish until [gate] is completed.
@@ -1871,32 +1873,36 @@ Stream<AsyncScopeInitState> _neverEmits() =>
 /// That parks `_performAsyncDispose` between `_isDisposing = true` and the
 /// `finally` that releases the key -- the window in which the scope is closing
 /// and still holding its `AccessEntry`.
-Stream<AsyncScopeInitState> _neverEmitsUntilCancelled(Completer<void> gate) =>
-    Stream<AsyncScopeInitState>.multi(
-      (controller) => controller.onCancel = () => gate.future,
-    );
+Future<void> Function(ScopeInitContext) _neverEmitsUntilCancelled(
+  Completer<void> gate,
+) =>
+    (ctx) async {
+      // Not through `ctx.wait`: the body has to be still running when the
+      // cancellation arrives, and to end only once the gate lets it.
+      await gate.future;
+    };
 
 /// Moves the scope into [AsyncScopeProgress] and keeps it there.
-Stream<AsyncScopeInitState> _emitsProgressOnly() =>
-    Stream<AsyncScopeInitState>.multi(
-      (controller) => controller.add(AsyncScopeProgress(1)),
-    );
+Future<void> _emitsProgressOnly(ScopeInitContext ctx) {
+  ctx.progress(1);
+
+  return ctx.wait(() => Completer<void>().future);
+}
 
 /// Moves the scope into [AsyncScopeError].
-Stream<AsyncScopeInitState> _failsImmediately() async* {
+Future<void> _failsImmediately(ScopeInitContext ctx) async {
   throw Exception('init failed');
 }
 
 /// Moves the scope into [AsyncScopeReady].
-Stream<AsyncScopeInitState> _becomesReady() =>
-    Stream<AsyncScopeInitState>.value(AsyncScopeReady());
+Future<void> _becomesReady(ScopeInitContext ctx) async {}
 
 /// A minimal [LiteScopeCore] with an element type visible to the test, so
 /// [LiteScopeElementBase.close] can be called in any state -- including the
 /// states in which no [LiteScopeCoreState] exists yet.
 final class _CloseScope
     extends LiteScopeCore<_CloseScope, _CloseScopeElement, _CloseScopeState> {
-  final Stream<AsyncScopeInitState> Function() init;
+  final Future<void> Function(ScopeInitContext ctx) init;
 
   /// Makes [_CloseScopeState.initStateAsync] fail, the way a plain user error in a
   /// state initializer does.
@@ -2025,7 +2031,7 @@ final class _CloseScopeElement extends LiteScopeElementBase<_CloseScope,
   }
 
   @override
-  Stream<AsyncScopeInitState> initScope() => widget.init();
+  Future<void> initScopeAsync(ScopeInitContext ctx) => widget.init(ctx);
 
   @override
   Future<void> disposeScope() async {

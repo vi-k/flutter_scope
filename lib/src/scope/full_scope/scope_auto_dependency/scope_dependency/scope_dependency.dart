@@ -35,12 +35,16 @@ abstract interface class ScopeDependency {
   /// Whether anything has to be released for this dependency.
   bool get disposalRequired;
 
-  /// Initializes this dependency, yielding the path of each step.
+  /// Initializes this dependency, reporting the path of each step to
+  /// [onStep].
   ///
   /// Keeps [state] in step with how it went. The step itself lives in the
   /// implementation and is not part of this interface: there is one way to
   /// initialize a dependency, and it is this one.
-  Stream<String> init();
+  ///
+  /// [ctx] carries the cancellation: a walk gives up where it next asks,
+  /// which is between steps.
+  Future<void> init(ScopeInitContext ctx, void Function(String path) onStep);
 
   /// Lets go of whatever cannot wait for [dispose].
   ///
@@ -48,10 +52,12 @@ abstract interface class ScopeDependency {
   /// from the tree or closed with `close()`.
   void onUnmount();
 
-  /// Releases this dependency, yielding the path of each step.
+  /// Releases this dependency, reporting the path of each step to [onStep].
   ///
-  /// Keeps [state] in step with how it went, the same way [init] does.
-  Stream<String> dispose();
+  /// Keeps [state] in step with how it went, the same way [init] does. There
+  /// is no context here: a teardown is not cancelled, and there would be
+  /// nothing to cancel it with.
+  Future<void> dispose(void Function(String path) onStep);
 
   /// The name as it appears in a tree dump — `"dep"` or `[group]`.
   String get wrappedName;

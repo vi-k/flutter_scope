@@ -34,19 +34,21 @@ final class _ScopeDependencyImpl with ScopeDependencyMixin {
       (_helper?.dispose != null || _helper?.unmount != null);
 
   @override
-  Stream<String> _runInit() async* {
+  Future<void> _runInit(
+    ScopeInitContext ctx,
+    void Function(String path) onStep,
+  ) async {
     // First of all, before the handle and before the initializer: the promise
     // is that this is out before the step awaits anything, so that a step
-    // which never comes back is still the last one announced. The body of an
-    // `async*` runs on subscription and stops at the first `yield`, and there
-    // is no `yield` between here and the end.
+    // which never comes back is still the last one announced. Nothing between
+    // here and the initializer waits for anything.
     _onStepStarted?.call(name);
     final helper = _helper = ScopeDependencyHandle._(this);
     final result = _init(helper);
     if (result is Future<void>) {
       await result;
     }
-    yield name;
+    onStep(name);
   }
 
   /// Runs the registered `unmount` hook, and only ever the first time.
@@ -68,7 +70,7 @@ final class _ScopeDependencyImpl with ScopeDependencyMixin {
   }
 
   @override
-  Stream<String> _runDispose() async* {
+  Future<void> _runDispose(void Function(String path) onStep) async {
     final helper = _helper;
     final disposer = helper?.dispose;
     if (helper == null || disposer == null) {
@@ -101,21 +103,15 @@ final class _ScopeDependencyImpl with ScopeDependencyMixin {
         await result;
       }
 
-      // Before the `yield`, not after it, and this is load-bearing. A
-      // cancelled `async*` is not stopped where it stands: a body parked on an
-      // `await` resumes, runs up to the next `yield`, and stops there. Sent
-      // after the `yield`, the exit of a disposer that had actually finished
-      // would be lost for ever, leaving an entry with no exit over a resource
-      // that is already released -- the exact false positive the pair exists
-      // to rule out.
+      // The exit before the step is reported onwards, which is the order the
+      // pair is read in: an entry with no exit means a release that hung, and
+      // a disposer that finished must never look like one.
       _onDisposalStepEnded?.call(name);
-      yield name;
+      onStep(name);
       // ignore: avoid_catching_errors
     } on Object catch (error, stackTrace) {
-      // The third thing an entry can end with. A cancelled walk does not come
-      // through here -- a cancelled `async*` runs its `finally` and not its
-      // `catch`, checked on 3.6.0 and 3.13.0 -- so this fires for a throw and
-      // nothing else.
+      // The third thing an entry can end with, and now the only other one: a
+      // teardown is not cancelled, so a throw is all that is left.
       _onDisposalStepFailed?.call(name, error, stackTrace);
       rethrow;
     } finally {

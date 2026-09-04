@@ -1227,9 +1227,7 @@ final class _FailingInitAsyncScopeElement extends AsyncScopeElementBase<
   }
 
   @override
-  Stream<AsyncScopeInitState> initScope() async* {
-    yield AsyncScopeReady();
-  }
+  Future<void> initScopeAsync(ScopeInitContext ctx) async {}
 
   @override
   Widget buildOnState(AsyncScopeState state) => const SizedBox.shrink();
@@ -1372,10 +1370,10 @@ final class _AsyncScopeElement
   _AsyncScopeElement(super.widget);
 
   @override
-  Stream<AsyncScopeInitState> initScope() async* {
-    yield AsyncScopeProgress('1/2');
-    yield AsyncScopeProgress('2/2');
-    yield AsyncScopeReady();
+  Future<void> initScopeAsync(ScopeInitContext ctx) async {
+    ctx
+      ..progress('1/2')
+      ..progress('2/2');
   }
 
   @override

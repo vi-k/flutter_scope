@@ -182,6 +182,55 @@ void main() {
       },
     );
   });
+
+  // A concurrent group hands its arms a context of their own: the first arm
+  // that fails cancels its siblings, and that has to happen without touching
+  // the initialization the group itself belongs to.
+  group('a child context', () {
+    test('is cancelled with its parent', () {
+      final parent = ScopeInitHandle();
+      final child = ScopeInitHandle.childOf(parent.context);
+
+      expect(child.isCancelled, isFalse);
+
+      parent.cancel();
+
+      expect(child.isCancelled, isTrue, reason: 'the parent takes it with it');
+    });
+
+    test('is cancelled on its own without touching the parent', () {
+      final parent = ScopeInitHandle();
+      final child = ScopeInitHandle.childOf(parent.context)..cancel();
+
+      expect(child.isCancelled, isTrue);
+      expect(
+        parent.isCancelled,
+        isFalse,
+        reason: 'one arm giving up is not the whole initialization giving up',
+      );
+    });
+
+    test('tells its own body, and the parent body separately', () {
+      final parent = ScopeInitHandle();
+      final child = ScopeInitHandle.childOf(parent.context);
+      final told = <String>[];
+
+      parent.context.onCancel(() => told.add('parent'));
+      child.context.onCancel(() => told.add('child'));
+
+      child.cancel();
+      expect(told, ['child']);
+
+      parent.cancel();
+      expect(told, ['child', 'parent']);
+    });
+
+    test('made under a cancelled parent is already cancelled', () {
+      final parent = ScopeInitHandle()..cancel();
+
+      expect(ScopeInitHandle.childOf(parent.context).isCancelled, isTrue);
+    });
+  });
 }
 
 final class _Host extends StatelessWidget {

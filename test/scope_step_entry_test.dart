@@ -301,7 +301,7 @@ void main() {
       observer.events.clear();
 
       final byHand = <String>[];
-      await dependencies.root.dispose().forEach(byHand.add);
+      await dependencies.root.dispose(byHand.add);
 
       expect(
         observer.events,
@@ -324,7 +324,7 @@ void main() {
       observer.events.clear();
 
       final byHand = <String>[];
-      dependencies.root.dispose().listen(byHand.add);
+      unawaited(dependencies.root.dispose(byHand.add));
       await pumpEventQueue();
 
       final joined = dependencies.dispose();
@@ -342,53 +342,6 @@ void main() {
         'disposed _ParkedDisposer',
       ]);
       expect(byHand, ['b', 'a']);
-    });
-
-    // The mark is sent before the `yield`, and this is the test that holds it
-    // there: a cancelled `async*` resumes past its `await` and runs up to the
-    // next `yield`, but never past it. Sent after the `yield`, the exit of a
-    // disposer that actually finished would be lost for ever -- an entry with
-    // no exit over a resource that is already released.
-    test('when the walk is cancelled on a parked disposer', () async {
-      final parked = Completer<void>();
-      final dependencies = _ParkedDisposer(parked);
-
-      await dependencies.init(null, ScopeInitHandle().context);
-      observer.events.clear();
-
-      final byHand = <String>[];
-      final subscription = dependencies.root.dispose().listen(byHand.add);
-      await pumpEventQueue();
-
-      unawaited(subscription.cancel());
-      parked.complete();
-      await pumpEventQueue();
-
-      expect(
-        observer.events,
-        [
-          'disposal step _ParkedDisposer b',
-          'disposal progress _ParkedDisposer b',
-        ],
-        reason: 'the disposer finished, so its exit is due even though the '
-            'walk that started it was cancelled',
-      );
-
-      await dependencies.dispose();
-
-      expect(
-        observer.events,
-        [
-          'disposal step _ParkedDisposer b',
-          'disposal progress _ParkedDisposer b',
-          'dispose _ParkedDisposer',
-          'disposal step _ParkedDisposer a',
-          'disposal progress _ParkedDisposer a',
-          'disposed _ParkedDisposer',
-        ],
-        reason: 'the container picks up what is left, and b is not released '
-            'a second time',
-      );
     });
 
     test('is announced for a foreign child by the group above it', () async {
@@ -576,7 +529,7 @@ void main() {
       await dependencies.init(null, ScopeInitHandle().context);
       observer.events.clear();
 
-      await dependencies.root.dispose().drain<void>().onError((_, __) {});
+      await dependencies.root.dispose((_) {}).onError((_, __) {});
 
       expect(observer.events, [
         'disposal step _FailingDisposer storage/cache',
@@ -686,10 +639,11 @@ void main() {
         ]);
 
         Object? failure;
-        await group
-            .init()
-            .drain<void>()
-            .onError<Object>((error, stackTrace) => failure = error);
+        try {
+          await group.init(ScopeInitHandle().context, (_) {});
+        } on Object catch (error) {
+          failure = error;
+        }
 
         expect(
           failure,
@@ -718,14 +672,15 @@ void main() {
           ScopeDependency('own', (dep) {
             log.add('own ran');
           }),
-          _RefusingStreamForeignDependency(),
+          _ThrowingForeignDependency(),
         ]);
 
         Object? failure;
-        await group
-            .init()
-            .drain<void>()
-            .onError<Object>((error, stackTrace) => failure = error);
+        try {
+          await group.init(ScopeInitHandle().context, (_) {});
+        } on Object catch (error) {
+          failure = error;
+        }
 
         expect(
           failure,
@@ -930,19 +885,22 @@ final class _ForeignDependency implements ScopeDependency {
   bool _disposalDone = false;
 
   @override
-  Stream<String> init() async* {
+  Future<void> init(
+    ScopeInitContext ctx,
+    void Function(String path) onStep,
+  ) async {
     _state = const ScopeDependencyInitialized();
-    yield name;
+    onStep(name);
   }
 
   @override
   void onUnmount() {}
 
   @override
-  Stream<String> dispose() async* {
+  Future<void> dispose(void Function(String path) onStep) async {
     _disposalDone = true;
     _state = const ScopeDependencyDisposed();
-    yield name;
+    onStep(name);
   }
 
   @override
@@ -952,26 +910,18 @@ final class _ForeignDependency implements ScopeDependency {
   String stateToString() => '$state';
 }
 
-/// A `Stream` that refuses to be listened to.
+/// A dependency of the caller's own making whose walk throws before it ever
+/// waits for anything.
 ///
-/// The package's own walks are `async*` bodies, whose `listen` is the SDK's
-/// and cannot throw; a caller writing a `Stream` of their own is under no such
-/// promise.
-final class _RefusingStream extends Stream<String> {
+/// The package's own walks cannot: theirs begin with bookkeeping and nothing
+/// else. A caller's own is under no such promise, and a synchronous throw used
+/// to be the one shape that went nowhere — it happened while a stream was
+/// being built or listened to, where no `catch` of the package could see it.
+/// An ordinary call has no such place.
+final class _ThrowingForeignDependency extends _ForeignDependency {
   @override
-  StreamSubscription<String> listen(
-    void Function(String event)? onData, {
-    Function? onError,
-    void Function()? onDone,
-    bool? cancelOnError,
-  }) =>
-      throw StateError('foreign stream refuses to be listened to');
-}
-
-/// A dependency of the caller's own making that hands back such a stream.
-final class _RefusingStreamForeignDependency extends _ForeignDependency {
-  @override
-  Stream<String> init() => _RefusingStream();
+  Future<void> init(ScopeInitContext ctx, void Function(String path) onStep) =>
+      throw StateError('foreign dependency refuses to initialize');
 }
 
 /// The same, with a `state` that throws when it is read.
@@ -986,21 +936,22 @@ final class _StateThrowingForeignDependency extends _ForeignDependency {
       throw StateError('foreign state getter boom');
 }
 
-/// The same, with a release that fails inside the stream it returned.
+/// The same, with a release that fails once it is under way.
 final class _FailingForeignDependency extends _ForeignDependency {
   @override
-  Stream<String> dispose() async* {
+  Future<void> dispose(void Function(String path) onStep) async {
     throw StateError('foreign boom');
   }
 }
 
-/// The same, with a release that throws before there is a stream at all —
-/// which the interface allows, and the package's own dependencies cannot do:
-/// their `dispose()` is an `async*`, whose body does not run until it is
-/// listened to.
+/// The same, with a release that throws before it waits for anything —
+/// which the interface allows, and which used to be a different shape
+/// entirely: a throw from before the stream existed went where no `catch` of
+/// the package could see it.
 final class _SyncFailingForeignDependency extends _ForeignDependency {
   @override
-  Stream<String> dispose() => throw StateError('sync foreign boom');
+  Future<void> dispose(void Function(String path) onStep) =>
+      throw StateError('sync foreign boom');
 }
 
 final class _FailingForeignRoot
@@ -1028,10 +979,11 @@ final class _FailingForeignChild
       ]);
 }
 
-/// The same, with an initialization that throws before there is a stream.
+/// The same, with an initialization that throws before it waits for anything.
 final class _SyncFailingInitForeignDependency extends _ForeignDependency {
   @override
-  Stream<String> init() => throw StateError('sync foreign init boom');
+  Future<void> init(ScopeInitContext ctx, void Function(String path) onStep) =>
+      throw StateError('sync foreign init boom');
 }
 
 final class _SyncFailingForeignInConcurrent

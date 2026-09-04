@@ -235,9 +235,8 @@ final class _PausedScopeElement
   Duration? get pauseAfterInitialization => widget.pause;
 
   @override
-  Stream<AsyncScopeInitState> initScope() async* {
-    yield AsyncScopeProgress('almost');
-    yield AsyncScopeReady();
+  Future<void> initScopeAsync(ScopeInitContext ctx) async {
+    ctx.progress('almost');
   }
 
   @override

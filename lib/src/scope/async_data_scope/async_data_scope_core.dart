@@ -114,29 +114,31 @@ abstract base class AsyncDataScopeElementBase<
   /// for good, and the analyzer would say nothing about it.
   @nonVirtual
   @override
-  Stream<AsyncScopeInitState> initScope() =>
-      _runScopeInit<AsyncScopeInitState, T>(
-        body: initDataAsync,
-        progressState: AsyncScopeProgress.new,
-        readyState: (data) {
-          // Refused here rather than one layer up. This runs as the event is
-          // built and the `asyncMap` above only after it has gone past, so
-          // the check for a second initialization up there arrived to find
-          // the value already replaced: the model stayed as it was, the
-          // dependents heard nothing, `data` handed out the newcomer, and the
-          // value the scope had been given was left with nobody to release
-          // it.
-          if (_hasData) {
-            throw StateError('$W already initialized');
-          }
+  Future<void> runInitBody(ScopeInitContext ctx) async {
+    final data = await initDataAsync(ctx);
 
-          _data = data;
-          _hasData = true;
+    // The value the body produced after the scope had given up. It never
+    // reaches [data], so the release takes it directly rather than through
+    // [disposeScope], which reads the field.
+    if (ctx.isCancelled) {
+      await releaseLateData(data);
 
-          return AsyncScopeReady();
-        },
-        releaseLateValue: releaseLateData,
-      );
+      return;
+    }
+
+    // Refused here rather than one layer up. This runs before the engine is
+    // told anything, so a second initialization is caught while the field
+    // still holds the value the scope has actually been using -- up there it
+    // arrived to find it already replaced: the model stayed as it was, the
+    // dependents heard nothing, `data` handed out the newcomer, and the value
+    // the scope had been given was left with nobody to release it.
+    if (_hasData) {
+      throw StateError('$W already initialized');
+    }
+
+    _data = data;
+    _hasData = true;
+  }
 
   /// Releases the value the initialization produced; awaited.
   @protected

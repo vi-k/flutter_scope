@@ -54,16 +54,12 @@ abstract base class ScopeDependencyGroup with ScopeDependencyMixin {
   /// that was disposed of because something under it failed keeps saying
   /// [ScopeDependencyFailed], so that the caller can still read what failed,
   /// and that must not be mistaken for a disposal that is still due.
-  /// [ScopeDependencyDisposalCancelled] is in the list for the same reason the
-  /// other three are: a walk that was stopped halfway left the children it
-  /// never reached holding what they took, so the disposal is still due.
   @override
   bool get disposalRequired =>
       !_isDisposalDone &&
       (state is ScopeDependencyInitialized ||
           state is ScopeDependencyFailed ||
-          state is ScopeDependencyCancelled ||
-          state is ScopeDependencyDisposalCancelled);
+          state is ScopeDependencyCancelled);
 
   /// Unmounts every child, in reverse, whatever any one of them makes of it.
   ///
@@ -221,27 +217,33 @@ final class _ScopeDependencySequential extends ScopeDependencyGroup {
   _ScopeDependencySequential(super.name, super._dependencies) : super._();
 
   @override
-  Stream<String> _runInit() async* {
+  Future<void> _runInit(
+    ScopeInitContext ctx,
+    void Function(String path) onStep,
+  ) async {
     final dependencies = _dependencies //
         .where((d) => d.initializationRequired);
     for (final dependency in dependencies) {
-      yield* dependency.init().map(_path);
+      // Between the children, which is where a cancelled walk used to stop by
+      // itself: a generator ended at its next `yield`, and a `yield` stood
+      // exactly here. Asked before the child rather than after it, so a walk
+      // that was told to stop takes nothing new.
+      ctx.check();
+      await dependency.init(ctx, (path) => onStep(_path(path)));
     }
   }
 
   @override
-  Stream<String> _runDispose() async* {
+  Future<void> _runDispose(void Function(String path) onStep) async {
     final dependencies = _disposalOrder();
     final errors = <AsyncError>[];
 
     for (final dependency in dependencies) {
       try {
-        // Iterated rather than `yield*`-ed: an error inside a delegated stream
-        // goes straight to the listener, where no `catch` of ours can see it.
-        await for (final path in dependency.dispose()) {
+        await dependency.dispose((path) {
           _announceExitFor(dependency, path);
-          yield _path(path);
-        }
+          onStep(_path(path));
+        });
         // ignore: avoid_catching_errors
       } on Object catch (error, stackTrace) {
         // One dependency that cannot let go is no reason to walk away from the
@@ -263,213 +265,75 @@ final class _ScopeDependencySequential extends ScopeDependencyGroup {
 final class _ScopeDependencyConcurrent extends ScopeDependencyGroup {
   _ScopeDependencyConcurrent(super.name, super._dependencies) : super._();
 
-  /// The stream of one arm, with a throw that arrives before it turned into
-  /// an error on it.
-  ///
-  /// A [ScopeDependency] of the caller's own making is free to throw before it
-  /// ever returns its stream — the package's own cannot, both of its walks
-  /// being `async*` bodies that do not run until they are listened to. The
-  /// arms of a concurrent group are asked for their streams from inside
-  /// `onListen` of the controller they are merged into, and a throw there is
-  /// told to nobody and closes nothing: the walk stopped for good, with no
-  /// error, no exit and no end, on the way in as on the way out. The
-  /// sequential group makes the same call from inside its own walk, where a
-  /// throw is either caught by the `try` around the disposal or carried to the
-  /// listener by the generator, which is why it never had this.
-  ///
-  /// One arm answering with an error is a shape the merge already knows: it is
-  /// what a stream that fails after its first event leaves behind.
-  static Stream<String> _guarded(Stream<String> Function() walk) {
+  @override
+  Future<void> _runInit(
+    ScopeInitContext ctx,
+    void Function(String path) onStep,
+  ) async {
+    final arms = _dependencies.where((dep) => dep.initializationRequired);
+
+    // The arms get a context of their own, and that is the whole of what the
+    // merge used to do about a failure: the first arm to fall over gave up on
+    // its siblings, because the guarded stream cancelled its source. Here the
+    // first failure cancels this handle, the siblings are told at their next
+    // step, and the initialization the group belongs to is untouched -- it is
+    // waiting for this group to say what became of it.
+    //
+    // Everything the merge did *besides* that is gone rather than rewritten.
+    // It existed because an arm was somebody's `Stream`: it could throw while
+    // being built, throw from `listen`, or throw from the lazy chain that
+    // produced it, and none of those went where an ordinary failure goes. An
+    // arm is now an ordinary call, and an ordinary call that throws is caught
+    // by an ordinary `catch`.
+    final arm = ScopeInitHandle.childOf(ctx);
     try {
-      return walk();
-      // ignore: avoid_catching_errors
-    } on Object catch (error, stackTrace) {
-      return Stream<String>.error(error, stackTrace);
+      await Future.wait([
+        for (final dependency in arms)
+          Future<void>.sync(
+            () => dependency.init(
+              arm.context,
+              (path) => onStep(_path(path)),
+            ),
+          ).onError<Object>((error, stackTrace) {
+            arm.cancel();
+            Error.throwWithStackTrace(error, stackTrace);
+          }),
+      ]);
+    } finally {
+      // Takes the handle off `ctx` whichever way the group ended, so a scope
+      // that outlives this group does not carry its callback around.
+      arm.cancel();
     }
   }
 
   @override
-  Stream<String> _runInit() async* {
-    // The loop that stood here collected the children so that each could be
-    // wired on the way in; the wiring moved to the constructor, and the filter
-    // is a filter again. Walked once: `_mergeStreams` collects what it is
-    // given before it asks it anything.
-    yield* _dependencies //
-        .where((dep) => dep.initializationRequired)
-        .map((dep) => _guarded(dep.init))
-        ._mergeStreams()
-        .map(_path);
-  }
-
-  @override
-  Stream<String> _runDispose() async* {
+  Future<void> _runDispose(void Function(String path) onStep) async {
     final errors = <AsyncError>[];
 
     // Each arm keeps its own failure to itself, which is the same rule the
     // sequential group applies and for the same reason -- one dependency that
     // cannot let go is no reason to walk away from the others, which are
-    // still holding resources of their own.
+    // still holding resources of their own. Swallowed here rather than let
+    // out, so that `Future.wait` runs every arm to its end instead of coming
+    // back on the first failure.
     //
-    // Here it has to be done before the merge rather than around the walk.
-    // An error reaching the merged stream is passed on by `yield*` straight
-    // to the listener, where no `catch` of ours can see it, and
-    // `runStreamGuarded` answers the first error by cancelling its source --
-    // which cancels every arm still running. An arm suspended mid-walk is
-    // then resumed only as far as its next `yield`, so a branch stops
-    // wherever the cancellation found it and everything below that point
-    // stays held. Nothing comes back for it either: `dispose` marks the
-    // walk done whichever way it ended.
-    //
-    // The first failure in time is passed upwards once the merged stream is
-    // over, as the sequential group passes on the first in walk order.
-    yield* _disposalOrder()
-        .map(
-          (dep) => _guarded(dep.dispose)
-              .handleError((Object error, StackTrace stackTrace) {
-            _announceFailureFor(dep, error, stackTrace);
-            errors.add(AsyncError(error, stackTrace));
-          })
-              // Per arm, because the bridge needs to know which child a path
-              // came from, and after the merge that is gone.
-              .map((path) {
-            _announceExitFor(dep, path);
-            return path;
+    // The first failure in time is passed upwards once every arm is over, as
+    // the sequential group passes on the first in walk order.
+    await Future.wait([
+      for (final dependency in _disposalOrder())
+        Future<void>.sync(
+          () => dependency.dispose((path) {
+            _announceExitFor(dependency, path);
+            onStep(_path(path));
           }),
-        )
-        ._mergeStreams()
-        .map(_path);
+        ).onError<Object>((error, stackTrace) {
+          _announceFailureFor(dependency, error, stackTrace);
+          errors.add(AsyncError(error, stackTrace));
+        }),
+    ]);
 
     if (errors.firstOrNull case final first?) {
       Error.throwWithStackTrace(first.error, first.stackTrace);
     }
-  }
-}
-
-extension<T> on Iterable<Stream<T>> {
-  /// Merges the streams into one, running them in parallel.
-  Stream<T> _mergeStreams() {
-    final controller = StreamController<T>(sync: true);
-
-    controller.onListen = () {
-      // Collected before it is asked anything, so that the shape of the chain
-      // handed in cannot matter. Whether `isEmpty` walks at all depends on
-      // which operation is outermost: `MappedIterable` overrides it and
-      // delegates to its source, so a chain ending in `map` never runs the
-      // mapping function for it; `WhereIterable` has no such override and
-      // answers by taking one step, which runs whatever `map` sits further in
-      // -- and the walk below then runs that one again.
-      //
-      // Neither caller ends on a `where` today, so nothing has come of it. It
-      // is collected anyway because the function at stake is the one that asks
-      // a dependency for its stream: a dependency whose stream begins its work
-      // when it is made rather than when it is listened to would begin twice,
-      // and that is too quiet a failure to leave hanging on which operation
-      // happens to be last.
-      final List<Stream<T>> streams;
-      try {
-        streams = toList(growable: false);
-        // ignore: avoid_catching_errors
-      } on Object catch (error, stackTrace) {
-        // Walking the chain runs whatever the caller put in it. For the
-        // initialization that is `initializationRequired`, an extension getter
-        // over `state` — a field read for the package's own dependencies, and
-        // anything at all for one of the caller's own making, which the
-        // interface allows. A throw that escapes `onListen` is told to nobody
-        // and closes nothing: the walk stopped for good, with no error, no
-        // exit and no end, and the sibling branches were left holding whatever
-        // they had taken. It is the same shape `_guarded` answers around
-        // `dep.init()` itself, one step earlier in the same expression.
-        //
-        // Answered on the stream, and from a microtask because this controller
-        // is `sync: true`: an event added from inside `onListen` reaches a
-        // subscription that `listen` has not returned yet.
-        scheduleMicrotask(() {
-          if (controller.isClosed) {
-            return;
-          }
-
-          controller
-            ..addError(error, stackTrace)
-            ..close(); // ignore: discarded_futures
-        });
-
-        return;
-      }
-
-      if (streams.isEmpty) {
-        controller.close(); // ignore: discarded_futures
-        return;
-      }
-
-      final subscriptions = <StreamSubscription<T>>[];
-
-      try {
-        for (final stream in streams) {
-          final subscription =
-              stream.listen(controller.add, onError: controller.addError);
-          subscriptions.add(subscription);
-        }
-        // ignore: avoid_catching_errors
-      } on Object catch (error, stackTrace) {
-        // The neighbour of the throw caught above, one step later: a `Stream`
-        // of the caller's own making is free to throw from `listen` as well.
-        // The package's own walks cannot -- theirs is the `listen` of an
-        // `async*`, which is the SDK's -- so this, like the other, is about a
-        // dependency written against the interface.
-        //
-        // What was already subscribed is let go of first, and the failure is
-        // answered only once that is done: an arm still running pushes into
-        // `controller.add`, and a controller closed underneath it turns one
-        // failure into two. The arms are cancelled rather than left to finish
-        // because the walk is over either way -- there is no longer a merged
-        // stream for them to arrive on.
-        scheduleMicrotask(() async {
-          await subscriptions.map((s) => s.cancel()).wait;
-          if (controller.isClosed) {
-            return;
-          }
-
-          controller.addError(error, stackTrace);
-          await controller.close();
-        });
-
-        return;
-      }
-
-      // The onDone handlers are attached only after `subscriptions` is fully
-      // populated, so that no handler can ever observe a partially filled list
-      // and close the controller prematurely.
-      for (final subscription in subscriptions) {
-        subscription.onDone(() {
-          subscriptions.remove(subscription);
-          if (subscriptions.isEmpty) {
-            controller.close(); // ignore: discarded_futures
-          }
-        });
-      }
-
-      controller
-        ..onPause = () {
-          for (final subscription in subscriptions) {
-            subscription.pause();
-          }
-        }
-        ..onResume = () {
-          for (final subscription in subscriptions) {
-            subscription.resume();
-          }
-        }
-        ..onCancel = () {
-          if (subscriptions.isEmpty) {
-            return null;
-          }
-
-          return subscriptions
-              .map((s) => s.cancel()) // ignore: discarded_futures
-              .wait
-              .then((_) => null); // ignore: discarded_futures
-        };
-    };
-    return controller.stream;
   }
 }

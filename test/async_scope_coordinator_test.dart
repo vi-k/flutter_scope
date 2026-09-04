@@ -1467,9 +1467,9 @@ final class _TestScope extends AsyncScopeCore<_TestScope, _TestScopeElement> {
   /// outlives the widget tree).
   final Completer<void>? disposeGate;
 
-  /// Parks [_TestScopeElement.initScope] on this until it is completed.
+  /// Parks [_TestScopeElement.initScopeAsync] on this until it is completed.
   ///
-  /// A gate that is never completed is a generator that cannot be cancelled:
+  /// A gate that is never completed is a body that cannot be cancelled:
   /// the body is suspended at an `await`, so it never reaches the point where
   /// a cancellation could end it.
   final Completer<void>? initGate;
@@ -1543,12 +1543,11 @@ final class _TestScopeElement
   }
 
   @override
-  Stream<AsyncScopeInitState> initScope() async* {
+  Future<void> initScopeAsync(ScopeInitContext ctx) async {
     initialized++;
     if (widget.initGate case final gate?) {
       await gate.future;
     }
-    yield AsyncScopeReady();
   }
 
   @override

@@ -541,8 +541,8 @@ void main() {
           'concurrent1/sequential1/dep3 (3/10)',
           'concurrent1/dep4 (4/10)',
           'concurrent1/sequential1/concurrent2/dep5 (5/10)',
-          'concurrent1/sequential1/concurrent2/dep6 (6/10)',
-          'concurrent1/sequential1/concurrent2/sequential2/dep7 (7/10)',
+          'concurrent1/sequential1/concurrent2/sequential2/dep7 (6/10)',
+          'concurrent1/sequential1/concurrent2/dep6 (7/10)',
           'concurrent1/sequential1/concurrent2/sequential2/dep8 (8/10)',
           'concurrent1/sequential1/dep9 (9/10)',
           'dep10 (10/10)',
@@ -698,15 +698,17 @@ void main() {
               fakeAsync.waitFuture(handleInit(dependencies)).result;
           expect(progress, [
             'dep1 (1/10)',
+            'concurrent1/sequential1/dep3 (2/10)',
+            'concurrent1/dep4 (3/10)',
             'concurrent1/dep2: Exception: dep2 failed',
           ]);
           expect(states(dependencies), [
             '[group] failed: concurrent1/dep2',
             '  "dep1" initialized',
             '  [concurrent1] failed: dep2',
-            '    "dep4" cancelled',
+            '    "dep4" initialized',
             '    [sequential1] cancelled',
-            '      "dep3" cancelled',
+            '      "dep3" initialized',
             '      [concurrent2] not initialized',
             '        "dep5" not initialized',
             '        [sequential2] not initialized',
@@ -733,7 +735,7 @@ void main() {
             '  [concurrent1] failed: dep2',
             '    "dep4" disposed',
             '    [sequential1] disposed',
-            '      "dep3" cancelled',
+            '      "dep3" no disposal required',
             '      [concurrent2] not initialized',
             '        "dep5" not initialized',
             '        [sequential2] not initialized',
@@ -760,13 +762,14 @@ void main() {
           expect(progress, [
             'dep1 (1/10)',
             'concurrent1/dep2 (2/10)',
+            'concurrent1/dep4 (3/10)',
             'concurrent1/sequential1/dep3: Exception: dep3 failed',
           ]);
           expect(states(dependencies), [
             '[group] failed: concurrent1/sequential1/dep3',
             '  "dep1" initialized',
             '  [concurrent1] failed: sequential1/dep3',
-            '    "dep4" cancelled',
+            '    "dep4" initialized',
             '    [sequential1] failed: dep3',
             '      "dep3" failed: Exception: dep3 failed',
             '      [concurrent2] not initialized',
@@ -823,6 +826,9 @@ void main() {
             'dep1 (1/10)',
             'concurrent1/dep2 (2/10)',
             'concurrent1/sequential1/dep3 (3/10)',
+            'concurrent1/sequential1/concurrent2/dep5 (4/10)',
+            'concurrent1/sequential1/concurrent2/sequential2/dep7 (5/10)',
+            'concurrent1/sequential1/concurrent2/dep6 (6/10)',
             'concurrent1/dep4: Exception: dep4 failed',
           ]);
           expect(states(dependencies), [
@@ -833,11 +839,11 @@ void main() {
             '    [sequential1] cancelled',
             '      "dep3" initialized',
             '      [concurrent2] cancelled',
-            '        "dep5" cancelled',
+            '        "dep5" initialized',
             '        [sequential2] cancelled',
-            '          "dep7" cancelled',
+            '          "dep7" initialized',
             '          "dep8" not initialized',
-            '        "dep6" cancelled',
+            '        "dep6" initialized',
             '      "dep9" not initialized',
             '    "dep2" initialized',
             '  "dep10" not initialized',
@@ -864,7 +870,7 @@ void main() {
             '        [sequential2] disposed',
             '          "dep7" disposed',
             '          "dep8" not initialized',
-            '        "dep6" cancelled',
+            '        "dep6" no disposal required',
             '      "dep9" not initialized',
             '    "dep2" disposed',
             '  "dep10" not initialized',
@@ -887,6 +893,8 @@ void main() {
             'concurrent1/dep2 (2/10)',
             'concurrent1/sequential1/dep3 (3/10)',
             'concurrent1/dep4 (4/10)',
+            'concurrent1/sequential1/concurrent2/sequential2/dep7 (5/10)',
+            'concurrent1/sequential1/concurrent2/dep6 (6/10)',
             'concurrent1/sequential1/concurrent2/dep5: Exception: dep5 failed',
           ]);
           expect(states(dependencies), [
@@ -899,9 +907,9 @@ void main() {
             '      [concurrent2] failed: dep5',
             '        "dep5" failed: Exception: dep5 failed',
             '        [sequential2] cancelled',
-            '          "dep7" cancelled',
+            '          "dep7" initialized',
             '          "dep8" not initialized',
-            '        "dep6" cancelled',
+            '        "dep6" initialized',
             '      "dep9" not initialized',
             '    "dep2" initialized',
             '  "dep10" not initialized',
@@ -928,7 +936,7 @@ void main() {
             '        [sequential2] disposed',
             '          "dep7" disposed',
             '          "dep8" not initialized',
-            '        "dep6" cancelled',
+            '        "dep6" no disposal required',
             '      "dep9" not initialized',
             '    "dep2" disposed',
             '  "dep10" not initialized',
@@ -952,6 +960,8 @@ void main() {
             'concurrent1/sequential1/dep3 (3/10)',
             'concurrent1/dep4 (4/10)',
             'concurrent1/sequential1/concurrent2/dep5 (5/10)',
+            'concurrent1/sequential1/concurrent2/sequential2/dep7 (6/10)',
+            'concurrent1/sequential1/concurrent2/sequential2/dep8 (7/10)',
             'concurrent1/sequential1/concurrent2/dep6: Exception: dep6 failed',
           ]);
           expect(states(dependencies), [
@@ -963,9 +973,9 @@ void main() {
             '      "dep3" initialized',
             '      [concurrent2] failed: dep6',
             '        "dep5" initialized',
-            '        [sequential2] cancelled',
-            '          "dep7" cancelled',
-            '          "dep8" not initialized',
+            '        [sequential2] initialized',
+            '          "dep7" initialized',
+            '          "dep8" initialized',
             '        "dep6" failed: Exception: dep6 failed',
             '      "dep9" not initialized',
             '    "dep2" initialized',
@@ -992,7 +1002,7 @@ void main() {
             '        "dep5" disposed',
             '        [sequential2] disposed',
             '          "dep7" disposed',
-            '          "dep8" not initialized',
+            '          "dep8" disposed',
             '        "dep6" failed: Exception: dep6 failed',
             '      "dep9" not initialized',
             '    "dep2" disposed',
@@ -1083,8 +1093,8 @@ void main() {
             'concurrent1/sequential1/dep3 (3/10)',
             'concurrent1/dep4 (4/10)',
             'concurrent1/sequential1/concurrent2/dep5 (5/10)',
-            'concurrent1/sequential1/concurrent2/dep6 (6/10)',
-            'concurrent1/sequential1/concurrent2/sequential2/dep7 (7/10)',
+            'concurrent1/sequential1/concurrent2/sequential2/dep7 (6/10)',
+            'concurrent1/sequential1/concurrent2/dep6 (7/10)',
             'concurrent1/sequential1/concurrent2/sequential2/dep8: Exception: dep8 failed',
           ]);
           expect(states(dependencies), [
@@ -1150,8 +1160,8 @@ void main() {
             'concurrent1/sequential1/dep3 (3/10)',
             'concurrent1/dep4 (4/10)',
             'concurrent1/sequential1/concurrent2/dep5 (5/10)',
-            'concurrent1/sequential1/concurrent2/dep6 (6/10)',
-            'concurrent1/sequential1/concurrent2/sequential2/dep7 (7/10)',
+            'concurrent1/sequential1/concurrent2/sequential2/dep7 (6/10)',
+            'concurrent1/sequential1/concurrent2/dep6 (7/10)',
             'concurrent1/sequential1/concurrent2/sequential2/dep8 (8/10)',
             'concurrent1/sequential1/dep9: Exception: dep9 failed',
           ]);
@@ -1218,8 +1228,8 @@ void main() {
             'concurrent1/sequential1/dep3 (3/10)',
             'concurrent1/dep4 (4/10)',
             'concurrent1/sequential1/concurrent2/dep5 (5/10)',
-            'concurrent1/sequential1/concurrent2/dep6 (6/10)',
-            'concurrent1/sequential1/concurrent2/sequential2/dep7 (7/10)',
+            'concurrent1/sequential1/concurrent2/sequential2/dep7 (6/10)',
+            'concurrent1/sequential1/concurrent2/dep6 (7/10)',
             'concurrent1/sequential1/concurrent2/sequential2/dep8 (8/10)',
             'concurrent1/sequential1/dep9 (9/10)',
             'dep10: Exception: dep10 failed',
@@ -1350,6 +1360,8 @@ void main() {
             'dep1 (1/10)',
             'concurrent1/dep2 (2/10)',
             'concurrent1/sequential1/dep3 (3/10)',
+            'concurrent1/sequential1/concurrent2/dep5 (4/10)',
+            'concurrent1/sequential1/concurrent2/dep6 (5/10)',
             'concurrent1/dep4: Exception: dep4 failed',
           ]);
           expect(states(dependencies), [
@@ -1360,11 +1372,11 @@ void main() {
             '    [sequential1] cancelled',
             '      "dep3" initialized',
             '      [concurrent2] cancelled',
-            '        "dep5" cancelled',
+            '        "dep5" initialized',
             '        [sequential2] cancelled',
             '          "dep7" cancelled with error: Exception: dep7 failed',
             '          "dep8" not initialized',
-            '        "dep6" cancelled',
+            '        "dep6" initialized',
             '      "dep9" not initialized',
             '    "dep2" initialized',
             '  "dep10" not initialized',
@@ -1392,7 +1404,7 @@ void main() {
             '        [sequential2] disposed',
             '          "dep7" cancelled with error: Exception: dep7 failed',
             '          "dep8" not initialized',
-            '        "dep6" cancelled',
+            '        "dep6" no disposal required',
             '      "dep9" not initialized',
             '    "dep2" disposed',
             '  "dep10" not initialized',
@@ -1416,6 +1428,7 @@ void main() {
             'dep1 (1/10)',
             'concurrent1/dep2 (2/10)',
             'concurrent1/sequential1/dep3 (3/10)',
+            'concurrent1/sequential1/concurrent2/dep6 (4/10)',
             'concurrent1/dep4: Exception: dep4 failed',
           ]);
           expect(states(dependencies), [
@@ -1430,7 +1443,7 @@ void main() {
             '        [sequential2] cancelled',
             '          "dep7" cancelled with error: Exception: dep7 failed',
             '          "dep8" not initialized',
-            '        "dep6" cancelled',
+            '        "dep6" initialized',
             '      "dep9" not initialized',
             '    "dep2" initialized',
             '  "dep10" not initialized',
@@ -1459,7 +1472,7 @@ void main() {
             '        [sequential2] disposed',
             '          "dep7" cancelled with error: Exception: dep7 failed',
             '          "dep8" not initialized',
-            '        "dep6" cancelled',
+            '        "dep6" no disposal required',
             '      "dep9" not initialized',
             '    "dep2" disposed',
             '  "dep10" not initialized',
@@ -1482,6 +1495,7 @@ void main() {
             'concurrent1/dep2 (2/10)',
             'concurrent1/sequential1/dep3 (3/10)',
             'concurrent1/dep4 (4/10)',
+            'concurrent1/sequential1/concurrent2/sequential2/dep7 (5/10)',
             'concurrent1/sequential1/concurrent2/dep5: Exception: dep5 failed',
           ]);
           expect(states(dependencies), [
@@ -1494,7 +1508,7 @@ void main() {
             '      [concurrent2] failed: dep5',
             '        "dep5" failed: Exception: dep5 failed',
             '        [sequential2] cancelled',
-            '          "dep7" cancelled',
+            '          "dep7" initialized',
             '          "dep8" not initialized',
             '        "dep6" cancelled with error: Exception: dep6 failed',
             '      "dep9" not initialized',
@@ -1940,30 +1954,6 @@ void main() {
               'looking for an assignment that does not exist',
         );
       });
-    });
-  });
-
-  // `ScopeDependencyDisposalCancelled` was read as unreachable: nothing in the
-  // package stops a teardown walk halfway. The walk is public, though --
-  // `dispose()` is a stream -- so a caller who drives one and cancels the
-  // subscription reaches the state, and this is what it looks like.
-  test('a disposal cancelled by whoever drove it says so', () {
-    myFakeAsync((async) {
-      final dependencies = TestDependencies();
-      handleInitFor(dependencies, async);
-
-      final subscription = dependencies.root.dispose().listen((_) {});
-      async
-        ..elapse(TestDependencies.step)
-        ..waitFuture(subscription.cancel());
-
-      expect(dependencies.root.state, isA<ScopeDependencyDisposalCancelled>());
-      expect(dependencies.root.stateToString(), 'disposal cancelled');
-      expect(
-        dependencies.root.isDisposed,
-        isFalse,
-        reason: 'a walk that stopped halfway did not dispose of the tree',
-      );
     });
   });
 
@@ -2429,10 +2419,11 @@ void main() {
         await Future<void>.delayed(Duration.zero);
 
         Object? refused;
-        await dependencies.root
-            .dispose()
-            .drain<void>()
-            .catchError((Object error) => refused = error);
+        try {
+          await dependencies.root.dispose((_) {});
+        } on Object catch (error) {
+          refused = error;
+        }
 
         expect(
           refused,
@@ -2490,10 +2481,10 @@ void main() {
         final group = ScopeDependency.sequential('g', [leaf]);
 
         // Straight at the child, around the group that holds it.
-        final first = leaf.init().drain<void>();
+        final first = leaf.init(ScopeInitHandle().context, (_) {});
         await Future<void>.delayed(Duration.zero);
 
-        await group.dispose().drain<void>();
+        await group.dispose((_) {});
 
         expect(
           log,
@@ -2511,7 +2502,7 @@ void main() {
               'disposer registered a moment later is still owed',
         );
 
-        await group.dispose().drain<void>();
+        await group.dispose((_) {});
 
         expect(
           log,
@@ -2545,14 +2536,17 @@ void main() {
           await gate.future;
         });
 
-        final first = dependency.init().drain<void>();
+        final first = dependency.init(ScopeInitHandle().context, (_) {});
         await Future<void>.delayed(Duration.zero);
 
         Object? refused;
-        final second = dependency
-            .init()
-            .drain<void>()
-            .catchError((Object error) => refused = error);
+        final second = () async {
+          try {
+            await dependency.init(ScopeInitHandle().context, (_) {});
+          } on Object catch (error) {
+            refused = error;
+          }
+        }();
 
         gate.complete();
         await first;
@@ -2590,11 +2584,11 @@ void main() {
           };
         });
 
-        await dependency.init().drain<void>();
+        await dependency.init(ScopeInitHandle().context, (_) {});
 
-        final first = dependency.dispose().drain<void>();
+        final first = dependency.dispose((_) {});
         await Future<void>.delayed(Duration.zero);
-        final second = dependency.dispose().drain<void>();
+        final second = dependency.dispose((_) {});
 
         gate.complete();
         await first;
@@ -2639,37 +2633,7 @@ void main() {
     );
   });
 
-  group('ScopeAutoDependencies a disposal that was cancelled', () {
-    // `dispose()` is a stream, and a caller who stops listening leaves what the
-    // walk had not reached still holding what it took. Marked done all the
-    // same, the tree stopped saying it needed disposing of -- so the next
-    // `init()` replaced it, and everything the walk never reached became
-    // unreachable.
-    test('leaves the tree still asking to be disposed of', () async {
-      final log = <String>[];
-      final dependencies = TwoDisposersDependencies(log);
-
-      await dependencies.init(null, ScopeInitHandle().context);
-
-      // Stopped after the first path arrives, which is one child in.
-      final subscription = dependencies.root.dispose().listen(null);
-      await Future<void>.delayed(Duration.zero);
-      await subscription.cancel();
-
-      expect(
-        dependencies.root.disposalRequired,
-        isTrue,
-        reason: 'the walk was stopped, and what it never reached is still '
-            'holding what it took',
-      );
-      await expectLater(
-        dependencies.init(null, ScopeInitHandle().context),
-        throwsA(isA<StateError>()),
-        reason: 'so a second init() is refused rather than quietly replacing '
-            'a tree nobody can reach any more',
-      );
-    });
-  });
+  group('ScopeAutoDependencies a disposal that was cancelled', () {});
 
   group('ScopeAutoDependencies a leaf that registered only unmount', () {
     // `unmount` is a documented way to hold something -- a subscription is the
@@ -2782,26 +2746,6 @@ final class SlowDisposeDependencies
           await gate.future;
         };
       });
-}
-
-/// A container of two dependencies, each with a disposer, so a walk can be
-/// stopped between them.
-final class TwoDisposersDependencies
-    extends ScopeAutoDependencies<TwoDisposersDependencies, void> {
-  final List<String> log;
-
-  TwoDisposersDependencies(this.log);
-
-  @override
-  ScopeDependency buildDependencies(void context) => sequential('', [
-        dep('a', (dep) => dep.dispose = () => log.add('dispose a')),
-        dep('b', (dep) {
-          dep.dispose = () async {
-            log.add('dispose b');
-            await Future<void>.delayed(const Duration(milliseconds: 20));
-          };
-        }),
-      ]);
 }
 
 /// A bare leaf as the root of a container, holding a subscription through
