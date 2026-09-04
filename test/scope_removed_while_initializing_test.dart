@@ -506,10 +506,11 @@ final class _DepScope extends Scope<_DepScope, _Deps, _DepScopeState> {
   const _DepScope({required this.deps}) : super(child: const SizedBox.shrink());
 
   @override
-  Stream<ScopeInitState<Object, _Deps>> initDependencies(
+  Future<_Deps> initDependencies(
     BuildContext context,
+    ScopeInitContext ctx,
   ) =>
-      deps.init(context);
+      deps.init(context, ctx);
 
   @override
   Widget buildOnProgress(BuildContext context, Object? progress) =>

@@ -35,7 +35,7 @@ final class _Deps extends ScopeAutoDependencies<_Deps, void> {
 }
 
 Future<void> _init(_Deps deps) async {
-  await deps.init(null).drain<void>();
+  await deps.init(null, ScopeInitHandle().context);
 }
 
 /// Its `init` logs and then throws, the way a real controller's would if
@@ -138,7 +138,10 @@ void main() {
       final calls = <String>[];
       final deps = _FailingDeps(calls);
 
-      await expectLater(deps.init(null).drain<void>(), throwsException);
+      await expectLater(
+        deps.init(null, ScopeInitHandle().context),
+        throwsException,
+      );
 
       expect(
         calls,
@@ -156,7 +159,17 @@ void main() {
         final gate = Completer<void>();
         final deps = _SlowDeps(calls, gate);
 
-        final subscription = deps.init(null).listen(null);
+        final handle = ScopeInitHandle();
+        // The caller drives the tree itself, so the cancellation it asks for
+        // comes back to it as a throw. Caught here because it is the answer,
+        // not a failure.
+        final walk = () async {
+          try {
+            await deps.init(null, handle.context);
+          } on ScopeInitCancelled {
+            calls.add('cancelled');
+          }
+        }();
         await pumpEventQueue();
 
         expect(
@@ -166,22 +179,22 @@ void main() {
               'window the whole registration order is about',
         );
 
-        // Asked for, then let through: cancelling a stream does not interrupt
-        // the `await` a generator is parked on, so the cancellation finishes
+        // Asked for, then let through: the cancellation reaches the walk at
+        // once, but the initializer it is parked inside is not interrupted --
+        // Dart cannot interrupt somebody else's `await` -- so the walk ends
         // only once `init` does.
-        final cancelled = subscription.cancel();
+        handle.cancel();
         gate.complete();
-        await cancelled;
+        await walk;
 
         expect(
           calls,
-          ['init', 'init finished', 'onUnmount', 'dispose'],
+          ['init', 'init finished', 'onUnmount', 'dispose', 'cancelled'],
           reason: 'cancelling the walk does not abandon the initializer that '
-              'is already running: `cancel()` waits for it, and only then '
-              'does the `finally` of the generator unmount and dispose of '
-              'what was registered. So a controller half-way through `init` '
-              'is never left holding what it took -- it finishes, then it is '
-              'released',
+              'is already running: it finishes, and only then does the '
+              'teardown of the walk unmount and dispose of what was '
+              'registered. So a controller half-way through `init` is never '
+              'left holding what it took -- it finishes, then it is released',
         );
         expect(deps.player.mounted, isFalse);
       },

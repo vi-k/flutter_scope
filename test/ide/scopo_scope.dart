@@ -68,10 +68,11 @@ final class App extends Scope<App, AppDependencies, AppState> {
       select(context, (state) => state.counter);
 
   @override
-  ScopeAutoDependenciesStream<AppDependencies> initDependencies(
+  Future<AppDependencies> initDependencies(
     BuildContext context,
+    ScopeInitContext ctx,
   ) =>
-      AppDependencies().init(context);
+      AppDependencies().init(context, ctx);
 
   @override
   AppState createState() => AppState();

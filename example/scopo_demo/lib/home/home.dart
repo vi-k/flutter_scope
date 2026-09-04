@@ -38,7 +38,7 @@ const _tabs = <(String, Widget)>[
 /// Initializes feature-specific dependencies like [FakeBloc] and
 /// [FakeController].
 final class Home extends Scope<Home, HomeDependencies, HomeState> {
-  final ScopeInitCallback<ScopeAutoDependenciesProgress, HomeDependencies> init;
+  final ScopeInitCallback<HomeDependencies> init;
   final bool isRoot;
 
   const Home({
@@ -49,10 +49,11 @@ final class Home extends Scope<Home, HomeDependencies, HomeState> {
   }) : super(pauseAfterInitialization: const Duration(milliseconds: 500));
 
   @override
-  ScopeAutoDependenciesStream<HomeDependencies> initDependencies(
+  Future<HomeDependencies> initDependencies(
     BuildContext context,
+    ScopeInitContext ctx,
   ) =>
-      init(context);
+      init(context, ctx);
 
   /// Provides access the scope params, i.e. to the widget [Home].
   static Home paramsOf(BuildContext context, {bool listen = true}) =>

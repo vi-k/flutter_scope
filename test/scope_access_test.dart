@@ -245,9 +245,7 @@ Widget _wrap(Widget child) => Directionality(
 //
 
 final class _Deps implements ScopeDependencies {
-  static Stream<ScopeInitState<Object, _Deps>> init() async* {
-    yield ScopeReady(_Deps());
-  }
+  static Future<_Deps> init(ScopeInitContext ctx) async => _Deps();
 
   @override
   void onUnmount() {}
@@ -264,10 +262,11 @@ final class _FullScope extends Scope<_FullScope, _Deps, _FullScopeState> {
   static const access = ScopeAccess<_FullScope, _Deps, _FullScopeState>();
 
   @override
-  Stream<ScopeInitState<Object, _Deps>> initDependencies(
+  Future<_Deps> initDependencies(
     BuildContext context,
+    ScopeInitContext ctx,
   ) =>
-      _Deps.init();
+      _Deps.init(ctx);
 
   @override
   _FullScopeState createState() => _FullScopeState();

@@ -659,58 +659,6 @@ void main() {
   });
 
   group('Scope', () {
-    // The container is assigned inside the `map` the family wraps the
-    // initialization in, one step ahead of the "already initialized" check in
-    // the layer above: `map` runs as the event goes past, `asyncMap` only
-    // after it. A second `ScopeReady` therefore replaced the field before
-    // anything could refuse it -- the model stayed as it was, the dependents
-    // heard nothing, and the container the scope had actually been using was
-    // left with nobody to unmount or dispose of it. The neighbouring
-    // `AsyncDataScope` refuses the same thing in the same place, and has since
-    // before this was written.
-    testWidgets('a second ready neither replaces the container nor strands it',
-        (tester) async {
-      final log = <String>[];
-      final gate = Completer<void>();
-      final first = _PlainDeps(log: log, label: 'first');
-      final second = _PlainDeps(log: log, label: 'second');
-
-      await tester.pumpWidget(
-        _wrap(
-          _PlainDepScope(
-            log: log,
-            init: (context) async* {
-              yield ScopeReady(first);
-              await gate.future;
-
-              yield ScopeReady(second);
-            },
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      gate.complete();
-      await tester.pumpAndSettle();
-
-      expect(
-        tester.takeException(),
-        isA<StateError>(),
-        reason: 'a second ready is a mistake in the initialization, and the '
-            'scope says so instead of quietly acting on it',
-      );
-
-      await tester.pumpWidget(_wrap(const SizedBox.shrink()));
-      await settle(tester, until: () => log.contains('dispose deps first'));
-
-      expect(
-        log,
-        ['unmount deps first', 'dispose deps first'],
-        reason: 'what is torn down is the container the scope was given and '
-            'handed on, and the one it never used is not touched at all',
-      );
-    });
-
     // The topic describes the state's own teardown and the disposal of the
     // dependency container as two steps, and promises that "a failure in one is
     // never a reason to skip what comes behind it". A hang is not a failure,
@@ -1317,10 +1265,11 @@ final class _DepScope extends Scope<_DepScope, _Deps, _DepScopeState> {
   }) : super(child: const SizedBox.shrink());
 
   @override
-  Stream<ScopeInitState<Object, _Deps>> initDependencies(
+  Future<_Deps> initDependencies(
     BuildContext context,
+    ScopeInitContext ctx,
   ) =>
-      _Deps(log: log, failOnUnmount: failOnUnmount).init(context);
+      _Deps(log: log, failOnUnmount: failOnUnmount).init(context, ctx);
 
   @override
   Widget buildOnProgress(BuildContext context, Object? progress) =>
@@ -1402,8 +1351,6 @@ final class _PlainDepScope
 
   /// Replaces the one-container default, so a test can write an
   /// initialization of its own — one that reports ready more than once, say.
-  final Stream<ScopeInitState<Object, _PlainDeps>> Function(BuildContext)? init;
-
   /// Parks `disposeStateAsync` on this, so the first of the two teardown steps
   /// never finishes.
   final Completer<void>? stateDisposeGate;
@@ -1422,22 +1369,23 @@ final class _PlainDepScope
     this.failOnDepsDispose = false,
     this.failOnStateUnmount = false,
     this.failOnStateDispose = false,
-    this.init,
     this.stateDisposeGate,
     this.stateInitGate,
     super.disposeScopeTimeout,
   }) : super(child: const SizedBox.shrink());
 
   @override
-  Stream<ScopeInitState<Object, _PlainDeps>> initDependencies(
+  Future<_PlainDeps> initDependencies(
     BuildContext context,
+    ScopeInitContext ctx,
   ) =>
-      init?.call(context) ??
-      _PlainDeps(
-        log: log,
-        failOnUnmount: failOnDepsUnmount,
-        failOnDispose: failOnDepsDispose,
-      ).asStream();
+      Future.value(
+        _PlainDeps(
+          log: log,
+          failOnUnmount: failOnDepsUnmount,
+          failOnDispose: failOnDepsDispose,
+        ),
+      );
 
   @override
   Widget buildOnProgress(BuildContext context, Object? progress) =>
@@ -1461,19 +1409,13 @@ final class _PlainDeps implements ScopeDependencies {
   final bool failOnUnmount;
   final bool failOnDispose;
 
-  /// Tells two containers of one test apart in [log]; empty when there is only
-  /// one, so every test that has no use for it reads as it always did.
-  final String label;
-
   _PlainDeps({
     required this.log,
     this.failOnUnmount = false,
     this.failOnDispose = false,
-    this.label = '',
   });
 
-  String _line(String verb) =>
-      label.isEmpty ? '$verb deps' : '$verb deps $label';
+  String _line(String verb) => '$verb deps';
 
   @override
   void onUnmount() {

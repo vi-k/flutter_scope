@@ -61,6 +61,50 @@ abstract interface class ScopeInitContext {
   void Function() onCancel(void Function() callback);
 }
 
+/// Drives an initialization written for a [ScopeInitContext] from outside a
+/// scope.
+///
+/// A scope makes its own context and cancels it when it gives up, so nothing
+/// that lives inside a scope needs this. It is for code that owns an
+/// initialization itself — a `ScopeAutoDependencies` tree driven by hand, a
+/// container initialized before any widget exists, a test:
+///
+/// ```dart
+/// final handle = ScopeInitHandle(onProgress: print);
+/// final dependencies = await deps.init(context, handle.context);
+/// // …and, if the caller changes its mind while that is still running:
+/// handle.cancel();
+/// ```
+///
+/// [cancel] is the counterpart of a scope leaving the tree: the body is told
+/// at its next touch of the context, and whatever it registered through
+/// [ScopeInitContext.onCancel] runs at once. It does not wait for the body —
+/// the caller has the future for that.
+final class ScopeInitHandle {
+  final _ScopeInitContext _context;
+
+  /// Creates a handle over a fresh context.
+  ///
+  /// [onProgress] is given whatever the initialization reports.
+  ScopeInitHandle({void Function(Object progress)? onProgress})
+      : _context = _ScopeInitContext() {
+    _context._onProgress = onProgress;
+  }
+
+  /// The context to hand to the initialization.
+  ScopeInitContext get context => _context;
+
+  /// Whether [cancel] has been called.
+  bool get isCancelled => _context.isCancelled;
+
+  /// Gives up on the initialization.
+  ///
+  /// Every member of [context] throws [ScopeInitCancelled] from here on, and
+  /// the callbacks registered through [ScopeInitContext.onCancel] run now.
+  /// Calling it twice does nothing the second time.
+  void cancel() => _context._cancel();
+}
+
 final class _ScopeInitContext implements ScopeInitContext {
   /// Where [progress] goes; set when the stream is listened to.
   void Function(Object progress)? _onProgress;

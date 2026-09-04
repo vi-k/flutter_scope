@@ -1,11 +1,15 @@
 part of '../scope.dart';
 
-/// A function that initializes scope dependencies and yields [ScopeInitState]
-/// updates.
+/// A function that initializes scope dependencies and returns them.
+///
+/// The progress goes through [ScopeInitContext.progress], which is why there
+/// is no type argument for it here.
 ///
 /// {@category Scope}
-typedef ScopeInitCallback<P extends Object, D extends ScopeDependencies>
-    = Stream<ScopeInitState<P, D>> Function(BuildContext context);
+typedef ScopeInitCallback<D extends ScopeDependencies> = Future<D> Function(
+  BuildContext context,
+  ScopeInitContext ctx,
+);
 
 /// A builder function used to display a waiting widget while the [Scope] is
 /// waiting for a [Scope.scopeKey] and [Scope.initDependencies] to send their
@@ -131,7 +135,7 @@ abstract base class Scope<W extends Scope<W, D, S>, D extends ScopeDependencies,
 
   /// Initializes the scope's dependencies and streams the initialization
   /// state.
-  Stream<ScopeInitState<Object, D>> initDependencies(BuildContext context);
+  Future<D> initDependencies(BuildContext context, ScopeInitContext ctx);
 
   /// Builds a widget to display while waiting for [scopeKey] and
   /// [initDependencies] to send their first state.
@@ -277,8 +281,8 @@ final class _ScopeElement<W extends Scope<W, D, S>, D extends ScopeDependencies,
   Duration? get pauseAfterInitialization => widget.pauseAfterInitialization;
 
   @override
-  Stream<ScopeInitState<Object, D>> initDependencies() =>
-      widget.initDependencies(this);
+  Future<D> initDependencies(ScopeInitContext ctx) =>
+      widget.initDependencies(this, ctx);
 
   @override
   Widget? buildOnWaiting() => widget.buildOnWaiting(this);

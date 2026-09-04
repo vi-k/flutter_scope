@@ -62,11 +62,11 @@ final class ScreenScope
       Scope.of<ScreenScope, ScreenDependencies, ScreenState>(context);
 
   @override
-  Stream<ScopeInitState<ScopeAutoDependenciesProgress, ScreenDependencies>>
-      initDependencies(
+  Future<ScreenDependencies> initDependencies(
     BuildContext context,
+    ScopeInitContext ctx,
   ) =>
-          ScreenDependencies().init(context);
+      ScreenDependencies().init(context, ctx);
 
   Widget _wrap({required Widget child}) {
     return Scaffold(

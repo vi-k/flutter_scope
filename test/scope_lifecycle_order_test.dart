@@ -275,10 +275,11 @@ final class _DepScope extends Scope<_DepScope, _Deps, _DepState> {
   const _DepScope();
 
   @override
-  Stream<ScopeInitState<Object, _Deps>> initDependencies(
+  Future<_Deps> initDependencies(
     BuildContext context,
+    ScopeInitContext ctx,
   ) =>
-      _Deps().init(context);
+      _Deps().init(context, ctx);
 
   @override
   Widget buildOnProgress(BuildContext context, Object? progress) =>

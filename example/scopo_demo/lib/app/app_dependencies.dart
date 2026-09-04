@@ -27,54 +27,49 @@ final class AppDependencies implements ScopeDependencies {
   KeyValueStorage keyValueStorage(String prefix) =>
       KeyValueStorage(sharedPreferences: _sharedPreferences, prefix: prefix);
 
-  static Stream<ScopeInitState<String, AppDependencies>> init(_) async* {
-    SharedPreferences? sharedPreferences;
+  static Future<AppDependencies> init(_, ScopeInitContext ctx) async {
     FakeAppHttpClient? httpClient;
     FakeService? service;
     FakeAnalytics? analytics;
 
     // An initialization that did not finish has to give back whatever it
-    // already took. A `try`/`catch` is not enough for that: the run can end
-    // in a failure, but it can also be cancelled from outside — the scope
-    // leaving the tree is enough — and only a `try`/`finally` sees both. The
-    // flag is how the `finally` tells the two endings apart.
-    var isInitialized = false;
-
+    // already took, and both ways it can fail to finish arrive here as a
+    // throw: a step of its own that fell over, and the cancellation, which
+    // `ctx.wait` raises the moment the scope gives up. No flag is needed to
+    // tell them apart from a successful run — that one leaves by `return`.
     try {
-      yield ScopeProgress('init storage');
-      sharedPreferences = await SharedPreferences.getInstance();
-      await Future<void>.delayed(AppEnvironment.defaultInitPause);
-
-      yield ScopeProgress('init analytics');
-      analytics = FakeAnalytics();
-      await analytics.init();
-
-      yield ScopeProgress('init http client');
-      httpClient = FakeAppHttpClient();
-      await httpClient.init();
-
-      yield ScopeProgress('init awesome service');
-      service = FakeService();
-      await service.init();
-
-      yield ScopeReady(
-        AppDependencies(
-          sharedPreferences: sharedPreferences,
-          httpClient: httpClient,
-          service: service,
-          analytics: analytics,
-        ),
+      ctx.progress('init storage');
+      final sharedPreferences = await ctx.wait(SharedPreferences.getInstance);
+      await ctx.wait(
+        () => Future<void>.delayed(AppEnvironment.defaultInitPause),
       );
 
-      isInitialized = true;
-    } finally {
-      if (!isInitialized) {
-        await [
-          httpClient?.close(),
-          service?.dispose(),
-          analytics?.dispose(),
-        ].nonNulls.wait;
-      }
+      ctx.progress('init analytics');
+      analytics = FakeAnalytics();
+      await ctx.wait(analytics.init);
+
+      ctx.progress('init http client');
+      httpClient = FakeAppHttpClient();
+      await ctx.wait(httpClient.init);
+
+      ctx.progress('init awesome service');
+      service = FakeService();
+      await ctx.wait(service.init);
+
+      return AppDependencies(
+        sharedPreferences: sharedPreferences,
+        httpClient: httpClient,
+        service: service,
+        analytics: analytics,
+      );
+      // ignore: avoid_catching_errors
+    } on Object {
+      await [
+        httpClient?.close(),
+        service?.dispose(),
+        analytics?.dispose(),
+      ].nonNulls.wait;
+      rethrow;
     }
   }
 

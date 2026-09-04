@@ -42,43 +42,40 @@ final class AppDependencies implements ScopeDependencies {
     required this.session,
   });
 
-  static Stream<ScopeInitState<Object, AppDependencies>> init(
+  static Future<AppDependencies> init(
     BuildContext context,
-  ) async* {
-    // Locals, not fields: until the container is assembled, these belong
-    // to this function, and it is this function that has to give them back
-    // if it does not get that far. Nullable so that a step which never ran
-    // can be skipped with `?.` below.
-    Database? database;
-    Session? session;
-
-    // A cancellation raises nothing: it ends the generator at a yield, so a
-    // `catch` never runs and only a `finally` sees it. The flag tells the
-    // two endings apart — handed over, or abandoned half-built.
-    var handedOver = false;
+    ScopeInitContext ctx,
+  ) async {
+    // What has been taken so far, in the order it was taken. Until the
+    // container is assembled these belong to this function, and it is this
+    // function that has to give them back if it does not get that far.
+    final acquired = <Future<void> Function()>[];
 
     try {
-      yield ScopeProgress('opening the database');
-      database = await Database.open();
+      ctx.progress('opening the database');
+      final database = await ctx.wait(Database.open);
+      acquired.add(database.close);
 
-      yield ScopeProgress('connecting');
-      session = await Session.connect();
+      ctx.progress('connecting');
+      final session = await ctx.wait(Session.connect);
+      acquired.add(session.close);
 
-      yield ScopeReady(
-        AppDependencies(database: database, session: session),
+      return AppDependencies(
+        database: database,
+        session: session,
       );
-      handedOver = true;
-    } finally {
-      // Only if the scope never got it. Once it did, releasing is the
-      // scope's job — through [dispose] below — and doing it here would
-      // release it twice.
+    } on Object {
+      // Both endings that leave the container half-built arrive here as a
+      // throw: a step of its own that fell over, and the cancellation,
+      // which `ctx.wait` raises the moment the scope gives up. A run that
+      // handed the container over leaves by `return` and never comes here,
+      // so releasing twice is not a thing that can happen.
       //
-      // Reverse order of construction, and every step asks whether it was
-      // reached at all.
-      if (!handedOver) {
-        await session?.close();
-        await database?.close();
+      // Reverse order of construction, and only what was actually taken.
+      for (final release in acquired.reversed) {
+        await release();
       }
+      rethrow;
     }
   }
 

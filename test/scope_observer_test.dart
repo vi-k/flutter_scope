@@ -931,7 +931,7 @@ void main() {
       () async {
     final dependencies = _TestDependencies();
 
-    await dependencies.init(null).drain<void>();
+    await dependencies.init(null, ScopeInitHandle().context);
     await dependencies.dispose();
 
     expect(observer.events, [

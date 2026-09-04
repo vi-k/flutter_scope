@@ -27,7 +27,7 @@ final class _Deps extends ScopeAutoDependencies<_Deps, void> {
 
 Future<void> _init(_Deps deps) async {
   try {
-    await deps.init(null).drain<void>();
+    await deps.init(null, ScopeInitHandle().context);
   } on Object {
     // The failure is the point of the fixture; the disposal is what is tested.
   }
@@ -142,7 +142,7 @@ void _sequentialDisposalGroup() {
       final released = <String>[];
       final deps = _Three(released, failOnDispose: {'b'});
 
-      await deps.init(null).drain<void>();
+      await deps.init(null, ScopeInitHandle().context);
       await deps.dispose();
 
       expect(
@@ -156,7 +156,7 @@ void _sequentialDisposalGroup() {
     test('is still reported', () async {
       final deps = _Three(<String>[], failOnDispose: {'b'});
 
-      await deps.init(null).drain<void>();
+      await deps.init(null, ScopeInitHandle().context);
       await deps.dispose();
 
       expect(
@@ -212,7 +212,7 @@ void _concurrentDisposalGroup() {
       final released = <String>[];
       final deps = _Nested(released, failOnDispose: {'x'});
 
-      await deps.init(null).drain<void>();
+      await deps.init(null, ScopeInitHandle().context);
       await deps.dispose();
 
       expect(
@@ -234,7 +234,7 @@ void _concurrentDisposalGroup() {
     test('is still reported', () async {
       final deps = _Nested(<String>[], failOnDispose: {'x'});
 
-      await deps.init(null).drain<void>();
+      await deps.init(null, ScopeInitHandle().context);
       await deps.dispose();
 
       expect(
@@ -270,7 +270,7 @@ void _diagnosticsGroup() {
       Object? error;
       StackTrace? stackTrace;
       try {
-        await deps.init(null).drain<void>();
+        await deps.init(null, ScopeInitHandle().context);
       } on Object catch (e, s) {
         error = e;
         stackTrace = s;
@@ -293,7 +293,7 @@ void _diagnosticsGroup() {
       addTearDown(() => FlutterError.onError = previous);
 
       final deps = _FailingDispose();
-      await deps.init(null).drain<void>();
+      await deps.init(null, ScopeInitHandle().context);
       await deps.dispose();
 
       expect(

@@ -1,9 +1,5 @@
 part of '../../scope.dart';
 
-/// {@category Scope}
-typedef ScopeAutoDependenciesStream<T extends ScopeDependencies>
-    = Stream<ScopeInitState<ScopeAutoDependenciesProgress, T>>;
-
 /// A container that builds its dependency tree and initializes it for you.
 ///
 /// [T] is the class being declared — `final class AppDeps extends
@@ -175,9 +171,7 @@ abstract base class ScopeAutoDependencies<T extends ScopeAutoDependencies<T, C>,
   }
 
   /// Initialize the scope dependencies.
-  Stream<ScopeInitState<ScopeAutoDependenciesProgress, T>> init(
-    C context,
-  ) async* {
+  Future<T> init(C context, ScopeInitContext ctx) async {
     // Before anything is built, because the cost of finding out late is the
     // whole tree. [T] is the container itself, and the bound on it only says
     // that whatever stands there is *a* container -- naming a different one
@@ -219,35 +213,77 @@ abstract base class ScopeAutoDependencies<T extends ScopeAutoDependencies<T, C>,
     final progressIterator = ProgressIterator(dependencies.count);
 
     _initializing = true;
+    // Declared out here because the `finally` waits for it: what the
+    // cancellation starts inside the `try` is finished after it.
+    Future<void>? walkStopped;
     try {
       notifyObserver((observer) => observer.onInit(this));
-      // The type argument is spelled out because `handleError` below stands
-      // between this and the `yield*` that used to supply it: without it the
-      // second parameter of `ScopeProgress` is inferred as `ScopeDependencies`
-      // rather than [T].
-      yield* dependencies
-          .init()
-          .map<ScopeInitState<ScopeAutoDependenciesProgress, T>>((path) {
-        final step = progressIterator.nextStep();
-        notifyObserver(
-          (observer) => observer.onProgress(
-            this,
-            ScopeAutoDependenciesProgress(path, step),
-          ),
-        );
-        return ScopeProgress(ScopeAutoDependenciesProgress(path, step));
-        // On the stream and not in a `try` around the `yield*`: an error of a
-        // delegated stream goes straight to the listener, and the `catch`
-        // would never run. That is the defect R3 of the post-wave review
-        // found here; this is the channel the error does travel.
-      }).handleError((Object error, StackTrace stackTrace) {
-        Error.throwWithStackTrace(_explainRerunFailure(error), stackTrace);
+
+      // The walk of the tree is still a stream -- that half of the package has
+      // not moved -- so this is where the two forms meet. The body waits on
+      // [walked]; the subscription feeds it.
+      final walked = Completer<void>();
+      final subscription = dependencies.init().listen(
+        (path) {
+          final step = progressIterator.nextStep();
+          final progress = ScopeAutoDependenciesProgress(path, step);
+          notifyObserver((observer) => observer.onProgress(this, progress));
+          ctx.progress(progress);
+        },
+        // Through the subscription and not through a `try` around the walk: an
+        // error of a delegated stream goes to the listener, and a `catch`
+        // would never run. That is the defect R3 of the post-wave review found
+        // here; this is the channel the error does travel.
+        onError: (Object error, StackTrace stackTrace) {
+          if (!walked.isCompleted) {
+            walked.completeError(
+              _explainRerunFailure(error),
+              stackTrace,
+            );
+          }
+        },
+        onDone: () {
+          if (!walked.isCompleted) {
+            walked.complete();
+          }
+        },
+        cancelOnError: true,
+      );
+
+      // What the cancellation used to do by itself. A cancelled `async*` took
+      // the subscription of its `yield*` with it; a body has to hand the
+      // cancellation on, and this is where it does. The wait ends here rather
+      // than in the walk, which goes on unwinding whatever it was in the
+      // middle of -- and the `finally` below is what waits for the result of
+      // that unwinding.
+      final unregister = ctx.onCancel(() {
+        // Kept rather than awaited: `onCancel` is synchronous, and what it
+        // starts here is finished by the `finally` below. Waiting matters --
+        // the walk unwinds through its own `finally`s, and a teardown that
+        // began before those had run met a tree that was still initializing
+        // and refused to dispose of itself.
+        walkStopped = subscription.cancel();
+        if (!walked.isCompleted) {
+          walked.completeError(const ScopeInitCancelled(), StackTrace.current);
+        }
       });
 
-      if (dependencies.isInitialized) {
-        yield ScopeReady(this as T);
-        notifyObserver((observer) => observer.onReady(this));
+      try {
+        await walked.future;
+      } finally {
+        unregister();
       }
+
+      if (!dependencies.isInitialized) {
+        throw StateError(
+          'The dependency tree of $T finished its walk without initializing. '
+          'That is what a container says when it was cancelled, and a caller '
+          'driving the tree by hand is the only one who can see it.',
+        );
+      }
+      notifyObserver((observer) => observer.onReady(this));
+
+      return this as T;
     } finally {
       // Put down first, before the teardown below rather than after it. By
       // here the run is over -- it failed, or the subscription was cancelled
@@ -260,6 +296,15 @@ abstract base class ScopeAutoDependencies<T extends ScopeAutoDependencies<T, C>,
       // being disposed of, and `_prepareDependencies` refuses it; a
       // `dispose()` joins the walk this `finally` is already running.
       _initializing = false;
+
+      // Before anything is released: the walk was told to stop, and until it
+      // has, the tree is still initializing -- and a tree that is initializing
+      // refuses to be disposed of, by the guard that keeps a caller from
+      // disposing of a container mid-run. The old form got this for free,
+      // because cancelling the stream is what ended the generator.
+      if (walkStopped case final stopped?) {
+        await stopped;
+      }
 
       if (!dependencies.isInitialized) {
         notifyObserver((observer) => observer.onCancelled(this));

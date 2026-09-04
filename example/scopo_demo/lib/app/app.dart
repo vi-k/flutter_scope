@@ -15,7 +15,7 @@ import 'theme_manager/theme_manager.dart';
 /// Initializes global dependencies like [FakeAppHttpClient], [FakeService], and
 /// [FakeAnalytics].
 final class App extends Scope<App, AppDependencies, AppState> {
-  final ScopeInitCallback<String, AppDependencies> init;
+  final ScopeInitCallback<AppDependencies> init;
   final ScopeProgressBuilder<String> progressBuilder;
   final Widget Function(BuildContext context) builder;
 
@@ -27,10 +27,11 @@ final class App extends Scope<App, AppDependencies, AppState> {
   }) : super(pauseAfterInitialization: const Duration(milliseconds: 500));
 
   @override
-  Stream<ScopeInitState<String, AppDependencies>> initDependencies(
+  Future<AppDependencies> initDependencies(
     BuildContext context,
+    ScopeInitContext ctx,
   ) =>
-      init(context);
+      init(context, ctx);
 
   /// Provides access the scope params, i.e. to the widget [App].
   static App paramsOf(BuildContext context, {bool listen = true}) =>

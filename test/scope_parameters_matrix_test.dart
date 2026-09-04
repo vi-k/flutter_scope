@@ -611,13 +611,15 @@ final class _ScopeFixture
         );
 
   @override
-  Stream<ScopeInitState<Object, _Deps>> initDependencies(
+  Future<_Deps> initDependencies(
     BuildContext context,
-  ) async* {
+    ScopeInitContext ctx,
+  ) async {
     if (c.initGate case final gate?) {
       await gate.future;
     }
-    yield ScopeReady(_Deps());
+
+    return _Deps();
   }
 
   @override

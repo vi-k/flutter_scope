@@ -112,10 +112,12 @@ final class CounterScopeElement
   }
 
   @override
-  Stream<AsyncScopeInitState> initScope() async* {
+  Future<void> initScopeAsync(ScopeInitContext ctx) async {
     console.log(_debugSource, '$_debugName: initialize');
-    await _model.init();
-    yield AsyncScopeReady();
+    await ctx.wait(_model.init);
+    // Before the return rather than after it, because after it there is
+    // nothing: a generator had a statement that ran once the scope had taken
+    // the event, and a body that returns does not.
     console.log(_debugSource, '$_debugName: initialized');
   }
 

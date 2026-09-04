@@ -567,10 +567,11 @@ final class _Full extends Scope<_Full, _FullDeps, _FullState> {
   }) : super(child: const SizedBox.shrink());
 
   @override
-  Stream<ScopeInitState<Object, _FullDeps>> initDependencies(
+  Future<_FullDeps> initDependencies(
     BuildContext context,
+    ScopeInitContext ctx,
   ) =>
-      _FullDeps().asStream();
+      Future.value(_FullDeps());
 
   @override
   Widget buildOnProgress(BuildContext context, Object? progress) =>

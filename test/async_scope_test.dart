@@ -703,6 +703,42 @@ void main() {
   // The assertions are about effects, never about timings: what proves the
   // defect is which error the app receives, which state the scope is left in,
   // and whether `disposeScope()` still runs.
+  // A stream that ends without ever yielding `AsyncScopeReady` is a mistake
+  // in the initialization, and it used to be a silent one: the model stayed
+  // `AsyncScopeWaiting`, the scope went on showing its loading branch for
+  // good, and the only trace of it was a diagnostic line nobody had turned
+  // on. A body cannot make that mistake any more — it returns or it throws —
+  // but the engine still takes a stream from anything that overrides
+  // `initScope()`, so the diagnostic is still reachable and still needed.
+  testWidgets(
+    'a stream that ends without a ready state shows the error branch',
+    (tester) async {
+      await tester.pumpWidget(
+        const Directionality(
+          textDirection: TextDirection.ltr,
+          child: _EmptyStreamScope(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('error: '), findsOneWidget);
+      expect(
+        find.text('init'),
+        findsNothing,
+        reason: 'the loading branch is not what a scope that will never load '
+            'should be left showing',
+      );
+
+      await tester.pumpWidget(
+        const Directionality(
+          textDirection: TextDirection.ltr,
+          child: SizedBox.shrink(),
+        ),
+      );
+      await settle(tester, until: () => false);
+    },
+  );
+
   group('the model of a scope', () {
     testWidgets('is one object rather than a wrapper made on every read',
         (tester) async {
@@ -1155,6 +1191,36 @@ final class _MovableScopeElement
 
   @override
   Widget buildOnState(AsyncScopeState state) => const SizedBox.shrink();
+}
+
+/// Feeds the engine a stream that ends without a ready state.
+///
+/// The form a body is written in cannot do this any more — a body either
+/// returns or throws — but the engine still eats a stream, and anything that
+/// overrides [AsyncScopeElementBase.initScope] can hand it one. That is what
+/// keeps the diagnostic reachable, and this is the only way in.
+final class _EmptyStreamScope
+    extends AsyncScopeCore<_EmptyStreamScope, _EmptyStreamScopeElement> {
+  const _EmptyStreamScope();
+
+  @override
+  _EmptyStreamScopeElement createScopeElement() =>
+      _EmptyStreamScopeElement(this);
+}
+
+final class _EmptyStreamScopeElement
+    extends AsyncScopeElementBase<_EmptyStreamScope, _EmptyStreamScopeElement> {
+  _EmptyStreamScopeElement(super.widget);
+
+  @override
+  Stream<AsyncScopeInitState> initScope() =>
+      const Stream<AsyncScopeInitState>.empty();
+
+  @override
+  Widget buildOnState(AsyncScopeState state) => switch (state) {
+        AsyncScopeError(:final error) => Text('error: $error'),
+        _ => const Text('init'),
+      };
 }
 
 /// A scope whose initialization raises *while it is being cancelled*: the

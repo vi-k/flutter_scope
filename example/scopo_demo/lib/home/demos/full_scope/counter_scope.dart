@@ -155,16 +155,16 @@ final class CounterScope
       );
 
   @override
-  Stream<ScopeInitState<ScopeAutoDependenciesProgress, CounterDependencies>>
-      initDependencies(
+  Future<CounterDependencies> initDependencies(
     BuildContext context,
+    ScopeInitContext ctx,
   ) {
     console.log(debugSource, '$debugName: initialize dependencies');
 
     return CounterDependencies(
       debugSource: debugSource,
       debugName: debugName,
-    ).init(context);
+    ).init(context, ctx);
   }
 
   @override

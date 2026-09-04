@@ -135,9 +135,8 @@ abstract base class ScopeElementBase<
   // Overriding block
   //
 
-  /// Initializes the dependencies and returns a stream of their initialization
-  /// states.
-  Stream<ScopeInitState<Object, D>> initDependencies();
+  /// Initializes the dependencies and returns them.
+  Future<D> initDependencies(ScopeInitContext ctx);
 
   /// Builds a widget to display while waiting.
   @override
@@ -171,30 +170,58 @@ abstract base class ScopeElementBase<
   // End of overriding block
   //
 
+  @nonVirtual
   @override
-  Stream<AsyncScopeInitState> initScope() => initDependencies().map(
-        (state) {
-          switch (state) {
-            case ScopeProgress(:final progress):
-              return AsyncScopeProgress(progress);
-            case ScopeReady(:final dependencies):
-              // Refused here rather than one layer up, which is where the
-              // neighbouring `AsyncDataScope` refuses the same thing and says
-              // so in the same words. This `map` runs as the event goes past
-              // and the `asyncMap` above only after it, so the check for a
-              // second initialization up there arrived to find the field
-              // already replaced: the model stayed as it was, the dependents
-              // heard nothing, and the container the scope had actually been
-              // using was left with nobody to unmount or dispose of it.
-              if (_dependencies != null) {
-                throw StateError('$W already initialized');
-              }
-
-              _dependencies = dependencies;
-              return AsyncScopeReady();
+  Stream<AsyncScopeInitState> initScope() =>
+      _runScopeInit<AsyncScopeInitState, D>(
+        body: initDependencies,
+        progressState: AsyncScopeProgress.new,
+        readyState: (dependencies) {
+          // Refused here rather than one layer up, which is where the
+          // neighbouring `AsyncDataScope` refuses the same thing and says so
+          // in the same words. This runs as the event is built and the
+          // `asyncMap` above only after it has gone past, so the check for a
+          // second initialization up there arrived to find the field already
+          // replaced: the model stayed as it was, the dependents heard
+          // nothing, and the container the scope had actually been using was
+          // left with nobody to unmount or dispose of it.
+          if (_dependencies != null) {
+            throw StateError('$W already initialized');
           }
+
+          _dependencies = dependencies;
+
+          return AsyncScopeReady();
         },
+        releaseLateValue: releaseLateDependencies,
       );
+
+  /// Lets go of a container the body built after the scope had given up.
+  ///
+  /// It never reached [_dependencies], so the teardown above will not walk it:
+  /// this is the only pass there is. `unmount` runs before `dispose` here as
+  /// everywhere else, because that is the promise the interface makes and not
+  /// a detail of who calls it.
+  @protected
+  Future<void> releaseLateDependencies(D dependencies) async {
+    if (!canReleaseAfterCancellation) {
+      return;
+    }
+
+    try {
+      dependencies.onUnmount();
+      // ignore: avoid_catching_errors
+    } on Object catch (error, stackTrace) {
+      _reportFailure(error, stackTrace, 'while unmounting the dependencies');
+    }
+
+    try {
+      await dependencies.dispose();
+      // ignore: avoid_catching_errors
+    } on Object catch (error, stackTrace) {
+      _reportFailure(error, stackTrace, 'while disposing of the dependencies');
+    }
+  }
 
   @override
   void onUnmount() {

@@ -31,10 +31,11 @@ final class App extends Scope<App, AppDependencies, AppState> {
 
   /// Dependencies initialization method.
   @override
-  Stream<ScopeInitState<String, AppDependencies>> initDependencies(
+  Future<AppDependencies> initDependencies(
     BuildContext context,
+    ScopeInitContext ctx,
   ) =>
-      AppDependencies.init(context);
+      AppDependencies.init(context, ctx);
 
   /// [App.paramsOf] provides access to the [App] widget parameters, such as
   /// [title].
@@ -124,18 +125,18 @@ final class AppDependencies implements ScopeDependencies {
 
   const AppDependencies({required this.sharedPreferences});
 
-  /// Dependency initialization is implemented via a stream generator. This
-  /// allows us to track the progress of initialization and cancel it when the
-  /// widget is removed from the tree before initialization is complete.
-  static Stream<ScopeInitState<String, AppDependencies>> init(
+  /// Dependency initialization is a plain `Future`. The context reports the
+  /// progress and carries the cancellation: the scope gives up when the widget
+  /// leaves the tree before the initialization is complete, and `ctx.wait`
+  /// ends the waiting there rather than at the end of the work.
+  static Future<AppDependencies> init(
     BuildContext context,
-  ) async* {
-    SharedPreferences? sharedPreferences;
+    ScopeInitContext ctx,
+  ) async {
+    ctx.progress('init $SharedPreferences');
+    final sharedPreferences = await ctx.wait(SharedPreferences.getInstance);
 
-    yield ScopeProgress('init $SharedPreferences');
-    sharedPreferences = await SharedPreferences.getInstance();
-
-    yield ScopeReady(AppDependencies(sharedPreferences: sharedPreferences));
+    return AppDependencies(sharedPreferences: sharedPreferences);
   }
 
   @override

@@ -40,6 +40,25 @@
   can override — takes a `ScopeInitContext` and returns instead of yielding.
   Its default is now an empty body rather than a stream that is ready at once,
   which is the same thing said in the new form.
+* **Breaking:** `Scope.initDependencies` returns the container, and
+  `ScopeAutoDependencies.init` with it. `ScopeInitState`, `ScopeProgress` and
+  `ScopeReady` are gone, as are the two shortcuts that only existed to build
+  that stream — `ScopeDependenciesExtension.asStream` and the
+  `ScopeAutoDependenciesStream` typedef. A container that is ready at once is
+  now returned rather than wrapped.
+* **Breaking:** `ScopeInitCallback` loses its progress type argument and takes
+  the context: `ScopeInitCallback<D>` is
+  `Future<D> Function(BuildContext, ScopeInitContext)`.
+* **New:** `ScopeInitHandle` drives an initialization from outside a scope — a
+  dependency tree walked by hand, a container built before any widget exists, a
+  test. It hands out the `ScopeInitContext` and has the `cancel()` a scope does
+  for itself. Without it the documented ability to drive a container yourself
+  would have gone with the stream.
+* A container that is cancelled mid-walk now waits for the walk to unwind
+  before releasing what it built. A cancelled generator did that on its own —
+  ending it *was* stopping the walk — and a body has to do it deliberately;
+  without the wait the teardown met a tree that was still initializing and
+  refused to release anything.
 * `AsyncScopeProgress` and `AsyncScopeReady` stay: they are states of the
   model, read through `state` and matched in `buildOnState`, and only their
   second job — being the language an initialization was written in — is over.

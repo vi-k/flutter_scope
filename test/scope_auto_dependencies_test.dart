@@ -403,29 +403,27 @@ List<String> handleInitFor<T extends ScopeAutoDependencies<T, void>>(
   final completer = Completer<void>();
   final progress = <String>[];
 
-  void errorToBuf(Object error) {
-    progress.add('$error');
+  final handle = ScopeInitHandle(
+    onProgress: (step) => progress.add('$step'),
+  );
+
+  Future<void> run() async {
+    try {
+      progress.add('${await dependencies.init(null, handle.context)}');
+    } on ScopeInitCancelled {
+      // A cancellation is not a step, and the old form reported none either:
+      // the stream simply ended.
+    } on Object catch (error) {
+      progress.add('$error');
+    } finally {
+      completer.complete();
+    }
   }
 
-  void stateToBuf(ScopeInitState<ScopeAutoDependenciesProgress, T> state) {
-    progress.add(
-      switch (state) {
-        ScopeProgress(:final progress) => '$progress',
-        ScopeReady(:final dependencies) => '$dependencies',
-      },
-    );
-  }
-
-  final subscription = dependencies //
-      .init(null)
-      .handleError(errorToBuf)
-      .listen(stateToBuf, onDone: completer.complete);
+  unawaited(run());
 
   if (cancel != null) {
-    Future.delayed(cancel, () async {
-      await subscription.cancel();
-      completer.complete();
-    });
+    Future.delayed(cancel, handle.cancel);
   }
 
   async.waitFuture(completer.future);
@@ -442,31 +440,26 @@ void main() {
       final completer = Completer<void>();
       final progress = <String>[];
 
-      void errorToBuf(Object error) {
-        progress.add('$error');
+      final handle = ScopeInitHandle(
+        onProgress: (step) => progress.add('$step'),
+      );
+
+      Future<void> run() async {
+        try {
+          progress.add('${await dependencies.init(null, handle.context)}');
+        } on ScopeInitCancelled {
+          // A cancellation is not a step.
+        } on Object catch (error) {
+          progress.add('$error');
+        } finally {
+          completer.complete();
+        }
       }
 
-      void stateToBuf(
-        ScopeInitState<ScopeAutoDependenciesProgress, TestDependencies> state,
-      ) {
-        progress.add(
-          switch (state) {
-            ScopeProgress(:final progress) => '$progress',
-            ScopeReady(:final dependencies) => '$dependencies',
-          },
-        );
-      }
-
-      final subscription = dependencies //
-          .init(null)
-          .handleError(errorToBuf)
-          .listen(stateToBuf, onDone: completer.complete);
+      unawaited(run());
 
       if (cancel != null) {
-        Future.delayed(cancel, () async {
-          await subscription.cancel();
-          completer.complete();
-        });
+        Future.delayed(cancel, handle.cancel);
       }
 
       await completer.future;
@@ -1641,20 +1634,16 @@ void main() {
 
       myFakeAsync((async) {
         final completer = Completer<void>();
-        final subscription = dependencies.init(null).listen(
-          (state) {
-            switch (state) {
-              case ScopeProgress(:final progress?):
-                events.add(progress);
-              case ScopeProgress():
-              case ScopeReady():
-                break;
-            }
-          },
-          onDone: completer.complete,
+        final handle = ScopeInitHandle(
+          onProgress: (step) =>
+              events.add(step as ScopeAutoDependenciesProgress),
+        );
+        unawaited(
+          dependencies
+              .init(null, handle.context)
+              .whenComplete(completer.complete),
         );
         async.waitFuture(completer.future);
-        unawaited(subscription.cancel());
       });
 
       expect(
@@ -2100,7 +2089,7 @@ void main() {
         final dependencies = HangingDisposeDependencies();
 
         await expectLater(
-          dependencies.init(null).drain<void>(),
+          dependencies.init(null, ScopeInitHandle().context),
           throwsA(
             isA<Exception>().having(
               (error) => error.toString(),
@@ -2137,11 +2126,15 @@ void main() {
 
         var settled = false;
         unawaited(
-          dependencies
-              .init(null)
-              .drain<void>()
-              .catchError((Object _) {})
-              .whenComplete(() => settled = true),
+          () async {
+            try {
+              await dependencies.init(null, ScopeInitHandle().context);
+            } on Object {
+              // The failure is what this test is about; where it goes is not.
+            } finally {
+              settled = true;
+            }
+          }(),
         );
 
         await Future<void>.delayed(const Duration(milliseconds: 100));
@@ -2149,7 +2142,7 @@ void main() {
         expect(
           settled,
           isFalse,
-          reason: 'with no limit the failure stays inside the generator for as '
+          reason: 'with no limit the failure stays inside the body for as '
               'long as the disposer holds it',
         );
 
@@ -2180,7 +2173,7 @@ void main() {
 
       final log = <String>[];
       final dependencies = TwoFailingUnmountsDependencies(log);
-      await dependencies.init(null).drain<void>();
+      await dependencies.init(null, ScopeInitHandle().context);
 
       expect(
         dependencies.onUnmount,
@@ -2233,7 +2226,7 @@ void main() {
           }
         });
 
-        final first = dependencies.init(null).drain<void>();
+        final first = dependencies.init(null, ScopeInitHandle().context);
         // One turn, so the initializer runs as far as its own `await`.
         await Future<void>.delayed(Duration.zero);
 
@@ -2241,10 +2234,13 @@ void main() {
         // second run parks on the very same gate, so awaiting it here would
         // hang the run rather than fail this test.
         Object? refused;
-        final second = dependencies
-            .init(null)
-            .drain<void>()
-            .catchError((Object error) => refused = error);
+        final second = () async {
+          try {
+            await dependencies.init(null, ScopeInitHandle().context);
+          } on Object catch (error) {
+            refused = error;
+          }
+        }();
 
         gate.complete();
         await first;
@@ -2299,7 +2295,7 @@ void main() {
           }
         });
 
-        final first = dependencies.init(null).drain<void>();
+        final first = dependencies.init(null, ScopeInitHandle().context);
         // One turn, so the initializer runs as far as its own `await`. Its
         // handle is empty at this point: there is nothing to give back yet.
         await Future<void>.delayed(Duration.zero);
@@ -2366,8 +2362,8 @@ void main() {
           }
         });
 
-        final first = kept.init(null).drain<void>();
-        final second = released.init(null).drain<void>();
+        final first = kept.init(null, ScopeInitHandle().context);
+        final second = released.init(null, ScopeInitHandle().context);
         await Future<void>.delayed(Duration.zero);
 
         Object? refusedKept;
@@ -2428,7 +2424,7 @@ void main() {
           }
         });
 
-        final first = dependencies.init(null).drain<void>();
+        final first = dependencies.init(null, ScopeInitHandle().context);
         // One turn, so the initializer runs as far as its own `await`.
         await Future<void>.delayed(Duration.zero);
 
@@ -2621,7 +2617,7 @@ void main() {
         });
 
         final dependencies = SlowDisposeDependencies(gate, log);
-        await dependencies.init(null).drain<void>();
+        await dependencies.init(null, ScopeInitHandle().context);
 
         final first = dependencies.dispose();
         await Future<void>.delayed(Duration.zero);
@@ -2653,7 +2649,7 @@ void main() {
       final log = <String>[];
       final dependencies = TwoDisposersDependencies(log);
 
-      await dependencies.init(null).drain<void>();
+      await dependencies.init(null, ScopeInitHandle().context);
 
       // Stopped after the first path arrives, which is one child in.
       final subscription = dependencies.root.dispose().listen(null);
@@ -2667,7 +2663,7 @@ void main() {
             'holding what it took',
       );
       await expectLater(
-        dependencies.init(null).drain<void>(),
+        dependencies.init(null, ScopeInitHandle().context),
         throwsA(isA<StateError>()),
         reason: 'so a second init() is refused rather than quietly replacing '
             'a tree nobody can reach any more',
@@ -2685,7 +2681,7 @@ void main() {
       final log = <String>[];
       final dependencies = UnmountOnlyDependencies(log);
 
-      await dependencies.init(null).drain<void>();
+      await dependencies.init(null, ScopeInitHandle().context);
 
       expect(
         dependencies.root.disposalRequired,
@@ -2693,7 +2689,7 @@ void main() {
         reason: 'a hook that has to run is something to hold on to',
       );
       await expectLater(
-        dependencies.init(null).drain<void>(),
+        dependencies.init(null, ScopeInitHandle().context),
         throwsA(isA<StateError>()),
       );
 
@@ -2716,7 +2712,7 @@ void main() {
       final dependencies = WrongTypeArgumentDependencies(built);
 
       await expectLater(
-        dependencies.init(null).drain<void>(),
+        dependencies.init(null, ScopeInitHandle().context),
         throwsA(
           isA<StateError>().having(
             (error) => error.message,

@@ -47,7 +47,7 @@ final class _Deps extends ScopeAutoDependencies<_Deps, void> {
 
 Future<void> _init(_Deps deps) async {
   try {
-    await deps.init(null).drain<void>();
+    await deps.init(null, ScopeInitHandle().context);
   } on Object {
     // The failure is the fixture; what happens to the teardown is the test.
   }
@@ -184,5 +184,5 @@ final class _UnmountOnly extends ScopeAutoDependencies<_UnmountOnly, void> {
 }
 
 Future<void> _init2(_UnmountOnly deps) async {
-  await deps.init(null).drain<void>();
+  await deps.init(null, ScopeInitHandle().context);
 }

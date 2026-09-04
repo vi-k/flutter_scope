@@ -127,13 +127,13 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
   /// Called when the wait for the child scopes expires.
   void onWaitForChildrenTimeout() {}
 
-  /// Where the body is turned into the stream the engine consumes, and the
-  /// turning is the same for every family. The hook to write is
-  /// [initScopeAsync].
+  /// Where the body is turned into the stream the engine consumes.
   ///
-  /// Not sealed yet: the families below still override this one with a stream
-  /// of their own while they are being moved over, and the `@nonVirtual` that
-  /// belongs here goes on once the last of them has (task 5 of the plan).
+  /// The hook to write is [initScopeAsync]. This one is overridden by the
+  /// families that produce a value — `AsyncDataScope` and `Scope` build the
+  /// same stream and catch the value on its way past — and by anything that
+  /// drives the engine with a stream of its own, which is what keeps the
+  /// engine's own diagnostics reachable.
   Stream<AsyncScopeInitState> initScope() =>
       _runScopeInit<AsyncScopeInitState, void>(
         body: initScopeAsync,
