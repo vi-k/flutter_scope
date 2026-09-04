@@ -1,3 +1,34 @@
+## 0.14.0
+
+* **Breaking:** an `AsyncScope` initialization is a `Future`, not a `Stream`.
+  `initScope` now takes a `ScopeInitContext` beside the `BuildContext` and
+  returns when the scope is ready: `ctx.progress(x)` reports a step where
+  `yield AsyncScopeProgress(x)` used to, and returning is what
+  `yield AsyncScopeReady()` used to say. The generator is gone from the form,
+  and with it the two things it cost: a `yield` works in the body and nowhere
+  else, so reporting a step from a helper meant making that helper a `Stream`
+  too — a call on the context can be made from anywhere; and a stream that
+  ended without `AsyncScopeReady` was a run-time failure the compiler could
+  not see, where a body that has to return cannot forget to.
+* **Breaking:** a cancelled initialization is thrown into. Cancelling a
+  generator raised nothing — the body resumed, ran to its next `yield` and
+  stopped there, so a `catch` around the step never ran and only a `finally`
+  could give back what had been taken. Now every member of `ScopeInitContext`
+  throws `ScopeInitCancelled` once the scope has given up, so a body that
+  waits through `ctx.wait(...)` unwinds through its own `catch`. A body that
+  waits on a bare `await` is still told nothing — Dart cannot interrupt
+  somebody else's wait — and for that case there is the next entry.
+* **New:** what a cancelled initialization produced too late is released
+  rather than lost. A body that never asks the context anything runs to its
+  end for a scope that is already gone; inside a generator whatever it took
+  stayed with nobody, because the body was parked and nothing would resume it.
+  It now goes to `disposeScope`. The one path where it cannot is a teardown
+  that has already finished — an `initCancellationTimeout` it gave up on —
+  because the scope no longer has a widget to read the hook from.
+* `AsyncScopeProgress` and `AsyncScopeReady` stay: they are states of the
+  model, read through `state` and matched in `buildOnState`, and only their
+  second job — being the language an initialization was written in — is over.
+
 ## 0.13.0
 
 * **Breaking:** `ScopeState.disposeStateAsync` and `LiteScopeState.disposeStateAsync`

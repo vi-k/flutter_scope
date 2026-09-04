@@ -36,7 +36,7 @@ void main() {
           textDirection: TextDirection.ltr,
           child: AsyncScope(
             pauseAfterInitialization: const Duration(seconds: 1),
-            initScope: (context) => Stream.value(AsyncScopeReady()),
+            initScope: (context, ctx) async {},
             disposeScope: () {},
             progressBuilder: (context, progress) => const Text('init'),
             errorBuilder: (context, error, stackTrace, progress) =>
@@ -75,7 +75,7 @@ void main() {
             child: present
                 ? AsyncScope(
                     pauseAfterInitialization: const Duration(seconds: 5),
-                    initScope: (context) => Stream.value(AsyncScopeReady()),
+                    initScope: (context, ctx) async {},
                     disposeScope: () {},
                     progressBuilder: (context, progress) => const Text('init'),
                     errorBuilder: (context, error, stackTrace, progress) =>
@@ -121,7 +121,7 @@ void main() {
                       waitForChildrenTimeout: const Duration(days: 1),
                       onWaitForChildrenTimeout: () {},
                       pauseAfterInitialization: const Duration(milliseconds: 1),
-                      initScope: (context) => Stream.value(AsyncScopeReady()),
+                      initScope: (context, ctx) async {},
                       disposeScope: () => hang.future,
                       progressBuilder: (context, progress) =>
                           const Text('init'),

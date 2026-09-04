@@ -136,13 +136,43 @@ void main() {
     });
   });
 
-  // A hand-written `initScope` gives back what it took by guarding its own
-  // steps, and the topics show how. What shape that guard has to be is the
-  // whole of it: a cancellation raises nothing, so the two shapes that look
-  // equivalent are not.
+  // A hand-written `initScope` gives back what it took, and there are two
+  // ways it happens. A body that waits through the context is thrown into and
+  // gives the thing back itself; a body that waits on a bare `await` is told
+  // nothing, runs to its end, and what it produced is released by the scope.
+  // Which of the two it is decides what the guard has to look like.
   group('an initialization cancelled after it took something', () {
-    testWidgets('does not reach a catch, which raising is what would',
+    testWidgets('is thrown into when it waits through the context',
         (tester) async {
+      final log = <String>[];
+      final gate = Completer<void>();
+
+      await tester.pumpWidget(
+        _wrap(
+          _Guarded.withCatch(log: log, gate: gate, waitsThroughContext: true),
+        ),
+      );
+      await settle(tester, until: () => log.contains('took'));
+
+      await tester.pumpWidget(_wrap(const SizedBox.shrink()));
+      await settle(tester, until: () => log.contains('released'));
+
+      expect(
+        log,
+        ['took', 'released'],
+        reason: 'the cancellation arrives as a throw from `ctx.wait`, so the '
+            'catch runs and the body gives back what it had taken',
+      );
+      expect(
+        gate.isCompleted,
+        isFalse,
+        reason: 'the wait ended without the step it was waiting for',
+      );
+    });
+
+    testWidgets(
+        'is not thrown into when it waits on a bare await, and the '
+        'scope releases what it produced instead', (tester) async {
       final log = <String>[];
       final gate = Completer<void>();
 
@@ -151,15 +181,15 @@ void main() {
 
       await tester.pumpWidget(_wrap(const SizedBox.shrink()));
       gate.complete();
-      await settle(tester, until: () => log.length > 1);
+      await settle(tester, until: () => log.contains('disposeScope'));
 
       expect(
         log,
-        ['took'],
-        reason: 'cancelling an `async*` resumes its body and ends it at the '
-            'next yield -- nothing is thrown, so the catch never runs; and '
-            'the scope never became ready, so `disposeScope` does not run '
-            'either. What the initialization took is held by nobody',
+        ['took', 'disposeScope'],
+        reason: 'a body that asks the context nothing cannot be told '
+            'anything, so its catch never runs -- and the value it finished '
+            'producing for a scope that had gone is handed to `disposeScope` '
+            'rather than left with nobody, which is where a generator left it',
       );
     });
 
@@ -168,20 +198,22 @@ void main() {
       final log = <String>[];
       final gate = Completer<void>();
 
-      await tester
-          .pumpWidget(_wrap(_Guarded.withFinally(log: log, gate: gate)));
+      await tester.pumpWidget(
+        _wrap(
+          _Guarded.withFinally(log: log, gate: gate, waitsThroughContext: true),
+        ),
+      );
       await settle(tester, until: () => log.contains('took'));
 
       await tester.pumpWidget(_wrap(const SizedBox.shrink()));
-      gate.complete();
       await settle(tester, until: () => log.contains('released'));
 
       expect(
         log,
         ['took', 'released'],
-        reason: 'the flag is set after the yield, so a body ended at that '
-            'yield leaves it false -- which is exactly the case where what '
-            'was taken is still the initialization`s to give back',
+        reason: 'the flag is set after the step, so a body thrown into at '
+            'that step leaves it false -- which is exactly the case where '
+            'what was taken is still the initialization`s to give back',
       );
     });
 
@@ -514,12 +546,23 @@ final class _Guarded extends AsyncScopeBase<_Guarded> {
   /// Whether the guard is a `finally` rather than a `catch`.
   final bool guardIsFinally;
 
+  /// Whether the body waits through the context rather than on a bare
+  /// `await`.
+  ///
+  /// This is what decides whether the cancellation reaches the body at all:
+  /// it arrives as a throw from [ScopeInitContext], and a body that asks the
+  /// context nothing is told nothing.
+  final bool waitsThroughContext;
+
   /// Holds the ready branch back, so the scope can be caught having registered
   /// the initialization while the screen still shows the loading one.
   final Duration? pause;
 
-  const _Guarded.withCatch({required this.log, required this.gate})
-      : guardIsFinally = false,
+  const _Guarded.withCatch({
+    required this.log,
+    required this.gate,
+    this.waitsThroughContext = false,
+  })  : guardIsFinally = false,
         pause = null,
         super(child: const SizedBox.shrink());
 
@@ -527,26 +570,30 @@ final class _Guarded extends AsyncScopeBase<_Guarded> {
     required this.log,
     required this.gate,
     this.pause,
+    this.waitsThroughContext = false,
   })  : guardIsFinally = true,
         super(child: const SizedBox.shrink());
 
   @override
   Duration? get pauseAfterInitialization => pause;
 
+  /// The step that follows the acquisition, waited for in one of the two ways
+  /// a body can wait.
+  Future<void> _step(ScopeInitContext ctx) =>
+      waitsThroughContext ? ctx.wait(() => gate.future) : gate.future;
+
   @override
-  Stream<AsyncScopeInitState> initScope(BuildContext context) async* {
+  Future<void> initScope(BuildContext context, ScopeInitContext ctx) async {
     log.add('took');
 
     if (!guardIsFinally) {
       try {
-        await gate.future;
+        await _step(ctx);
         // ignore: avoid_catching_errors
       } on Object {
         log.add('released');
         rethrow;
       }
-
-      yield AsyncScopeReady();
 
       return;
     }
@@ -554,9 +601,7 @@ final class _Guarded extends AsyncScopeBase<_Guarded> {
     var handedOver = false;
 
     try {
-      await gate.future;
-
-      yield AsyncScopeReady();
+      await _step(ctx);
       handedOver = true;
       log.add('handed over');
     } finally {

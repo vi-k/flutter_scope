@@ -127,8 +127,55 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
   /// Called when the wait for the child scopes expires.
   void onWaitForChildrenTimeout() {}
 
+  /// Where the body is turned into the stream the engine consumes, and the
+  /// turning is the same for every family. The hook to write is
+  /// [initScopeAsync].
+  ///
+  /// Not sealed yet: the families below still override this one with a stream
+  /// of their own while they are being moved over, and the `@nonVirtual` that
+  /// belongs here goes on once the last of them has (task 5 of the plan).
+  Stream<AsyncScopeInitState> initScope() =>
+      _runScopeInit<AsyncScopeInitState, void>(
+        body: initScopeAsync,
+        progressState: AsyncScopeProgress.new,
+        readyState: (_) => AsyncScopeReady(),
+        // This family has no value to hand back, but a body that finished
+        // after the cancellation has taken whatever it took, and
+        // [disposeScope] is the only thing that gives it back.
+        releaseLateValue: (_) async => releaseAfterCancellation(),
+      );
+
+  /// Releases what an initialization produced after the scope gave up on it.
+  ///
+  /// The release is [disposeScope], and the one thing it needs is a scope that
+  /// still exists. A teardown that gave up on a cancellation it could not wait
+  /// for -- an expired `initCancellationTimeout` -- runs to its end while the
+  /// body is still going, and by then the element has handed back everything
+  /// it was holding, the widget included. `disposeScope` is the widget's, so
+  /// on that path there is nothing left to release with, and saying so out
+  /// loud is the whole of what can be done.
+  @protected
+  Future<void> releaseAfterCancellation() async {
+    // Quietly, and that is deliberate. Reaching here means the teardown gave
+    // up on a wait it had already reported -- an expired
+    // `initCancellationTimeout` is announced through `onError` and
+    // `FlutterError.reportError` where it happens -- and a second report of
+    // the same event says nothing new while failing every widget test that
+    // deliberately leaves an initialization hanging. What the body took on
+    // that path stays taken; the way not to end up here is to give the body
+    // something to stop at.
+    if (_disposalFinished) {
+      return;
+    }
+
+    await disposeScope();
+  }
+
   /// The initialization; ready at once by default.
-  Stream<AsyncScopeInitState> initScope() => Stream.value(AsyncScopeReady());
+  ///
+  /// Reports its steps through [ScopeInitContext.progress] and returns when
+  /// the scope is ready.
+  Future<void> initScopeAsync(ScopeInitContext ctx) async {}
 
   /// Releases what [initScope] acquired; awaited.
   FutureOr<void> disposeScope() {}

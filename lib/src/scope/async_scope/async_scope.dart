@@ -9,7 +9,8 @@ final class AsyncScope extends AsyncScopeBase<AsyncScope> {
   final void Function(BuildContext context)? _onMount;
 
   /// What [initScope] was given.
-  final Stream<AsyncScopeInitState> Function(BuildContext context) _initScope;
+  final Future<void> Function(BuildContext context, ScopeInitContext ctx)
+      _initScope;
 
   /// What [onUnmount] was given, if anything.
   final void Function()? _onUnmount;
@@ -59,7 +60,7 @@ final class AsyncScope extends AsyncScopeBase<AsyncScope> {
     super.onWaitForChildrenTimeout,
     super.pauseAfterInitialization,
     void Function(BuildContext context)? onMount,
-    required Stream<AsyncScopeInitState> Function(BuildContext context)
+    required Future<void> Function(BuildContext context, ScopeInitContext ctx)
         initScope,
     void Function()? onUnmount,
     required FutureOr<void> Function() disposeScope,
@@ -76,8 +77,8 @@ final class AsyncScope extends AsyncScopeBase<AsyncScope> {
   void onMount(BuildContext context) => _onMount?.call(context);
 
   @override
-  Stream<AsyncScopeInitState> initScope(BuildContext context) =>
-      _initScope(context);
+  Future<void> initScope(BuildContext context, ScopeInitContext ctx) =>
+      _initScope(context, ctx);
 
   @override
   void onUnmount() => _onUnmount?.call();

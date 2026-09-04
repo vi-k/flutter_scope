@@ -373,8 +373,8 @@ void main() {
           Directionality(
             textDirection: TextDirection.ltr,
             child: AsyncScope(
-              initScope: (context) async* {
-                yield AsyncScopeProgress('connecting');
+              initScope: (context, ctx) async {
+                ctx.progress('connecting');
                 await gate.future;
 
                 throw StateError('init failed');
@@ -422,8 +422,8 @@ void main() {
           Directionality(
             textDirection: TextDirection.ltr,
             child: AsyncScope(
-              initScope: (context) async* {
-                yield AsyncScopeProgress('step');
+              initScope: (context, ctx) async {
+                ctx.progress('step');
                 throw StateError('init failed');
               },
               disposeScope: () {},
@@ -647,7 +647,7 @@ void main() {
                 // the tree rather than in the work.
                 child: AsyncScope(
                   scopeKey: 'k',
-                  initScope: (context) => Stream.value(AsyncScopeReady()),
+                  initScope: (context, ctx) async {},
                   disposeScope: () {},
                   progressBuilder: (context, progress) => const Text('init'),
                   errorBuilder: (context, error, stackTrace, progress) =>
@@ -681,54 +681,6 @@ void main() {
         expect(
           errors.single.toString(),
           contains('No `AsyncScopeCoordinator`'),
-        );
-
-        await tester.pumpWidget(
-          const Directionality(
-            textDirection: TextDirection.ltr,
-            child: SizedBox.shrink(),
-          ),
-        );
-        await settle(tester, until: () => false);
-      },
-    );
-
-    // A stream that ends without ever yielding `AsyncScopeReady` is a mistake
-    // in the initialization, and it used to be a silent one: the model stayed
-    // `AsyncScopeWaiting`, the scope went on showing its loading branch for
-    // good, and the only trace of it was a diagnostic line nobody had turned
-    // on.
-    testWidgets(
-      'an initialization that ends without a ready state shows the error '
-      'branch',
-      (tester) async {
-        await tester.pumpWidget(
-          Directionality(
-            textDirection: TextDirection.ltr,
-            child: AsyncScope(
-              initScope: (context) => const Stream<AsyncScopeInitState>.empty(),
-              disposeScope: () {},
-              progressBuilder: (context, progress) => const Text('init'),
-              errorBuilder: (context, error, stackTrace, progress) =>
-                  Text('error: $error'),
-              builder: (context) => const Text('ready'),
-            ),
-          ),
-        );
-        await tester.pumpAndSettle();
-
-        expect(
-          find.textContaining('error: '),
-          findsOneWidget,
-          reason: 'an initialization that will never finish is a failed one, '
-              'and the state table says a failure before the ready state '
-              'builds `buildOnError`',
-        );
-        expect(
-          find.text('init'),
-          findsNothing,
-          reason: 'the loading branch is not what a scope that will never '
-              'load should be left showing',
         );
 
         await tester.pumpWidget(

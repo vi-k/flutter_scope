@@ -480,8 +480,8 @@ void main() {
         Directionality(
           textDirection: TextDirection.ltr,
           child: AsyncScope(
-            initScope: (context) async* {
-              yield AsyncScopeProgress('step');
+            initScope: (context, ctx) async {
+              ctx.progress('step');
               throw StateError('init failed');
             },
             disposeScope: () {},
@@ -516,7 +516,7 @@ void main() {
             textDirection: TextDirection.ltr,
             child: present
                 ? AsyncScope(
-                    initScope: (context) => Stream.value(AsyncScopeReady()),
+                    initScope: (context, ctx) async {},
                     disposeScope: () => throw StateError('dispose failed'),
                     progressBuilder: (context, progress) => const Text('init'),
                     errorBuilder: (context, error, stackTrace, progress) =>
@@ -643,14 +643,14 @@ void main() {
                     waitForChildrenTimeout: const Duration(milliseconds: 50),
                     onWaitForChildrenTimeout: () =>
                         throw StateError('onWaitForChildrenTimeout failed'),
-                    initScope: (context) => Stream.value(AsyncScopeReady()),
+                    initScope: (context, ctx) async {},
                     disposeScope: () {},
                     progressBuilder: (context, progress) => const Text('init'),
                     errorBuilder: (context, error, stackTrace, progress) =>
                         Text('$error'),
                     builder: (context) => AsyncScope(
                       tag: 'child',
-                      initScope: (context) => Stream.value(AsyncScopeReady()),
+                      initScope: (context, ctx) async {},
                       disposeScope: () => childGate.future,
                       progressBuilder: (context, progress) =>
                           const Text('init'),
@@ -749,9 +749,8 @@ void main() {
                     initCancellationTimeout: const Duration(milliseconds: 50),
                     onInitCancellationTimeout: () =>
                         throw StateError('onInitCancellationTimeout failed'),
-                    initScope: (context) async* {
+                    initScope: (context, ctx) async {
                       await hang.future;
-                      yield AsyncScopeReady();
                     },
                     disposeScope: () {},
                     progressBuilder: (context, progress) => const Text('init'),
@@ -832,7 +831,7 @@ void main() {
                     key: const ValueKey('holder'),
                     tag: 'holder',
                     scopeKey: 'shared',
-                    initScope: (context) => Stream.value(AsyncScopeReady()),
+                    initScope: (context, ctx) async {},
                     disposeScope: () => holderGate.future,
                     progressBuilder: (context, progress) => const Text('init'),
                     errorBuilder: (context, error, stackTrace, progress) =>
@@ -845,7 +844,7 @@ void main() {
                       tag: 'successor',
                       scopeKey: 'shared',
                       scopeKeyTimeout: const Duration(days: 1),
-                      initScope: (context) => Stream.value(AsyncScopeReady()),
+                      initScope: (context, ctx) async {},
                       disposeScope: () {},
                       progressBuilder: (context, progress) =>
                           const Text('init'),
@@ -892,7 +891,7 @@ void main() {
             child: present
                 ? AsyncScope(
                     disposeScopeTimeout: const Duration(milliseconds: 50),
-                    initScope: (context) => Stream.value(AsyncScopeReady()),
+                    initScope: (context, ctx) async {},
                     disposeScope: () => hang.future,
                     progressBuilder: (context, progress) => const Text(
                       'init',
@@ -1088,7 +1087,7 @@ void main() {
         Directionality(
           textDirection: TextDirection.ltr,
           child: AsyncScope(
-            initScope: (context) => Stream.value(AsyncScopeReady()),
+            initScope: (context, ctx) async {},
             disposeScope: () {},
             progressBuilder: (context, progress) => const Text('init'),
             errorBuilder: (context, error, stackTrace, progress) =>
@@ -1287,11 +1286,10 @@ Widget _keyed({
       tag: tag,
       scopeKey: 'shared',
       scopeKeyTimeout: scopeKeyTimeout,
-      initScope: (context) async* {
+      initScope: (context, ctx) async {
         if (gate != null) {
           await gate.future;
         }
-        yield AsyncScopeReady();
       },
       disposeScope: () async {
         if (disposeGate != null) {
@@ -1307,7 +1305,7 @@ Widget _keyed({
 /// A child scope whose teardown is held until [gate] is completed.
 Widget _held(Completer<void> gate) => AsyncScope(
       tag: 'child',
-      initScope: (context) => Stream.value(AsyncScopeReady()),
+      initScope: (context, ctx) async {},
       disposeScope: () => gate.future,
       progressBuilder: (context, progress) => const SizedBox.shrink(),
       builder: (context) => const SizedBox.shrink(),
@@ -1323,9 +1321,7 @@ Widget _parent({
     AsyncScope(
       tag: 'parent',
       waitForChildrenTimeout: waitForChildrenTimeout,
-      initScope: (context) async* {
-        yield AsyncScopeReady();
-      },
+      initScope: (context, ctx) async {},
       disposeScope: () {},
       progressBuilder: (context, progress) => const SizedBox.shrink(),
       builder: (context) => child,

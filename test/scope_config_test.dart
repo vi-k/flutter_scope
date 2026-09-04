@@ -32,7 +32,7 @@ void main() {
                   if (first)
                     AsyncScope(
                       scopeKey: 'shared',
-                      initScope: (context) => Stream.value(AsyncScopeReady()),
+                      initScope: (context, ctx) async {},
                       disposeScope: () async {
                         await slow.future;
                         log.add('disposed');
@@ -47,7 +47,7 @@ void main() {
                     AsyncScope(
                       scopeKey: 'shared',
                       scopeKeyTimeout: const Duration(days: 1),
-                      initScope: (context) => Stream.value(AsyncScopeReady()),
+                      initScope: (context, ctx) async {},
                       disposeScope: () {},
                       progressBuilder: (context, progress) =>
                           const SizedBox.shrink(),

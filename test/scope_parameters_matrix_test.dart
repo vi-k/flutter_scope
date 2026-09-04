@@ -443,11 +443,10 @@ Widget _asyncScope(_Case c) => AsyncScope(
       waitForChildrenTimeout: c.waitForChildrenTimeout,
       onWaitForChildrenTimeout: c.onWaitForChildrenTimeout,
       pauseAfterInitialization: c.pauseAfterInitialization,
-      initScope: (context) async* {
+      initScope: (context, ctx) async {
         if (c.initGate case final gate?) {
           await gate.future;
         }
-        yield AsyncScopeReady();
       },
       disposeScope: () async {
         if (c.disposeGate case final gate?) {

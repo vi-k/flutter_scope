@@ -1160,11 +1160,10 @@ final class _Async extends AsyncScopeBase<_Async> {
   }) : super(child: child ?? const SizedBox.shrink());
 
   @override
-  Stream<AsyncScopeInitState> initScope(BuildContext context) async* {
+  Future<void> initScope(BuildContext context, ScopeInitContext ctx) async {
     if (initGate case final gate?) {
       await gate.future;
     }
-    yield AsyncScopeReady();
   }
 
   @override

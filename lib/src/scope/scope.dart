@@ -30,6 +30,7 @@ part 'async_scope/async_scope_context.dart';
 part 'async_scope/async_scope_core.dart';
 part 'async_scope/async_scope_model.dart';
 part 'async_scope/async_scope_state.dart';
+part 'async_scope/scope_init_context.dart';
 part 'async_scope/async_scope_coordinator.dart';
 part 'async_data_scope/async_data_scope.dart';
 part 'async_data_scope/async_data_scope_base.dart';

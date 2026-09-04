@@ -20,10 +20,8 @@ void main() {
           textDirection: TextDirection.ltr,
           child: AsyncScope(
             onMount: (context) => order.add('onMount'),
-            initScope: (context) {
+            initScope: (context, ctx) async {
               order.add('init');
-
-              return Stream.value(AsyncScopeReady());
             },
             disposeScope: () {},
             progressBuilder: (context, progress) => const SizedBox.shrink(),
@@ -79,7 +77,7 @@ void main() {
             value: 'above',
             child: AsyncScope(
               onMount: (context) => seen = _Ancestor.of(context),
-              initScope: (context) => Stream.value(AsyncScopeReady()),
+              initScope: (context, ctx) async {},
               disposeScope: () {},
               progressBuilder: (context, progress) => const SizedBox.shrink(),
               errorBuilder: (context, error, stackTrace, progress) =>
@@ -241,7 +239,7 @@ void main() {
         Directionality(
           textDirection: TextDirection.ltr,
           child: AsyncScope(
-            initScope: (context) => Stream.value(AsyncScopeReady()),
+            initScope: (context, ctx) async {},
             onUnmount: () => _order.add('onUnmount'),
             disposeScope: () => _order.add('disposeScope'),
             progressBuilder: (context, progress) => const SizedBox.shrink(),

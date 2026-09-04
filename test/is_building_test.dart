@@ -141,9 +141,7 @@ void main() {
 
       await tester.pumpWidget(
         AsyncScope(
-          initScope: (context) async* {
-            yield AsyncScopeReady();
-          },
+          initScope: (context, ctx) async {},
           disposeScope: () {},
           progressBuilder: (context, progress) => const SizedBox.shrink(),
           errorBuilder: (context, error, stackTrace, progress) =>

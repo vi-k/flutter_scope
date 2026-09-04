@@ -48,17 +48,16 @@ final class ConnectionScope extends AsyncScopeBase<ConnectionScope> {
       select(context, (scope) => scope.isInitialized);
 
   @override
-  Stream<AsyncScopeInitState> initScope(BuildContext context) async* {
-    yield AsyncScopeProgress('connecting');
-
-    yield AsyncScopeReady();
+  Future<void> initScope(BuildContext context, ScopeInitContext ctx) async {
+    ctx.progress('connecting');
   }
 
   @override
   Future<void> disposeScope() async {}
 
-  /// Whatever [initScope] reported — here the caption it yields, and
-  /// `null` until it yields anything. This family keeps the progress
+  /// Whatever [initScope] reported — here the caption it sends
+  /// through `ctx.progress`, and `null` until it sends anything. This
+  /// family keeps the progress
   /// untyped on purpose: it is a caption rather than something the scope
   /// carries, and a `ProgressIterator` puts its `Progress` here when the
   /// steps are counted.

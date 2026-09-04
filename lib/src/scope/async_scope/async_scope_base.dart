@@ -98,9 +98,15 @@ abstract base class AsyncScopeBase<W extends AsyncScopeBase<W>>
 
   /// The initialization.
   ///
-  /// Yields [AsyncScopeProgress] any number of times and [AsyncScopeReady]
-  /// once.
-  Stream<AsyncScopeInitState> initScope(BuildContext context);
+  /// Reports its steps through [ScopeInitContext.progress] as many times as
+  /// it likes, and returns when the scope is ready. Returning is how it says
+  /// so; there is no other way, and no way to say it without finishing.
+  ///
+  /// Cancellation is cooperative: the body learns that the scope has given up
+  /// the next time it touches [ctx]. After a bare `await`, call
+  /// [ScopeInitContext.check]; to wait for something and give up on
+  /// cancellation at once, wrap it in [ScopeInitContext.wait].
+  Future<void> initScope(BuildContext context, ScopeInitContext ctx);
 
   /// Called synchronously when the scope leaves the tree.
   void onUnmount() {}
@@ -222,7 +228,8 @@ final class _AsyncScopeElement<W extends AsyncScopeBase<W>>
   }
 
   @override
-  Stream<AsyncScopeInitState> initScope() => widget.initScope(this);
+  Future<void> initScopeAsync(ScopeInitContext ctx) =>
+      widget.initScope(this, ctx);
 
   @override
   void onUnmount() {

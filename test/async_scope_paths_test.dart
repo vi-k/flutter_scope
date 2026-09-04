@@ -25,7 +25,7 @@ void main() {
                     AsyncScope(
                       key: const ValueKey('holder'),
                       scopeKey: 'k',
-                      initScope: (context) => Stream.value(AsyncScopeReady()),
+                      initScope: (context, ctx) async {},
                       disposeScope: () => gate.future,
                       progressBuilder: (context, progress) =>
                           const Text('holder: init'),
@@ -37,7 +37,7 @@ void main() {
                     AsyncScope(
                       key: const ValueKey('successor'),
                       scopeKey: 'k',
-                      initScope: (context) => Stream.value(AsyncScopeReady()),
+                      initScope: (context, ctx) async {},
                       disposeScope: () {},
                       waitingBuilder: (context) => const Text('waiting'),
                       progressBuilder: (context, progress) =>
@@ -89,7 +89,7 @@ void main() {
                 AsyncScope(
                   key: const ValueKey('holder'),
                   scopeKey: 'k',
-                  initScope: (context) => Stream.value(AsyncScopeReady()),
+                  initScope: (context, ctx) async {},
                   disposeScope: () => gate.future,
                   progressBuilder: (context, progress) =>
                       const Text('holder: init'),
@@ -113,7 +113,7 @@ void main() {
                 AsyncScope(
                   key: const ValueKey('successor'),
                   scopeKey: 'k',
-                  initScope: (context) => Stream.value(AsyncScopeReady()),
+                  initScope: (context, ctx) async {},
                   disposeScope: () {},
                   // No waitingBuilder: `buildOnWaiting()` answers null and the
                   // initializing branch is built with a null progress instead.

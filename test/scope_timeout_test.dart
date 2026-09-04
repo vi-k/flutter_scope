@@ -340,11 +340,10 @@ Widget _scope({
       disposeScopeTimeout: disposeScopeTimeout,
       initCancellationTimeout: initCancellationTimeout,
       pauseAfterInitialization: pauseAfterInitialization,
-      initScope: (context) async* {
+      initScope: (context, ctx) async {
         if (initGate != null) {
           await initGate.future;
         }
-        yield AsyncScopeReady();
       },
       disposeScope: () async {
         if (disposeGate != null) {
@@ -364,7 +363,7 @@ Widget _parent({
     AsyncScope(
       tag: 'parent',
       waitForChildrenTimeout: waitForChildrenTimeout,
-      initScope: (context) => Stream.value(AsyncScopeReady()),
+      initScope: (context, ctx) async {},
       disposeScope: () {},
       progressBuilder: (context, progress) => const SizedBox.shrink(),
       builder: (context) => child,
