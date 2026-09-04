@@ -454,10 +454,9 @@ final class _Lite extends LiteScope<_Lite, _LiteState> {
   }) : super(child: const SizedBox.shrink());
 
   @override
-  Stream<AsyncScopeInitState> initScope() async* {
+  Future<void> initScope(ScopeInitContext ctx) async {
     log.add('init');
-    yield AsyncScopeProgress('half');
-    yield AsyncScopeReady();
+    ctx.progress('half');
   }
 
   @override
@@ -528,13 +527,12 @@ final class _HalfWritten extends LiteScope<_HalfWritten, _HalfWrittenState> {
       : super(child: const SizedBox.shrink());
 
   @override
-  Stream<AsyncScopeInitState> initScope() async* {
+  Future<void> initScope(ScopeInitContext ctx) async {
     if (failing) {
       throw StateError('the pre-initialization fell over');
     }
 
-    yield AsyncScopeProgress('half');
-    yield AsyncScopeReady();
+    ctx.progress('half');
   }
 
   @override

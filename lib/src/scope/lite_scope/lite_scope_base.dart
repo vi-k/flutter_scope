@@ -96,7 +96,7 @@ abstract base class LiteScope<W extends LiteScope<W, S>,
   /// Override this method if you need to perform pre-initialization before the
   /// state is created. In that case, also override the [buildOnProgress]
   /// and [buildOnError] methods.
-  Stream<AsyncScopeInitState> initScope() => Stream.value(AsyncScopeReady());
+  Future<void> initScope(ScopeInitContext ctx) async {}
 
   /// Waiting builder.
   ///
@@ -291,7 +291,7 @@ final class _LiteScopeElement<W extends LiteScope<W, S>,
   Duration? get pauseAfterInitialization => widget.pauseAfterInitialization;
 
   @override
-  Stream<AsyncScopeInitState> initScope() => widget.initScope();
+  Future<void> initScopeAsync(ScopeInitContext ctx) => widget.initScope(ctx);
 
   @override
   Widget? buildOnWaiting() => widget.buildOnWaiting(this);

@@ -36,6 +36,10 @@
   `finally` would now tear down a controller that is running behind the ready
   branch. The family's promise is unchanged: created, initialized and released
   on every path, including the one where `init` wakes up after the teardown.
+* **Breaking:** `LiteScope.initScope` — the pre-initialization a lite scope
+  can override — takes a `ScopeInitContext` and returns instead of yielding.
+  Its default is now an empty body rather than a stream that is ready at once,
+  which is the same thing said in the new form.
 * `AsyncScopeProgress` and `AsyncScopeReady` stay: they are states of the
   model, read through `state` and matched in `buildOnState`, and only their
   second job — being the language an initialization was written in — is over.

@@ -138,7 +138,7 @@ abstract base class LiteScopeElementBase<
   //
 
   @override
-  Stream<AsyncScopeInitState> initScope();
+  Future<void> initScopeAsync(ScopeInitContext ctx);
 
   /// Builds a widget to display while waiting.
   Widget? buildOnWaiting();

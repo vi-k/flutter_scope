@@ -544,11 +544,10 @@ final class _LiteFixture extends LiteScope<_LiteFixture, _LiteFixtureState> {
         );
 
   @override
-  Stream<AsyncScopeInitState> initScope() async* {
+  Future<void> initScope(ScopeInitContext ctx) async {
     if (c.initGate case final gate?) {
       await gate.future;
     }
-    yield AsyncScopeReady();
   }
 
   @override
