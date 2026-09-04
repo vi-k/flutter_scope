@@ -101,10 +101,10 @@ initializer got to the end.
 
 There are two phases, and they are not the same thing.
 
-`LiteScope.initScope()` on the **widget** is a pre-initialization: a stream of
-`AsyncScopeInitState`, exactly as in the `AsyncScope` topic, running *before*
-the state is created. Its default yields `AsyncScopeReady()` at once, which is
-why most scopes never override it. Override it when something has to be ready
+`LiteScope.initScope()` on the **widget** is a pre-initialization: an ordinary
+`async` function taking a `ScopeInitContext`, exactly as in the `AsyncScope`
+topic, running *before* the state is created. Its default body is empty — ready
+at once — which is why most scopes never override it. Override it when something has to be ready
 before `createState`, and then `buildOnProgress` and `buildOnError` have to
 be overridden too — their default implementations throw
 `UnimplementedError`, on the reasoning that a progress branch nobody wrote is a

@@ -1,6 +1,6 @@
 # scopo
 
-> Перевод `README.md` (blob `74c34f0d134351b9366c4cb133f345b9953625b6`).
+> Перевод `README.md` (blob `47a7c1a09905ee27ba10dfe50ffb47592a0fdc66`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 [![pub version](https://img.shields.io/pub/v/scopo)](https://pub.dev/packages/scopo)
@@ -23,8 +23,9 @@ Flutter-пакет для управления скоупами: внедрен�
 жизненный цикл — база данных, сокет, плеер, сессия вошедшего пользователя. Что
 даёт scopo:
 
-- **инициализация — это `Stream`**, поэтому у скоупа есть ветка загрузки,
-  значение прогресса и ветка ошибки без собственной машины состояний;
+- **инициализация — обычная `async`-функция**, которая сообщает о шагах и
+  возвращает результат, поэтому у скоупа есть ветка загрузки, значение
+  прогресса и ветка ошибки без собственной машины состояний;
 - **недоделанную инициализацию отменяют**, а взятое ею возвращают; чтобы это
   началось, достаточно убрать виджет с дерева;
 - **разбор идёт по порядку** — скоуп дожидается дочерних скоупов, прежде чем
@@ -52,9 +53,9 @@ Riverpod закрывает часть этого: `FutureProvider` и `AsyncVal
 
 - **Скоупы**: виджет, который владеет зависимостями и состоянием и отдаёт то и
   другое своим потомкам.
-- **Асинхронная инициализация**: инициализация — это `Stream`. Она сообщает о
-  прогрессе, ведёт ветки загрузки и ошибки и отменяется, если скоуп уйдёт с
-  дерева раньше, чем она закончится.
+- **Асинхронная инициализация**: инициализация — это `Future`. Она сообщает о
+  прогрессе через контекст, ведёт ветки загрузки и ошибки и отменяется, если
+  скоуп уйдёт с дерева раньше, чем она закончится.
 - **Утилизация по порядку**: скоуп дожидается утилизации дочерних скоупов,
   прежде чем утилизировать собственные зависимости
   (`waitForChildrenTimeout`), а `scopeKey` заставляет пересозданный скоуп
@@ -222,11 +223,9 @@ class ConnectionGate extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => AsyncScope(
-        initScope: (context) async* {
-          yield AsyncScopeProgress('connecting');
-          await connection.open();
-
-          yield AsyncScopeReady();
+        initScope: (context, ctx) async {
+          ctx.progress('connecting');
+          await ctx.wait(connection.open);
         },
         disposeScope: () => connection.close(),
         progressBuilder: (context, progress) => Text('$progress'),
@@ -250,10 +249,10 @@ class DatabaseGate extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => AsyncDataScope<Database>(
-        initData: (context) async* {
-          yield AsyncDataScopeProgress('opening the database');
+        initData: (context, ctx) async {
+          ctx.progress('opening the database');
 
-          yield AsyncDataScopeReady(await Database.open());
+          return ctx.wait(Database.open);
         },
         disposeData: (database) => database.close(),
         progressBuilder: (context, progress) => Text('$progress'),
@@ -393,9 +392,11 @@ final class ScreenScopeState
 
 ### 1. Зависимости
 
-Реализуйте `ScopeDependencies` и инициализируйте его генератором потока: именно
-это позволяет скоупу сообщать о прогрессе и отменять недоделанную инициализацию,
-когда виджет убирают с дерева.
+Реализуйте `ScopeDependencies` и инициализируйте его обычной `async`-функцией.
+Контекст, который ей дают, — это то, что позволяет скоупу сообщать о прогрессе
+и отменять недоделанную инициализацию, когда виджет убирают с дерева: `ctx.wait`
+заканчивает ожидание в тот миг, когда скоуп сдался, и тело раскручивается через
+собственные `catch` и `finally`.
 
 ```dart
 final class AppDependencies implements ScopeDependencies {
@@ -403,11 +404,11 @@ final class AppDependencies implements ScopeDependencies {
 
   AppDependencies({required this.sharedPreferences});
 
-  static Stream<ScopeInitState<String, AppDependencies>> init() async* {
-    yield ScopeProgress('Initializing storage…');
-    final sharedPreferences = await SharedPreferences.getInstance();
+  static Future<AppDependencies> init(ScopeInitContext ctx) async {
+    ctx.progress('Initializing storage…');
+    final sharedPreferences = await ctx.wait(SharedPreferences.getInstance);
 
-    yield ScopeReady(AppDependencies(sharedPreferences: sharedPreferences));
+    return AppDependencies(sharedPreferences: sharedPreferences);
   }
 
   /// Отпускает то, что не может ждать асинхронного разбора. Выполняется
@@ -479,10 +480,11 @@ final class App extends Scope<App, AppDependencies, AppState> {
   const App({super.key, required this.title});
 
   @override
-  Stream<ScopeInitState<String, AppDependencies>> initDependencies(
+  Future<AppDependencies> initDependencies(
     BuildContext context,
+    ScopeInitContext ctx,
   ) =>
-      AppDependencies.init();
+      AppDependencies.init(ctx);
 
   @override
   AppState createState() => AppState();

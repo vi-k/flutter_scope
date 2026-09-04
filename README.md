@@ -19,8 +19,9 @@ things are let go on the way out.
 That is worth a package only when the objects have a lifecycle of their own — a
 database, a socket, a player, a signed-in session. What scopo adds:
 
-- **initialization is a `Stream`**, so a scope has a loading branch, a progress
-  value and an error branch without a state machine of your own;
+- **initialization is an ordinary `async` function** that reports its steps and
+  returns its value, so a scope has a loading branch, a progress value and an
+  error branch without a state machine of your own;
 - **an unfinished initialization is cancelled**, and whatever it already took is
   given back; the widget leaving the tree is enough to start that;
 - **disposal is ordered** — a scope waits for its child scopes before releasing
@@ -47,9 +48,9 @@ you nothing: `provider` is smaller, better known, and enough.
 
 - **Scopes**: a widget that owns dependencies and a state and provides both to
   its descendants.
-- **Async initialization**: initialization is a `Stream`. It reports progress,
-  drives the loading and error branches, and is cancelled if the scope leaves
-  the tree before it completes.
+- **Async initialization**: initialization is a `Future`. It reports progress
+  through a context, drives the loading and error branches, and is cancelled if
+  the scope leaves the tree before it completes.
 - **Ordered disposal**: a scope waits for its child scopes to be disposed of
   before disposing of its own dependencies (`waitForChildrenTimeout`), and
   `scopeKey` makes a re-created scope wait for the previous scope with the same
@@ -213,11 +214,9 @@ class ConnectionGate extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => AsyncScope(
-        initScope: (context) async* {
-          yield AsyncScopeProgress('connecting');
-          await connection.open();
-
-          yield AsyncScopeReady();
+        initScope: (context, ctx) async {
+          ctx.progress('connecting');
+          await ctx.wait(connection.open);
         },
         disposeScope: () => connection.close(),
         progressBuilder: (context, progress) => Text('$progress'),
@@ -241,10 +240,10 @@ class DatabaseGate extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => AsyncDataScope<Database>(
-        initData: (context) async* {
-          yield AsyncDataScopeProgress('opening the database');
+        initData: (context, ctx) async {
+          ctx.progress('opening the database');
 
-          yield AsyncDataScopeReady(await Database.open());
+          return ctx.wait(Database.open);
         },
         disposeData: (database) => database.close(),
         progressBuilder: (context, progress) => Text('$progress'),
@@ -382,9 +381,11 @@ parts:
 
 ### 1. Dependencies
 
-Implement `ScopeDependencies` and initialize it with a stream generator: this is
-what lets the scope report progress and cancel a half-finished initialization
-when the widget is removed from the tree.
+Implement `ScopeDependencies` and initialize it with an ordinary `async`
+function. The context it is given is what lets the scope report progress and
+cancel a half-finished initialization when the widget is removed from the
+tree: `ctx.wait` ends the waiting the moment the scope gives up, and the body
+unwinds through its own `catch` and `finally`.
 
 ```dart
 final class AppDependencies implements ScopeDependencies {
@@ -392,11 +393,11 @@ final class AppDependencies implements ScopeDependencies {
 
   AppDependencies({required this.sharedPreferences});
 
-  static Stream<ScopeInitState<String, AppDependencies>> init() async* {
-    yield ScopeProgress('Initializing storage…');
-    final sharedPreferences = await SharedPreferences.getInstance();
+  static Future<AppDependencies> init(ScopeInitContext ctx) async {
+    ctx.progress('Initializing storage…');
+    final sharedPreferences = await ctx.wait(SharedPreferences.getInstance);
 
-    yield ScopeReady(AppDependencies(sharedPreferences: sharedPreferences));
+    return AppDependencies(sharedPreferences: sharedPreferences);
   }
 
   /// Lets go of whatever cannot wait for the asynchronous teardown. Runs
@@ -467,10 +468,11 @@ final class App extends Scope<App, AppDependencies, AppState> {
   const App({super.key, required this.title});
 
   @override
-  Stream<ScopeInitState<String, AppDependencies>> initDependencies(
+  Future<AppDependencies> initDependencies(
     BuildContext context,
+    ScopeInitContext ctx,
   ) =>
-      AppDependencies.init();
+      AppDependencies.init(ctx);
 
   @override
   AppState createState() => AppState();

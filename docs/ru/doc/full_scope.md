@@ -1,6 +1,6 @@
 # Scope
 
-> Перевод `doc/full_scope.md` (blob `75ef8ad2abb7a3c4567121ec675a32f19807b316`).
+> Перевод `doc/full_scope.md` (blob `014412b82eaf8238025117f44d9cd2bd38662400`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 `Scope` — основной строительный блок пакета: виджет, который владеет контейнером
@@ -25,19 +25,20 @@
 
 ## Ветка инициализации
 
-`initDependencies` возвращает `Stream<ScopeInitState<P, D>>` с событиями двух
-видов: `ScopeProgress(progress)` сколько угодно раз и `ScopeReady(deps)` один
-раз. Поток, а не `Future`, по двум причинам: он умеет сообщать о прогрессе и его
-можно отменить — если виджет уйдёт с дерева, пока контейнер ещё строится,
-подписку отменят, и недостроенный контейнер никогда не попадёт в состояние.
+`initDependencies` — обычная `async`-функция, возвращающая контейнер. Рядом с
+`BuildContext` ей дают `ScopeInitContext`, и он несёт те две вещи, которым в
+голом `Future` нет места: `ctx.progress(x)` сообщает о шаге сколько угодно раз,
+а отмена доходит до тела через `ctx` — если виджет уйдёт с дерева, пока
+контейнер ещё строится, в тело бросят на ближайшем `ctx.wait` или `ctx.check`,
+и недостроенный контейнер никогда не попадёт в состояние.
 
 Что скоуп показывает и что зовёт, по порядку:
 
 | Фаза | Билдер |
 | --- | --- |
 | ожидание `scopeKey` и первого события потока | `buildOnWaiting` — может вернуть `null`, тогда `buildOnProgress(context, null)` |
-| пришёл `ScopeProgress` | `buildOnProgress(context, progress)` |
-| пришёл `ScopeReady` | `wrapState` вокруг `build` состояния из `createState` |
+| тело сообщило о прогрессе | `buildOnProgress(context, progress)` |
+| тело вернуло контейнер | `wrapState` вокруг `build` состояния из `createState` |
 | поток упал | `buildOnError(context, error, stackTrace, progress)` |
 | работает `close()` | `buildOnClosing` поверх замороженного снимка готового поддерева, если снимок удалось снять |
 
@@ -45,7 +46,7 @@
 сразу (обычно это `MaterialApp`), строят внутри каждого билдера.
 
 `pauseAfterInitialization` придерживает готовую ветку на фиксированное время
-после `ScopeReady`, чтобы индикатор загрузки не сменялся в том же кадре, в
+после того, как контейнер придёт, чтобы индикатор загрузки не сменялся в том же кадре, в
 котором появился. `ScopeConfig.pauseAfterInitializationEnabled` выключает все
 такие паузы разом — см. тему `debug`.
 
@@ -57,11 +58,11 @@ final class AppDependencies implements ScopeDependencies {
 
   AppDependencies({required this.sharedPreferences});
 
-  static Stream<ScopeInitState<String, AppDependencies>> init() async* {
-    yield ScopeProgress('Initializing storage…');
-    final sharedPreferences = await SharedPreferences.getInstance();
+  static Future<AppDependencies> init(ScopeInitContext ctx) async {
+    ctx.progress('Initializing storage…');
+    final sharedPreferences = await ctx.wait(SharedPreferences.getInstance);
 
-    yield ScopeReady(AppDependencies(sharedPreferences: sharedPreferences));
+    return AppDependencies(sharedPreferences: sharedPreferences);
   }
 
   /// Отпускает то, что не может ждать асинхронного разбора.
@@ -75,10 +76,9 @@ final class AppDependencies implements ScopeDependencies {
 }
 ```
 
-`ScopeDependenciesExtension.asStream` сокращает вырожденный случай — контейнер,
-которому асинхронная работа не нужна вовсе:
-`AppDependencies().asStream<String>()` выдаёт единственный
-`ScopeReady`.
+Контейнер, которому асинхронная работа не нужна вовсе, возвращают как есть:
+`initDependencies` — это `Future`, и `AppDependencies()` удовлетворяет ему без
+всякой обёртки.
 
 У четырёх функциональных типов, из которых собран скоуп, есть имена — на
 случай, если их приходится передавать: `ScopeInitCallback`,
@@ -276,7 +276,7 @@ dep('database', (dep) async {
 
 Разбор провалившейся инициализации выполняет `ScopeAutoDependencies`. За
 контейнером, написанным руками, ничего такого нет: скоуп запоминает контейнер,
-когда поток выдаёт `ScopeReady`, а поток, упавший раньше, ничего ему и не
+когда тело возвращает его, а тело, упавшее раньше, ничего ему и не
 передал. Ничто из того, что держит скоуп, на контейнер не указывает, и его
 `dispose()` никогда не позовут.
 
@@ -284,20 +284,20 @@ dep('database', (dep) async {
 `AsyncScope`: что шаг взял, то и отдаётся, если контейнер не передали дальше.
 
 ```dart
-static Stream<ScopeInitState<String, AppDependencies>> init() async* {
-  final storage = await Storage.open();
-  var handedOver = false;
+static Future<AppDependencies> init(ScopeInitContext ctx) async {
+  final storage = await ctx.wait(Storage.open);
 
   try {
-    yield ScopeProgress('signing in');
-    final session = await Session.restore(storage);
+    ctx.progress('signing in');
+    final session = await ctx.wait(() => Session.restore(storage));
 
-    yield ScopeReady(AppDependencies(storage: storage, session: session));
-    handedOver = true;
-  } finally {
-    if (!handedOver) {
-      await storage.close();
-    }
+    return AppDependencies(storage: storage, session: session);
+  } on Object {
+    // Сюда приходят и упавший шаг, и отмена, а возврат — это передача, так
+    // что дойти сюда и дойти до передачи взаимоисключающе, и различать их
+    // флагом незачем.
+    await storage.close();
+    rethrow;
   }
 }
 ```
@@ -462,7 +462,7 @@ UI «закрываемся…» для скоупа, чья утилизаци�
 половин, не оговаривая, какой чей. По порядку:
 
 1. **Контейнер.** `initDependencies` строит дерево зависимостей. Только когда
-   он выдаст `ScopeReady`, скоуп строит готовую ветку — и только тогда
+   он вернёт контейнер, скоуп строит готовую ветку — и только тогда
    состояние вообще появляется.
 2. **Состояние.** `createState()`, потом `initState()` — где `dependencies`
    уже на месте, ради чего семейство и заводили, — потом `initStateAsync()`,
@@ -507,7 +507,7 @@ UI «закрываемся…» для скоупа, чья утилизаци�
 контроллерного семейства, и слой состояния держит его тоже.
 
 **Зависимости возвращают на любом пути**, и на провальном — не элемент.
-Элементу контейнер вручают только вместе с `ScopeReady`, так что при провале
+Элементу контейнер вручают только когда тело его вернёт, так что при провале
 `initDependencies` у него его никогда и не было. Вместо элемента контейнер
 разбирает себя сам, изнутри собственной инициализации, — это и есть
 `ScopeAutoDependencies.autoDisposeOnError`: `dep.unmount` у каждой зависимости,
@@ -537,9 +537,10 @@ UI «закрываемся…» для скоупа, чья утилизаци�
 
 ```dart
 // Неправильно: соединение открыто, и ни одному хуку его уже не передадут.
-initDependencies: (context) async* {
-  final connection = await Connection.open();
-  yield* somethingThatFails();
+initDependencies: (context, ctx) async {
+  final connection = await ctx.wait(Connection.open);
+
+  return somethingThatFails();
 }
 
 // Правильно: что этот инициализатор взял, тот же и регистрирует.

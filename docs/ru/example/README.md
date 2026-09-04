@@ -1,6 +1,6 @@
 # example
 
-> Перевод `example/README.md` (blob `dd6301e2aff4e2028b4e2c76f48888511afba4e3`).
+> Перевод `example/README.md` (blob `2ac0a30fa26be974b4a20a7868f7b27a149b4570`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 Полный обзор scopo — в
@@ -54,10 +54,11 @@ final class App extends Scope<App, AppDependencies, AppState> {
 
   /// Метод инициализации зависимостей.
   @override
-  Stream<ScopeInitState<String, AppDependencies>> initDependencies(
+  Future<AppDependencies> initDependencies(
     BuildContext context,
+    ScopeInitContext ctx,
   ) =>
-      AppDependencies.init(context);
+      AppDependencies.init(context, ctx);
 
   /// [App.paramsOf] даёт доступ к параметрам виджета [App] — например, к
   /// [title].
@@ -145,18 +146,18 @@ final class AppDependencies implements ScopeDependencies {
 
   const AppDependencies({required this.sharedPreferences});
 
-  /// Инициализация зависимостей сделана через генератор потока. Это
-  /// позволяет следить за её прогрессом и отменить её, если виджет уйдёт с
-  /// дерева раньше, чем она закончится.
-  static Stream<ScopeInitState<String, AppDependencies>> init(
+  /// Инициализация зависимостей — обычный `Future`. Контекст сообщает о
+  /// прогрессе и несёт отмену: скоуп сдаётся, когда виджет уходит с дерева
+  /// раньше, чем инициализация закончится, а `ctx.wait` заканчивает ожидание
+  /// там же, а не в конце работы.
+  static Future<AppDependencies> init(
     BuildContext context,
-  ) async* {
-    SharedPreferences? sharedPreferences;
+    ScopeInitContext ctx,
+  ) async {
+    ctx.progress('init $SharedPreferences');
+    final sharedPreferences = await ctx.wait(SharedPreferences.getInstance);
 
-    yield ScopeProgress('init $SharedPreferences');
-    sharedPreferences = await SharedPreferences.getInstance();
-
-    yield ScopeReady(AppDependencies(sharedPreferences: sharedPreferences));
+    return AppDependencies(sharedPreferences: sharedPreferences);
   }
 
   @override

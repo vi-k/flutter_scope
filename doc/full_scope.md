@@ -23,20 +23,21 @@ the full set.
 
 ## The initialization branch
 
-`initDependencies` returns a `Stream<ScopeInitState<P, D>>` with two kinds of
-events: `ScopeProgress(progress)` any number of times, and `ScopeReady(deps)`
-once. A stream rather than a `Future`, for two reasons: it can report progress,
-and it can be cancelled — if the widget leaves the tree while the container is
-still being built, the subscription is cancelled and a half-built container is
-never handed to a state.
+`initDependencies` is an ordinary `async` function that returns the container.
+It is given a `ScopeInitContext` beside the `BuildContext`, and that is what
+carries the two things a bare `Future` has no room for: `ctx.progress(x)`
+reports a step any number of times, and the cancellation reaches the body
+through `ctx` — if the widget leaves the tree while the container is still
+being built, the body is thrown into at its next `ctx.wait` or `ctx.check`, and
+a half-built container is never handed to a state.
 
 What the scope shows, and what it calls, in order:
 
 | Phase                                                     | Builder                                                                       |
 | --------------------------------------------------------- | ----------------------------------------------------------------------------- |
 | waiting for `scopeKey` and for the first event of the stream | `buildOnWaiting` — may return `null`, then `buildOnProgress(context, null)` |
-| a `ScopeProgress` arrived                                 | `buildOnProgress(context, progress)`                                      |
-| `ScopeReady` arrived                                      | `wrapState` around the `build` of the state from `createState`                 |
+| the body reported progress                                | `buildOnProgress(context, progress)`                                      |
+| the body returned the container                           | `wrapState` around the `build` of the state from `createState`                 |
 | the stream failed                                         | `buildOnError(context, error, stackTrace, progress)`                          |
 | `close()` is running                                      | `buildOnClosing`, over a frozen screenshot of the ready subtree when one can be taken |
 
@@ -44,7 +45,7 @@ What the scope shows, and what it calls, in order:
 `MaterialApp`, typically) is built inside each builder instead.
 
 `pauseAfterInitialization` holds the ready branch back for a fixed duration
-after `ScopeReady`, so that a loading indicator is not replaced within the same
+after the container arrives, so that a loading indicator is not replaced within the same
 frame it appeared in. `ScopeConfig.pauseAfterInitializationEnabled` turns all of
 those pauses off at once — see the `debug` topic.
 
@@ -56,11 +57,11 @@ final class AppDependencies implements ScopeDependencies {
 
   AppDependencies({required this.sharedPreferences});
 
-  static Stream<ScopeInitState<String, AppDependencies>> init() async* {
-    yield ScopeProgress('Initializing storage…');
-    final sharedPreferences = await SharedPreferences.getInstance();
+  static Future<AppDependencies> init(ScopeInitContext ctx) async {
+    ctx.progress('Initializing storage…');
+    final sharedPreferences = await ctx.wait(SharedPreferences.getInstance);
 
-    yield ScopeReady(AppDependencies(sharedPreferences: sharedPreferences));
+    return AppDependencies(sharedPreferences: sharedPreferences);
   }
 
   /// Lets go of whatever cannot wait for the asynchronous teardown.
@@ -73,10 +74,9 @@ final class AppDependencies implements ScopeDependencies {
 }
 ```
 
-`ScopeDependenciesExtension.asStream` shortens the degenerate case of a
-container that needs no asynchronous work at all:
-`AppDependencies().asStream<String>()` yields a single
-`ScopeReady`.
+A container that needs no asynchronous work at all is returned as it is —
+`initDependencies` is a `Future`, and `AppDependencies()` satisfies one without
+a wrapper of any kind.
 
 The four function types the scope is built from are named as well, for anyone
 passing them around: `ScopeInitCallback`, `ScopeWaitingBuilder`,
@@ -273,7 +273,7 @@ yours to do.
 
 `ScopeAutoDependencies` is what runs the teardown of a failed initialization.
 A container written by hand has no such thing behind it: the scope stores the
-container when the stream yields `ScopeReady`, and a stream that failed before
+container when the body returns it, and a body that failed before
 that never handed one over. Nothing the scope holds points at it, and its
 `dispose()` is never called.
 
@@ -281,20 +281,20 @@ So an `init` written by hand takes the same shape as the one in the `AsyncScope`
 topic — what a step took is given back unless the container was handed over:
 
 ```dart
-static Stream<ScopeInitState<String, AppDependencies>> init() async* {
-  final storage = await Storage.open();
-  var handedOver = false;
+static Future<AppDependencies> init(ScopeInitContext ctx) async {
+  final storage = await ctx.wait(Storage.open);
 
   try {
-    yield ScopeProgress('signing in');
-    final session = await Session.restore(storage);
+    ctx.progress('signing in');
+    final session = await ctx.wait(() => Session.restore(storage));
 
-    yield ScopeReady(AppDependencies(storage: storage, session: session));
-    handedOver = true;
-  } finally {
-    if (!handedOver) {
-      await storage.close();
-    }
+    return AppDependencies(storage: storage, session: session);
+  } on Object {
+    // A failing step and a cancellation both arrive here, and returning is
+    // the handover — so reaching this and reaching the handover are
+    // exclusive, and no flag is needed to tell them apart.
+    await storage.close();
+    rethrow;
   }
 }
 ```
@@ -458,7 +458,7 @@ A `Scope` initializes **twice**, and the six steps above name hooks from both
 halves without saying which is which. Read in that order:
 
 1. **The container.** `initDependencies` builds the dependency tree. Only when
-   it yields `ScopeReady` does the scope build its ready branch — and only then
+   it returns the container does the scope build its ready branch — and only then
    is there a state at all.
 2. **The state.** `createState()`, then `initState()` — where `dependencies`
    are already in place, which is the whole point of the family — then
@@ -504,7 +504,7 @@ and the state layer keeps it too.
 
 **The dependencies are given back on every path**, and on the failing one not
 by the element. The element is handed the container only together with
-`ScopeReady`, so when `initDependencies` failed it never has one to reach for.
+the container, so when `initDependencies` failed it never has one to reach for.
 The container tears itself down from inside its own initialization instead,
 which is what `ScopeAutoDependencies.autoDisposeOnError` is: `dep.unmount` for
 every dependency, then `dep.dispose` for everything that registered one, in
@@ -534,9 +534,10 @@ initialization gives back — through `dep.dispose` when it was taken through
 
 ```dart
 // Wrong: the connection is open and no hook will ever be handed it.
-initDependencies: (context) async* {
-  final connection = await Connection.open();
-  yield* somethingThatFails();
+initDependencies: (context, ctx) async {
+  final connection = await ctx.wait(Connection.open);
+
+  return somethingThatFails();
 }
 
 // Right: what this initializer took, this initializer registers.

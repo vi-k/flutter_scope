@@ -14,10 +14,10 @@ dependency container.
 
 ```dart
 AsyncDataScope<Database>(
-  initData: (context) async* {
-    yield AsyncDataScopeProgress('opening the database');
+  initData: (context, ctx) async {
+    ctx.progress('opening the database');
 
-    yield AsyncDataScopeReady(await Database.open());
+    return ctx.wait(Database.open);
   },
   disposeData: (database) => database.close(),
   progressBuilder: (context, progress) => Text('$progress'),
@@ -32,7 +32,7 @@ AsyncDataScope<Database>(
 ## The value in each place
 
 ```dart
-AsyncDataScopeReady(await Database.open())
+returning `await Database.open()`
 ```
 
 is where the value enters. The element stores it as the ready state is applied,
@@ -46,13 +46,13 @@ and from that moment on:
   tree, which may be long before there is a value, or after a failure;
 - **descendants** read it from the context (below).
 
-The progress side is typed loosely on purpose: `AsyncDataScopeProgress` carries
+The progress side is typed loosely on purpose: `ctx.progress` takes
 an `Object?`, and the builders receive it as `Object?`. The value being built is
 what the type parameter is for; the progress is a caption.
 
 ### A value that never arrives is a value nobody releases
 
-`AsyncDataScopeReady` is the handover, and until it happens the value belongs to
+Returning is the handover, and until it happens the value belongs to
 the initialization alone. The scope has never seen it, so it cannot release it:
 `disposeData` runs only when the initialization succeeded, and `onUnmount` is handed
 `null`.
@@ -63,44 +63,45 @@ after it:
 
 ```dart
 // Wrong: the database is open, and `disposeData` will never be called with it.
-initData: (context) async* {
-  final database = await Database.open();
+initData: (context, ctx) async {
+  final database = await ctx.wait(Database.open);
 
-  yield AsyncDataScopeProgress('migrating');
-  await database.migrate();             // throws
+  ctx.progress('migrating');
+  await ctx.wait(database.migrate);     // throws
 
-  yield AsyncDataScopeReady(database);
+  return database;
 },
 disposeData: (database) => database.close(),
 ```
 
 ```dart
-// Right: not handed over yet means still mine to close.
-initData: (context) async* {
-  final database = await Database.open();
-  var handedOver = false;
+// Right: whatever ends the body early leaves the database mine to close.
+initData: (context, ctx) async {
+  final database = await ctx.wait(Database.open);
 
   try {
-    yield AsyncDataScopeProgress('migrating');
-    await database.migrate();
-
-    yield AsyncDataScopeReady(database);
-    handedOver = true;
-  } finally {
-    if (!handedOver) {
-      await database.close();
-    }
+    ctx.progress('migrating');
+    await ctx.wait(database.migrate);
+  } on Object {
+    await database.close();
+    rethrow;
   }
+
+  return database;
 },
 disposeData: (database) => database.close(),
 ```
 
-`finally`, and not `catch`: a failing step is only one of the two ways this
-initialization ends early. The other is a cancellation — the scope removed from
-the tree, or `close()`d, before it was ready — and it raises nothing, so a
-`catch` is never reached. See the `AsyncScope` topic for the whole of it; here
-the trap is worse, because a `yield` inside the guard is itself a point the
-cancellation can end the body at.
+One `catch` covers both ways this initialization ends early: a failing step,
+and a cancellation — the scope removed from the tree, or `close()`d, before it
+was ready. The second arrives as `ScopeInitCancelled`, thrown by the next
+member of `ctx` the body touches, which is why the guard has to sit around the
+steps that wait through `ctx` rather than around bare `await`s. See the
+`AsyncScope` topic for the whole of it.
+
+A value the body produces after the cancellation is handed to `disposeData`
+rather than lost, so a body that never asks `ctx` anything does not leak — it
+merely runs to its end for a scope that is already gone.
 
 Two ways to avoid writing the guard at all: build the value in one step that
 cannot fail halfway, or use the dependency container of the `Scope` family,

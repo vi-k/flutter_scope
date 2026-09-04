@@ -1,6 +1,6 @@
 # AsyncDataScope
 
-> Перевод `doc/async_data_scope.md` (blob `01fd79372fdbe6fabebf20894cda94c0f6c0d28f`).
+> Перевод `doc/async_data_scope.md` (blob `06af6a71ecfd03c69e85b2f6a8e175b2dd16611f`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 `AsyncScope`, который производит значение. Инициализация заканчивается объектом,
@@ -16,10 +16,10 @@
 
 ```dart
 AsyncDataScope<Database>(
-  initData: (context) async* {
-    yield AsyncDataScopeProgress('opening the database');
+  initData: (context, ctx) async {
+    ctx.progress('opening the database');
 
-    yield AsyncDataScopeReady(await Database.open());
+    return ctx.wait(Database.open);
   },
   disposeData: (database) => database.close(),
   progressBuilder: (context, progress) => Text('$progress'),
@@ -34,7 +34,7 @@ AsyncDataScope<Database>(
 ## Значение в каждом месте
 
 ```dart
-AsyncDataScopeReady(await Database.open())
+возврат `await Database.open()`
 ```
 
 — вот где значение входит. Элемент сохраняет его в момент применения готового
@@ -49,13 +49,13 @@ AsyncDataScopeReady(await Database.open())
   после провала;
 - **потомки** читают его из контекста (ниже).
 
-Сторона прогресса намеренно типизирована слабо: `AsyncDataScopeProgress` несёт
+Сторона прогресса намеренно типизирована слабо: `ctx.progress` принимает
 `Object?`, и билдеры получают его как `Object?`. Параметр типа существует ради
 строящегося значения; прогресс — это подпись.
 
 ### Значение, которое не доехало, освобождать некому
 
-`AsyncDataScopeReady` — это передача, и до неё значение принадлежит одной лишь
+Возврат — это передача, и до неё значение принадлежит одной лишь
 инициализации. Скоуп его не видел, а значит и освободить не может: `disposeData`
 выполняется, только если инициализация удалась, а `onUnmount` получает `null`.
 
@@ -65,44 +65,45 @@ AsyncDataScopeReady(await Database.open())
 
 ```dart
 // Неправильно: база открыта, и с ней `disposeData` никогда не позовут.
-initData: (context) async* {
-  final database = await Database.open();
+initData: (context, ctx) async {
+  final database = await ctx.wait(Database.open);
 
-  yield AsyncDataScopeProgress('migrating');
-  await database.migrate();             // бросает
+  ctx.progress('migrating');
+  await ctx.wait(database.migrate);     // бросает
 
-  yield AsyncDataScopeReady(database);
+  return database;
 },
 disposeData: (database) => database.close(),
 ```
 
 ```dart
-// Правильно: не передал — значит закрывать самому.
-initData: (context) async* {
-  final database = await Database.open();
-  var handedOver = false;
+// Правильно: что бы ни закончило тело досрочно, база остаётся моей.
+initData: (context, ctx) async {
+  final database = await ctx.wait(Database.open);
 
   try {
-    yield AsyncDataScopeProgress('migrating');
-    await database.migrate();
-
-    yield AsyncDataScopeReady(database);
-    handedOver = true;
-  } finally {
-    if (!handedOver) {
-      await database.close();
-    }
+    ctx.progress('migrating');
+    await ctx.wait(database.migrate);
+  } on Object {
+    await database.close();
+    rethrow;
   }
+
+  return database;
 },
 disposeData: (database) => database.close(),
 ```
 
-`finally`, а не `catch`: упавший шаг — только один из двух способов закончить
-эту инициализацию досрочно. Второй — отмена: скоуп убрали из дерева или закрыли
-через `close()`, так и не дав ему стать готовым, — и она не бросает ничего,
-поэтому до `catch` дело не доходит. Разбор целиком — в теме `AsyncScope`; здесь
-ловушка хуже, потому что `yield` внутри защиты сам по себе точка, на которой
-отмена может закончить тело.
+Один `catch` покрывает оба способа закончить эту инициализацию досрочно:
+упавший шаг и отмену — скоуп убрали из дерева или закрыли через `close()`, так
+и не дав ему стать готовым. Второе приходит как `ScopeInitCancelled`, который
+бросит следующий член `ctx`, к которому обратится тело, — поэтому защита должна
+стоять вокруг шагов, ожидающих через `ctx`, а не вокруг голых `await`. Разбор
+целиком — в теме `AsyncScope`.
+
+Значение, произведённое телом после отмены, отдают в `disposeData`, а не
+теряют, так что тело, которое ничего не спрашивает у `ctx`, не течёт — оно
+просто доработает до конца для скоупа, которого уже нет.
 
 Два способа не писать защиту вовсе: строить значение одним шагом, который не
 может упасть на середине, — или взять контейнер зависимостей семейства `Scope`,

@@ -8,11 +8,9 @@ the widget tree.
 
 ```dart
 AsyncScope(
-  initScope: (context) async* {
-    yield AsyncScopeProgress('connecting');
-    await connection.open();
-
-    yield AsyncScopeReady();
+  initScope: (context, ctx) async {
+    ctx.progress('connecting');
+    await ctx.wait(connection.open);
   },
   disposeScope: () => connection.close(),
   waitingBuilder: (context) => const SizedBox.shrink(),
@@ -38,12 +36,13 @@ needs its own element.
 | --- | --- | --- |
 | `AsyncScopeWaiting` | `buildOnWaiting`, or `buildOnProgress` when it returns `null` | mounted; waiting for a `scopeKey` and for the first event |
 | `AsyncScopeProgress` | `buildOnProgress` | `initScope` reported progress; the value is `progress` |
-| `AsyncScopeReady` | `buildOnReady` | `initScope` yielded `AsyncScopeReady` |
+| `AsyncScopeReady` | `buildOnReady` | `initScope` returned |
 | `AsyncScopeError` | `buildOnError` | `initScope` failed before it was ready; the progress it had reached comes with it |
 
-`initScope` is typed to yield `AsyncScopeInitState`, which is the `Progress`/`Ready`
-half of that hierarchy: a stream cannot report "waiting" or "failed" as values,
-because those two states belong to the scope rather than to the work.
+`initScope` says only two of those four things, and names neither:
+`ctx.progress(x)` is the progress, and returning is the ready. "Waiting" and
+"failed" belong to the scope rather than to the work — the first is where a
+scope starts, and the second is what a throw makes of it.
 
 The ready state is not applied in the same frame the event arrives in. Without
 `pauseAfterInitialization` the scope schedules a post-frame callback, so the
@@ -60,14 +59,12 @@ inside it. A `String` is the common case; anything with a `toString` will do.
 
 ```dart
 AsyncScope(
-  initScope: (context) async* {
-    yield AsyncScopeProgress('connecting');
-    await api.connect();
+  initScope: (context, ctx) async {
+    ctx.progress('connecting');
+    await ctx.wait(api.connect);
 
-    yield AsyncScopeProgress('loading the profile');
-    await api.loadProfile();
-
-    yield AsyncScopeReady();
+    ctx.progress('loading the profile');
+    await ctx.wait(api.loadProfile);
   },
   disposeScope: api.close,
   progressBuilder: (context, progress) => Center(child: Text('$progress')),
@@ -80,26 +77,26 @@ AsyncScope(
 Four things are worth knowing about the `progress` argument.
 
 **It is `null` before the first event.** The scope is `AsyncScopeWaiting` from
-the moment it is mounted until `initScope` yields, and if `buildOnWaiting` returns
+the moment it is mounted until `initScope` reports, and if `buildOnWaiting` returns
 `null` the waiting branch is `buildOnProgress(context, null)`. Write the
 builder so that `null` means "nothing reported yet" — that is also what it means
 in `buildOnError` when the failure came before any progress did.
 
 **The last value gets a frame of its own.** `AsyncScopeReady` is applied in a
-post-frame callback, so a progress value yielded immediately before it is
-actually painted instead of being replaced within the same frame.
+post-frame callback, so a progress value reported immediately before the body
+returns is actually painted instead of being replaced within the same frame.
 `pauseAfterInitialization` holds the ready branch back further still, which is
 what to reach for when the steps are too fast to read.
 
 **Progress after ready is a mistake, and is refused.** The scope is initialized
-once; an event arriving after `AsyncScopeReady` — another `ready`, or a late
-progress value — is reported through `FlutterError.reportError` and does not
+once; a progress call made after the body has returned — by a helper it left
+running, say — is reported through `FlutterError.reportError` and does not
 change what is on screen. An initialization that goes on producing values after
-the scope is usable wants a `Listenable` under the scope, not this stream.
+the scope is usable wants a `Listenable` under the scope, not this context.
 
-**No progress at all is fine.** An `initScope` that yields only `AsyncScopeReady`
-never leaves `AsyncScopeWaiting`, so the scope shows `buildOnWaiting` — a
-spinner, usually — and then the ready branch.
+**No progress at all is fine.** An `initScope` that reports nothing never
+leaves `AsyncScopeWaiting`, so the scope shows `buildOnWaiting` — a spinner,
+usually — and then the ready branch.
 
 ### Counting steps
 
@@ -108,19 +105,17 @@ counts them and `Progress` is the value it produces: `number`, `total`,
 `value` as a fraction between 0 and 1, and a `toString` of `2/3`.
 
 ```dart
-initScope: (context) async* {
+initScope: (context, ctx) async {
   final steps = ProgressIterator(3);
 
-  yield AsyncScopeProgress(steps.nextStep()); // 1/3
-  await api.connect();
+  ctx.progress(steps.nextStep()); // 1/3
+  await ctx.wait(api.connect);
 
-  yield AsyncScopeProgress(steps.nextStep()); // 2/3
-  await api.loadProfile();
+  ctx.progress(steps.nextStep()); // 2/3
+  await ctx.wait(api.loadProfile);
 
-  yield AsyncScopeProgress(steps.nextStep()); // 3/3
-  await api.warmUpCache();
-
-  yield AsyncScopeReady();
+  ctx.progress(steps.nextStep()); // 3/3
+  await ctx.wait(api.warmUpCache);
 },
 progressBuilder: (context, progress) => switch (progress) {
   final Progress progress => LinearProgressIndicator(value: progress.value),
@@ -134,14 +129,16 @@ topic.
 
 ### Where the type comes back
 
-`Scope` types its progress: `ScopeInitState<P, D>` carries a `P`, so
-`buildOnProgress` can declare `covariant P? progress` and read fields
-instead of calling `toString`. `ScopeAutoDependencies` uses that to report a
-`ScopeAutoDependenciesProgress` per dependency — the path, the name and the step
-counter in one object. See the `Scope` topic.
+`ctx.progress` takes an `Object` and the builders receive an `Object?`, so the
+type of a progress value is the builder's to declare: `buildOnProgress` can say
+`covariant Progress? progress` and read fields instead of calling `toString`.
+`ScopeAutoDependencies` reports a `ScopeAutoDependenciesProgress` per
+dependency — the path, the name and the step counter in one object. See the
+`Scope` topic.
 
-`AsyncScope` and `AsyncDataScope` stay untyped on purpose: their type parameter,
-where they have one, belongs to the value being built. Progress is a caption.
+The package itself never looks inside a progress value. Progress is a caption;
+the type parameter a family has, where it has one, belongs to the value being
+built.
 
 ## Reading the state from the subtree
 
@@ -158,23 +155,19 @@ subscribes to that field alone — the `base` topic explains the filtering.
 
 ## Errors
 
-A stream that fails before the scope is ready puts it into `AsyncScopeError`,
+A body that throws before the scope is ready puts it into `AsyncScopeError`,
 and `buildOnError` receives the error, its stack trace, and the progress the
 scope had reached when it failed.
 
-Two failures are handled differently, and both deserve to be known.
-
-**A second `AsyncScopeReady`** is a `StateError` — `already initialized`. A
-scope becomes ready once; a stream that yields it twice is a bug in the stream,
-and the scope says so rather than initializing everything a second time.
+One failure is handled differently, and deserves to be known.
 
 **A failure after the scope is already ready** does not switch the screen to
 `buildOnError`. It is reported through `FlutterError.reportError` and the scope
 stays ready. That is deliberate: the widgets on screen are the ready ones,
-whatever `initScope` acquired still has to be released by `disposeScope`, and swapping the
-subtree for an error screen behind the user's back would strand both. A stream
-that keeps working after `AsyncScopeReady` is unusual, but it is exactly the
-case where the difference matters.
+whatever `initScope` acquired still has to be released by `disposeScope`, and
+swapping the subtree for an error screen behind the user's back would strand
+both. A body that goes on working after it has returned — a helper it left
+running — is unusual, but it is exactly the case where the difference matters.
 
 ## Disposal, in order
 
@@ -189,16 +182,17 @@ awaited:
    for one.
 3. **The initialization is cancelled**, and the wait for that is bounded by
    `initCancellationTimeout` (`ScopeConfig.defaultInitCancellationTimeout` by
-   default). A generator runs its `finally` when its subscription is cancelled,
-   and a failure raised there is reported rather than thrown on: abandoning the
-   disposal at that point would leave the scope registered with its parent and
-   its `scopeKey` unreleased. A cancellation that never finishes at all would
-   leave it there just as surely, and needs no failure to do it — cancelling a
-   generator means resuming its body and letting it run out, which a body
-   parked on a future that never completes never does. When the limit expires
-   the initialization is left where it stands, the expiry is reported, and the
-   teardown goes on. What the generator itself holds stays held: it waits on
-   somebody else's future, and no scope can complete that one for it.
+   default). The body is told at once — the next member of `ctx` it touches
+   throws `ScopeInitCancelled` — and a failure raised while it unwinds is
+   reported rather than thrown on: abandoning the disposal at that point would
+   leave the scope registered with its parent and its `scopeKey` unreleased.
+   A cancellation that never finishes at all would leave it there just as
+   surely, and needs no failure to do it: a body parked on somebody else's
+   future is not interrupted by anything, and one that never asks `ctx`
+   anything is never told. When the limit expires the initialization is left
+   where it stands, the expiry is reported, and the teardown goes on. What the
+   body holds stays held — and if it finishes later, what it produced is handed
+   to `disposeScope`, unless the teardown has by then run to its end.
 4. **The initialization is awaited** if it could not be cancelled.
 5. **The child scopes are awaited**, bounded by `waitForChildrenTimeout`
    (`ScopeConfig.defaultWaitForChildrenTimeout` by default). An expiry is
@@ -241,64 +235,77 @@ So it is the initialization's job to give back what it took before it failed:
 
 ```dart
 // Wrong: the connection is open and nobody will ever close it.
-initScope: (context) async* {
-  connection = await Api.connect();
-  await connection.authenticate();           // throws
-
-  yield AsyncScopeReady();
+initScope: (context, ctx) async {
+  connection = await ctx.wait(Api.connect);
+  await ctx.wait(connection.authenticate);   // throws
 },
 disposeScope: () => connection.close(),      // never called
 ```
 
 ```dart
 // Right: what a step took is given back unless the scope took it over.
-initScope: (context) async* {
-  connection = await Api.connect();
-  var handedOver = false;
+initScope: (context, ctx) async {
+  final opened = await ctx.wait(Api.connect);
 
   try {
-    await connection.authenticate();
-
-    yield AsyncScopeReady();
-    handedOver = true;
-  } finally {
-    if (!handedOver) {
-      await connection.close();
-    }
+    await ctx.wait(opened.authenticate);
+  } on Object {
+    await opened.close();
+    rethrow;
   }
+
+  connection = opened;
 },
 disposeScope: () => connection.close(),
 ```
 
-**`finally`, and not `catch`** — this is the part that is easy to get wrong. An
-initialization ends early in two ways: a step of it fails, or the scope goes
-away before it was ever ready, removed from the tree or `close()`d. The second
-raises nothing at all. Cancelling an `async*` resumes its body and ends it at
-the next `yield`, so `catch` blocks are skipped and only `finally` blocks run —
-a guard written as `try`/`catch` gives back what it took when a step throws, and
-leaks it when the scope leaves first.
+**`catch`, and no flag** — and both halves of that are worth saying, because
+the older form of this package needed the opposite of each.
 
-The flag is what keeps the guard quiet afterwards. `yield AsyncScopeReady()` is
-the handover, and a body ended at that `yield` never reaches the line below it:
-a `finally` that finds the flag still false is exactly the case where the scope
-never took the connection over and `disposeScope` will not be called for it. Once the
-flag is set, releasing it is the scope's job and the guard must not do it a
-second time.
+An initialization ends early in two ways: a step of it fails, or the scope goes
+away before it was ever ready, removed from the tree or `close()`d. Both arrive
+in the body as a throw — the second one as `ScopeInitCancelled`, raised by the
+next member of `ctx` the body touches — so one `catch` covers both. A body that
+waits on a bare `await` is the exception that proves it: nothing is thrown at
+it, because Dart cannot interrupt somebody else's wait, and it runs to its end
+for a scope that is already gone. What it produces then is handed to
+`disposeScope` rather than lost, but the whole point of `ctx.wait` is not to
+get there.
 
-The flag can be trusted with that decision because of when the line below the
-`yield` runs: a generator is resumed when its consumer asks for the next event,
-and by then the scope has taken the one it was given — `disposeScope` is going to be
-called. There is no window where the flag says handed over and the scope
-disagrees, not even while the ready branch is still held back by
-`pauseAfterInitialization`, and the suite stands in that state to check.
+There is no flag because there is nothing to guard against. Returning is the
+handover, and a body that returned has no lines left to run: reaching the
+`catch` and reaching the handover are exclusive by construction, so the guard
+cannot release something the scope has taken over. Where the guard has to know
+the difference from *inside* — a body with several steps releasing them in
+reverse — collect the releases as they are taken:
+
+```dart
+final acquired = <Future<void> Function()>[];
+
+try {
+  final database = await ctx.wait(Database.open);
+  acquired.add(database.close);
+
+  final session = await ctx.wait(Session.connect);
+  acquired.add(session.close);
+
+  connection = Connection(database, session);
+} on Object {
+  for (final release in acquired.reversed) {
+    await release();
+  }
+  rethrow;
+}
+```
 
 Keep what the guard awaits able to finish. Nothing downstream sees the failure
-until the generator does, so an `await` in the guard holds the failure as well
-as the resource: a `close()` that never completes leaves the scope showing its
-loading branch for good, with nothing on screen and nothing in the console. The
-scope's own waits are all bounded for this reason, and so is the one the
-dependency container of the `Scope` family makes on your behalf — a guard you
-write yourself is the one place left where a hang is unbounded.
+until the body is done with it, so an `await` in the guard holds the failure as
+well as the resource: a `close()` that never completes leaves the scope showing
+its loading branch until `initCancellationTimeout` expires, with nothing on
+screen and nothing in the console. The scope's own waits are all bounded for
+this reason, and so is the one the dependency container of the `Scope` family
+makes on your behalf — a guard you write yourself is the one place left where a
+hang is unbounded.
 
 An initialization with several steps like that turns into a pile of nested
 `try`s, and that is what the dependency container of the `Scope` family exists
