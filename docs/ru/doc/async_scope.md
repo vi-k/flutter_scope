@@ -1,6 +1,6 @@
 # AsyncScope
 
-> Перевод `doc/async_scope.md` (blob `74d4c2a0c541ce17be00958fc13ac0773721f2a2`).
+> Перевод `doc/async_scope.md` (blob `3d61ba698d1a0efe1ae49bab1eef96437a7ffdac`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 Скоуп, всё содержимое которого — жизненный цикл: асинхронная инициализация и
@@ -13,7 +13,7 @@
 AsyncScope(
   initScope: (context, ctx) async {
     ctx.progress('connecting');
-    await ctx.wait(connection.open);
+    await connection.open();
   },
   disposeScope: () => connection.close(),
   waitingBuilder: (context) => const SizedBox.shrink(),
@@ -63,10 +63,10 @@ AsyncScope(
 AsyncScope(
   initScope: (context, ctx) async {
     ctx.progress('connecting');
-    await ctx.wait(api.connect);
+    await api.connect();
 
     ctx.progress('loading the profile');
-    await ctx.wait(api.loadProfile);
+    await api.loadProfile();
   },
   disposeScope: api.close,
   progressBuilder: (context, progress) => Center(child: Text('$progress')),
@@ -113,13 +113,13 @@ initScope: (context, ctx) async {
   final steps = ProgressIterator(3);
 
   ctx.progress(steps.nextStep()); // 1/3
-  await ctx.wait(api.connect);
+  await api.connect();
 
   ctx.progress(steps.nextStep()); // 2/3
-  await ctx.wait(api.loadProfile);
+  await api.loadProfile();
 
   ctx.progress(steps.nextStep()); // 3/3
-  await ctx.wait(api.warmUpCache);
+  await api.warmUpCache();
 },
 progressBuilder: (context, progress) => switch (progress) {
   final Progress progress => LinearProgressIndicator(value: progress.value),
@@ -237,8 +237,8 @@ if (scope.isInitialized) { … }
 ```dart
 // Неправильно: соединение открыто, и закрыть его теперь некому.
 initScope: (context, ctx) async {
-  connection = await ctx.wait(Api.connect);
-  await ctx.wait(connection.authenticate);   // бросает
+  connection = await Api.connect();
+  await connection.authenticate();           // бросает
 },
 disposeScope: () => connection.close(),      // не будет вызван
 ```
@@ -246,10 +246,11 @@ disposeScope: () => connection.close(),      // не будет вызван
 ```dart
 // Правильно: что шаг взял, то и отдаётся, если скоуп это не забрал себе.
 initScope: (context, ctx) async {
-  final opened = await ctx.wait(Api.connect);
+  final opened = await Api.connect();
 
   try {
-    await ctx.wait(opened.authenticate);
+    ctx.progress('authenticating');
+    await opened.authenticate();
   } on Object {
     await opened.close();
     rethrow;
@@ -266,12 +267,15 @@ disposeScope: () => connection.close(),
 Инициализация кончается досрочно двумя способами: падает её шаг — или скоуп
 уходит, так и не став готовым: его убрали из дерева или закрыли через
 `close()`. Оба приходят в тело броском — второй как `ScopeInitCancelled`,
-который поднимет следующий член `ctx`, к которому тело обратится, — поэтому
-один `catch` покрывает и то и другое. Тело, ожидающее голым `await`, —
-исключение, подтверждающее правило: ему не бросают ничего, потому что Dart не
-прерывает чужое ожидание, и оно доработает до конца для скоупа, которого уже
-нет. Произведённое им тогда отдадут в `disposeScope`, а не потеряют, — но
-`ctx.wait` затем и нужен, чтобы до этого не доходило.
+который поднимет следующий член `ctx`, к которому тело обратится, а между двумя
+шагами это обычно `ctx.progress`, — поэтому один `catch` покрывает и то и
+другое.
+
+Тело, не трогающее контекст нигде, — исключение, подтверждающее правило: ему не
+бросают ничего, потому что Dart не прерывает чужое ожидание, и оно доработает
+до конца для скоупа, которого уже нет. Это не дыра. Произведённое им тогда
+отдадут в `disposeScope`, а не потеряют, — и следующий раздел ровно про это
+обещание.
 
 Флага нет, потому что защищаться не от чего. Возврат — это и есть передача, и у
 тела, которое вернуло управление, строк больше не осталось: дойти до `catch` и
@@ -284,10 +288,11 @@ disposeScope: () => connection.close(),
 final acquired = <Future<void> Function()>[];
 
 try {
-  final database = await ctx.wait(Database.open);
+  final database = await Database.open();
   acquired.add(database.close);
 
-  final session = await ctx.wait(Session.connect);
+  ctx.progress('connecting');
+  final session = await Session.connect();
   acquired.add(session.close);
 
   connection = Connection(database, session);
@@ -307,6 +312,53 @@ try {
 ожидания скоупа ограничены именно поэтому, и то, которое за вас делает
 контейнер зависимостей семейства `Scope`, — тоже; защита, которую вы пишете
 сами, — единственное оставшееся место, где зависание ничем не ограничено.
+
+### Что идёт через контекст, а что нет
+
+Dart не прерывает чужое ожидание, поэтому единственный способ для тела узнать
+об отмене — спросить, а спрашивает оно любым членом `ctx`. `ctx.wait` — узкий
+из них: он заканчивает ожидание, а не работу, так что действие доработает, а
+значение, которое оно собиралось произвести, вернётся в ожидание, которое уже
+закончилось.
+
+Отсюда он верен для вызова, который ничем не владеет и чей результат больше
+никому не нужен, — чтение, прогрев, пауза:
+
+```dart
+await ctx.wait(cache.warmUp);   // отпускаем, как только скоуп сдался
+```
+
+и неверен для приобретения:
+
+```dart
+// Неверно: ожидание кончилось раньше, чем пришло соединение, — тело его не
+// получает, а чего никто не получил, того никто и не закроет.
+final opened = await ctx.wait(Api.connect);
+
+// Верно: значение доходит до тела, что бы скоуп ни решил, а дальше его судьбу
+// решает `catch` выше или возврат ниже.
+final opened = await Api.connect();
+```
+
+Приобретение зовут напрямую, и безопасно это не по надежде, а по обещанию
+скоупа: **тело, вернувшееся к скоупу, который уже сдался, ничего не
+устанавливает, но произведённое им освобождают, а не теряют** — здесь
+`disposeScope`, в теме `AsyncDataScope` — `disposeData`, в теме `Scope` —
+собственный разбор контейнера. Единственный путь, где это невозможно, — разбор,
+который уже закончился, то есть истёкший `initCancellationTimeout`: к этому
+моменту у скоупа не осталось виджета, из которого читается хук.
+
+Средний случай — вызов, который ничем не владеет, но бросать его на полпути
+нельзя: миграция, чужой `init`, запись, уже ушедшая в провод. Его тоже зовут
+напрямую, а следом говорят, что остальное делать незачем:
+
+```dart
+await database.migrate();
+ctx.check();
+```
+
+`ctx.check()` делает то же, что и `ctx.progress` между двумя шагами, — поэтому
+телам, сообщающим о своих шагах, выписывать его отдельно почти не приходится.
 
 Инициализация из нескольких таких шагов превращается в стопку вложенных `try`,
 и ровно для этого существует контейнер зависимостей семейства `Scope` — см. тему

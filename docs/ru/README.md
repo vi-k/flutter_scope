@@ -1,6 +1,6 @@
 # scopo
 
-> Перевод `README.md` (blob `47a7c1a09905ee27ba10dfe50ffb47592a0fdc66`).
+> Перевод `README.md` (blob `1cd98ea8b9820beade3b4963fd968463331fae63`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 [![pub version](https://img.shields.io/pub/v/scopo)](https://pub.dev/packages/scopo)
@@ -225,7 +225,7 @@ class ConnectionGate extends StatelessWidget {
   Widget build(BuildContext context) => AsyncScope(
         initScope: (context, ctx) async {
           ctx.progress('connecting');
-          await ctx.wait(connection.open);
+          await connection.open();
         },
         disposeScope: () => connection.close(),
         progressBuilder: (context, progress) => Text('$progress'),
@@ -252,7 +252,7 @@ class DatabaseGate extends StatelessWidget {
         initData: (context, ctx) async {
           ctx.progress('opening the database');
 
-          return ctx.wait(Database.open);
+          return Database.open();
         },
         disposeData: (database) => database.close(),
         progressBuilder: (context, progress) => Text('$progress'),
@@ -394,9 +394,12 @@ final class ScreenScopeState
 
 Реализуйте `ScopeDependencies` и инициализируйте его обычной `async`-функцией.
 Контекст, который ей дают, — это то, что позволяет скоупу сообщать о прогрессе
-и отменять недоделанную инициализацию, когда виджет убирают с дерева: `ctx.wait`
-заканчивает ожидание в тот миг, когда скоуп сдался, и тело раскручивается через
-собственные `catch` и `finally`.
+и отменять недоделанную инициализацию, когда виджет убирают с дерева: в тело
+бросят при ближайшем обращении к `ctx` — между двумя шагами это обычно
+`ctx.progress`, — и оно раскручивается через собственные `catch` и `finally`.
+То, чем строится зависимость, зовут напрямую, а не оборачивают в `ctx.wait`:
+тот заканчивает ожидание, а не работу, поэтому значение, открытое внутрь него,
+до тела не доходит, — а чего никто не получил, того никто и не закроет.
 
 ```dart
 final class AppDependencies implements ScopeDependencies {
@@ -406,7 +409,7 @@ final class AppDependencies implements ScopeDependencies {
 
   static Future<AppDependencies> init(ScopeInitContext ctx) async {
     ctx.progress('Initializing storage…');
-    final sharedPreferences = await ctx.wait(SharedPreferences.getInstance);
+    final sharedPreferences = await SharedPreferences.getInstance();
 
     return AppDependencies(sharedPreferences: sharedPreferences);
   }

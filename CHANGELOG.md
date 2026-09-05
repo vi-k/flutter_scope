@@ -14,10 +14,11 @@
   generator raised nothing — the body resumed, ran to its next `yield` and
   stopped there, so a `catch` around the step never ran and only a `finally`
   could give back what had been taken. Now every member of `ScopeInitContext`
-  throws `ScopeInitCancelled` once the scope has given up, so a body that
-  waits through `ctx.wait(...)` unwinds through its own `catch`. A body that
-  waits on a bare `await` is still told nothing — Dart cannot interrupt
-  somebody else's wait — and for that case there is the next entry.
+  throws `ScopeInitCancelled` once the scope has given up, so a body that asks
+  the context anything unwinds through its own `catch` — and between two steps
+  the asking is usually `ctx.progress`. A body that touches the context
+  nowhere is told nothing, because Dart cannot interrupt somebody else's wait;
+  what it produces is then released rather than lost, which is the next entry.
 * **New:** what a cancelled initialization produced too late is released
   rather than lost. A body that never asks the context anything runs to its
   end for a scope that is already gone; inside a generator whatever it took
@@ -25,6 +26,13 @@
   It now goes to `disposeScope`. The one path where it cannot is a teardown
   that has already finished — an `initCancellationTimeout` it gave up on —
   because the scope no longer has a widget to read the hook from.
+* **New:** `ScopeInitContext.wait` is for a call that owns nothing and whose
+  result nobody needs any more — a read, a warm-up, a pause. What an
+  initialization acquires is called directly instead: `wait` ends the waiting
+  rather than the work, so a connection or a database opened into it comes
+  back to a wait that is already over, never reaches the body, and is
+  therefore released by nobody. Called directly it reaches the body, and from
+  there the body's own `catch` or the entry above settles it.
 * **Breaking:** `AsyncDataScope.initData` is a `Future<T>` too, and the value
   is what it returns. `AsyncDataScopeInitState`, `AsyncDataScopeProgress` and
   `AsyncDataScopeReady` are gone with the form that needed them.

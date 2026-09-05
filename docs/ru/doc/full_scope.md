@@ -1,6 +1,6 @@
 # Scope
 
-> Перевод `doc/full_scope.md` (blob `72749c1ebb038c159500e33ca22bdfb7de06aacb`).
+> Перевод `doc/full_scope.md` (blob `0547978db72b94a1b37303ddef092dc4d7a7e686`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 `Scope` — основной строительный блок пакета: виджет, который владеет контейнером
@@ -29,8 +29,11 @@
 `BuildContext` ей дают `ScopeInitContext`, и он несёт те две вещи, которым в
 голом `Future` нет места: `ctx.progress(x)` сообщает о шаге сколько угодно раз,
 а отмена доходит до тела через `ctx` — если виджет уйдёт с дерева, пока
-контейнер ещё строится, в тело бросят на ближайшем `ctx.wait` или `ctx.check`,
-и недостроенный контейнер никогда не попадёт в состояние.
+контейнер ещё строится, в тело бросят при ближайшем обращении к контексту, а
+между двумя шагами это обычно сам `ctx.progress`, и недостроенный контейнер
+никогда не попадёт в состояние. То, чем строится зависимость, зовут напрямую, а
+не через `ctx.wait`: контейнер, которого тело не получило, освободить некому.
+Правило — в теме `AsyncScope`.
 
 Что скоуп показывает и что зовёт, по порядку:
 
@@ -60,7 +63,7 @@ final class AppDependencies implements ScopeDependencies {
 
   static Future<AppDependencies> init(ScopeInitContext ctx) async {
     ctx.progress('Initializing storage…');
-    final sharedPreferences = await ctx.wait(SharedPreferences.getInstance);
+    final sharedPreferences = await SharedPreferences.getInstance();
 
     return AppDependencies(sharedPreferences: sharedPreferences);
   }
@@ -286,11 +289,11 @@ dep('database', (dep) async {
 
 ```dart
 static Future<AppDependencies> init(ScopeInitContext ctx) async {
-  final storage = await ctx.wait(Storage.open);
+  final storage = await Storage.open();
 
   try {
     ctx.progress('signing in');
-    final session = await ctx.wait(() => Session.restore(storage));
+    final session = await Session.restore(storage);
 
     return AppDependencies(storage: storage, session: session);
   } on Object {
@@ -536,7 +539,7 @@ UI «закрываемся…» для скоупа, чья утилизаци�
 ```dart
 // Неправильно: соединение открыто, и ни одному хуку его уже не передадут.
 initDependencies: (context, ctx) async {
-  final connection = await ctx.wait(Connection.open);
+  final connection = await Connection.open();
 
   return somethingThatFails();
 }

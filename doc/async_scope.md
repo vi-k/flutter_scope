@@ -10,7 +10,7 @@ the widget tree.
 AsyncScope(
   initScope: (context, ctx) async {
     ctx.progress('connecting');
-    await ctx.wait(connection.open);
+    await connection.open();
   },
   disposeScope: () => connection.close(),
   waitingBuilder: (context) => const SizedBox.shrink(),
@@ -61,10 +61,10 @@ inside it. A `String` is the common case; anything with a `toString` will do.
 AsyncScope(
   initScope: (context, ctx) async {
     ctx.progress('connecting');
-    await ctx.wait(api.connect);
+    await api.connect();
 
     ctx.progress('loading the profile');
-    await ctx.wait(api.loadProfile);
+    await api.loadProfile();
   },
   disposeScope: api.close,
   progressBuilder: (context, progress) => Center(child: Text('$progress')),
@@ -109,13 +109,13 @@ initScope: (context, ctx) async {
   final steps = ProgressIterator(3);
 
   ctx.progress(steps.nextStep()); // 1/3
-  await ctx.wait(api.connect);
+  await api.connect();
 
   ctx.progress(steps.nextStep()); // 2/3
-  await ctx.wait(api.loadProfile);
+  await api.loadProfile();
 
   ctx.progress(steps.nextStep()); // 3/3
-  await ctx.wait(api.warmUpCache);
+  await api.warmUpCache();
 },
 progressBuilder: (context, progress) => switch (progress) {
   final Progress progress => LinearProgressIndicator(value: progress.value),
@@ -236,8 +236,8 @@ So it is the initialization's job to give back what it took before it failed:
 ```dart
 // Wrong: the connection is open and nobody will ever close it.
 initScope: (context, ctx) async {
-  connection = await ctx.wait(Api.connect);
-  await ctx.wait(connection.authenticate);   // throws
+  connection = await Api.connect();
+  await connection.authenticate();           // throws
 },
 disposeScope: () => connection.close(),      // never called
 ```
@@ -245,10 +245,11 @@ disposeScope: () => connection.close(),      // never called
 ```dart
 // Right: what a step took is given back unless the scope took it over.
 initScope: (context, ctx) async {
-  final opened = await ctx.wait(Api.connect);
+  final opened = await Api.connect();
 
   try {
-    await ctx.wait(opened.authenticate);
+    ctx.progress('authenticating');
+    await opened.authenticate();
   } on Object {
     await opened.close();
     rethrow;
@@ -265,12 +266,14 @@ the older form of this package needed the opposite of each.
 An initialization ends early in two ways: a step of it fails, or the scope goes
 away before it was ever ready, removed from the tree or `close()`d. Both arrive
 in the body as a throw — the second one as `ScopeInitCancelled`, raised by the
-next member of `ctx` the body touches — so one `catch` covers both. A body that
-waits on a bare `await` is the exception that proves it: nothing is thrown at
-it, because Dart cannot interrupt somebody else's wait, and it runs to its end
-for a scope that is already gone. What it produces then is handed to
-`disposeScope` rather than lost, but the whole point of `ctx.wait` is not to
-get there.
+next member of `ctx` the body touches, which between two steps is usually
+`ctx.progress` — so one `catch` covers both.
+
+A body that touches the context nowhere is the exception that proves it:
+nothing is thrown at it, because Dart cannot interrupt somebody else's wait,
+and it runs to its end for a scope that is already gone. That is not a hole.
+What it produces then is handed to `disposeScope` rather than lost, which is
+the promise the next section is about.
 
 There is no flag because there is nothing to guard against. Returning is the
 handover, and a body that returned has no lines left to run: reaching the
@@ -283,10 +286,11 @@ reverse — collect the releases as they are taken:
 final acquired = <Future<void> Function()>[];
 
 try {
-  final database = await ctx.wait(Database.open);
+  final database = await Database.open();
   acquired.add(database.close);
 
-  final session = await ctx.wait(Session.connect);
+  ctx.progress('connecting');
+  final session = await Session.connect();
   acquired.add(session.close);
 
   connection = Connection(database, session);
@@ -306,6 +310,53 @@ screen and nothing in the console. The scope's own waits are all bounded for
 this reason, and so is the one the dependency container of the `Scope` family
 makes on your behalf — a guard you write yourself is the one place left where a
 hang is unbounded.
+
+### What goes through the context, and what does not
+
+Dart cannot interrupt somebody else's `await`, so the only way a body hears
+about a cancellation is by asking, and every member of `ctx` is an asking.
+`ctx.wait` is the narrow one: it ends the waiting rather than the work, so the
+action runs on and the value it was going to produce comes back to a wait that
+is already over.
+
+That makes it right for a call that owns nothing and whose result nobody needs
+any more — a read, a warm-up, a pause:
+
+```dart
+await ctx.wait(cache.warmUp);   // let go of the moment the scope gives up
+```
+
+and wrong for an acquisition:
+
+```dart
+// Wrong: the wait is over before the connection arrives, so the body never
+// receives it, and what nobody receives, nobody closes.
+final opened = await ctx.wait(Api.connect);
+
+// Right: the value reaches the body whatever the scope has decided, and from
+// there the `catch` above or the return below is what settles its fate.
+final opened = await Api.connect();
+```
+
+An acquisition is called directly, and the reason that is safe is a promise of
+the scope rather than a hope: **a body that comes back for a scope which has
+already given up settles nothing, but what it produced is released rather than
+dropped** — `disposeScope` here, `disposeData` in the `AsyncDataScope` topic,
+the container's own teardown in the `Scope` one. The one path where it cannot
+is a teardown that has already finished, an `initCancellationTimeout` it gave
+up on: by then the scope has no widget left to read the hook from.
+
+The middle case is a call that owns nothing but must not be left in flight —
+a migration, somebody else's `init`, a write already on the wire. Call it
+directly too, and say afterwards that the rest is not worth doing:
+
+```dart
+await database.migrate();
+ctx.check();
+```
+
+`ctx.check()` is what a `ctx.progress` between two steps does anyway, which is
+why bodies that report their steps rarely need it written out.
 
 An initialization with several steps like that turns into a pile of nested
 `try`s, and that is what the dependency container of the `Scope` family exists

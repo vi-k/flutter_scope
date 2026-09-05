@@ -216,7 +216,7 @@ class ConnectionGate extends StatelessWidget {
   Widget build(BuildContext context) => AsyncScope(
         initScope: (context, ctx) async {
           ctx.progress('connecting');
-          await ctx.wait(connection.open);
+          await connection.open();
         },
         disposeScope: () => connection.close(),
         progressBuilder: (context, progress) => Text('$progress'),
@@ -243,7 +243,7 @@ class DatabaseGate extends StatelessWidget {
         initData: (context, ctx) async {
           ctx.progress('opening the database');
 
-          return ctx.wait(Database.open);
+          return Database.open();
         },
         disposeData: (database) => database.close(),
         progressBuilder: (context, progress) => Text('$progress'),
@@ -384,8 +384,12 @@ parts:
 Implement `ScopeDependencies` and initialize it with an ordinary `async`
 function. The context it is given is what lets the scope report progress and
 cancel a half-finished initialization when the widget is removed from the
-tree: `ctx.wait` ends the waiting the moment the scope gives up, and the body
-unwinds through its own `catch` and `finally`.
+tree: the body is thrown into at its next touch of `ctx` — `ctx.progress`
+between two steps is usually that touch — and unwinds through its own `catch`
+and `finally`. What builds a dependency is called directly rather than wrapped
+in `ctx.wait`: that one ends the waiting rather than the work, so a value
+opened into it never reaches the body, and what nobody receives, nobody
+closes.
 
 ```dart
 final class AppDependencies implements ScopeDependencies {
@@ -395,7 +399,7 @@ final class AppDependencies implements ScopeDependencies {
 
   static Future<AppDependencies> init(ScopeInitContext ctx) async {
     ctx.progress('Initializing storage…');
-    final sharedPreferences = await ctx.wait(SharedPreferences.getInstance);
+    final sharedPreferences = await SharedPreferences.getInstance();
 
     return AppDependencies(sharedPreferences: sharedPreferences);
   }

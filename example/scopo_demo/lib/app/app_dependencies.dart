@@ -35,26 +35,34 @@ final class AppDependencies implements ScopeDependencies {
     // An initialization that did not finish has to give back whatever it
     // already took, and both ways it can fail to finish arrive here as a
     // throw: a step of its own that fell over, and the cancellation, which
-    // `ctx.wait` raises the moment the scope gives up. No flag is needed to
-    // tell them apart from a successful run — that one leaves by `return`.
+    // the next `ctx.progress` raises once the scope has given up. No flag is
+    // needed to tell them apart from a successful run — that one leaves by
+    // `return`.
+    //
+    // The steps themselves are called directly rather than through
+    // `ctx.wait`: each of them is something this body will have to give back,
+    // and `ctx.wait` ends the waiting rather than the work — a client whose
+    // `init` is walked away from is a client the `catch` below would be
+    // closing while it is still starting up. The pause is the one place
+    // `ctx.wait` belongs: nobody needs it once the screen is gone.
     try {
       ctx.progress('init storage');
-      final sharedPreferences = await ctx.wait(SharedPreferences.getInstance);
+      final sharedPreferences = await SharedPreferences.getInstance();
       await ctx.wait(
         () => Future<void>.delayed(AppEnvironment.defaultInitPause),
       );
 
       ctx.progress('init analytics');
       analytics = FakeAnalytics();
-      await ctx.wait(analytics.init);
+      await analytics.init();
 
       ctx.progress('init http client');
       httpClient = FakeAppHttpClient();
-      await ctx.wait(httpClient.init);
+      await httpClient.init();
 
       ctx.progress('init awesome service');
       service = FakeService();
-      await ctx.wait(service.init);
+      await service.init();
 
       return AppDependencies(
         sharedPreferences: sharedPreferences,

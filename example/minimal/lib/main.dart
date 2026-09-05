@@ -127,14 +127,16 @@ final class AppDependencies implements ScopeDependencies {
 
   /// Dependency initialization is a plain `Future`. The context reports the
   /// progress and carries the cancellation: the scope gives up when the widget
-  /// leaves the tree before the initialization is complete, and `ctx.wait`
-  /// ends the waiting there rather than at the end of the work.
+  /// leaves the tree before the initialization is complete, and the body is
+  /// thrown into at its next touch of `ctx`. What it builds is called
+  /// directly — `ctx.wait` would end the waiting rather than the work, and a
+  /// value that never reaches the body is one nobody can release.
   static Future<AppDependencies> init(
     BuildContext context,
     ScopeInitContext ctx,
   ) async {
     ctx.progress('init $SharedPreferences');
-    final sharedPreferences = await ctx.wait(SharedPreferences.getInstance);
+    final sharedPreferences = await SharedPreferences.getInstance();
 
     return AppDependencies(sharedPreferences: sharedPreferences);
   }

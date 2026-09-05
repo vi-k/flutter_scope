@@ -49,15 +49,19 @@ final class AppDependencies implements ScopeDependencies {
     // What has been taken so far, in the order it was taken. Until the
     // container is assembled these belong to this function, and it is this
     // function that has to give them back if it does not get that far.
+    //
+    // Which is why the steps are called directly rather than through
+    // `ctx.wait`: that one ends the waiting rather than the work, and a
+    // value that never reaches this body is one nobody can release.
     final acquired = <Future<void> Function()>[];
 
     try {
       ctx.progress('opening the database');
-      final database = await ctx.wait(Database.open);
+      final database = await Database.open();
       acquired.add(database.close);
 
       ctx.progress('connecting');
-      final session = await ctx.wait(Session.connect);
+      final session = await Session.connect();
       acquired.add(session.close);
 
       return AppDependencies(
@@ -67,9 +71,9 @@ final class AppDependencies implements ScopeDependencies {
     } on Object {
       // Both endings that leave the container half-built arrive here as a
       // throw: a step of its own that fell over, and the cancellation,
-      // which `ctx.wait` raises the moment the scope gives up. A run that
-      // handed the container over leaves by `return` and never comes here,
-      // so releasing twice is not a thing that can happen.
+      // which the next `ctx.progress` raises once the scope has given up.
+      // A run that handed the container over leaves by `return` and never
+      // comes here, so releasing twice is not a thing that can happen.
       //
       // Reverse order of construction, and only what was actually taken.
       for (final release in acquired.reversed) {

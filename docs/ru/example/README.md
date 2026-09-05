@@ -1,6 +1,6 @@
 # example
 
-> Перевод `example/README.md` (blob `2ac0a30fa26be974b4a20a7868f7b27a149b4570`).
+> Перевод `example/README.md` (blob `9d3a5c9c71afd9be6a2ff2ca38fcd0938b83eb28`).
 > Правится в том же коммите, что и оригинал; проверка — `sh docs/ru/check.sh`.
 
 Полный обзор scopo — в
@@ -148,14 +148,16 @@ final class AppDependencies implements ScopeDependencies {
 
   /// Инициализация зависимостей — обычный `Future`. Контекст сообщает о
   /// прогрессе и несёт отмену: скоуп сдаётся, когда виджет уходит с дерева
-  /// раньше, чем инициализация закончится, а `ctx.wait` заканчивает ожидание
-  /// там же, а не в конце работы.
+  /// раньше, чем инициализация закончится, и в тело бросают при ближайшем
+  /// обращении к `ctx`. То, что оно строит, зовут напрямую: `ctx.wait`
+  /// закончил бы ожидание, а не работу, — а значение, не дошедшее до тела,
+  /// освободить некому.
   static Future<AppDependencies> init(
     BuildContext context,
     ScopeInitContext ctx,
   ) async {
     ctx.progress('init $SharedPreferences');
-    final sharedPreferences = await ctx.wait(SharedPreferences.getInstance);
+    final sharedPreferences = await SharedPreferences.getInstance();
 
     return AppDependencies(sharedPreferences: sharedPreferences);
   }

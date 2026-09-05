@@ -23,8 +23,17 @@ final class ScopeInitCancelled implements Exception {
 /// Cancellation is cooperative: Dart cannot interrupt somebody else's `await`.
 /// A body learns that the scope gave up the next time it touches this context —
 /// every member here except [isCancelled] throws [ScopeInitCancelled] from that
-/// moment on. After a bare `await`, call [check]; to wait for something and
-/// give up on cancellation at once, wrap it in [wait].
+/// moment on.
+///
+/// What must not be wrapped is an acquisition. [wait] gives up on waiting
+/// rather than on the work, so the value it was waiting for never reaches the
+/// body — and a connection, a database or a container the body never received
+/// is one nobody can release. Call those directly and let the body return what
+/// it built: what a body produced for a scope that had already given up is
+/// handed to the release rather than lost. [wait] is for a call that owns
+/// nothing and whose result nobody needs any more; after a bare `await` that
+/// must not be walked away from, [check] is what says the rest is not worth
+/// doing.
 abstract interface class ScopeInitContext {
   /// Reports that the initialization has advanced.
   ///
@@ -48,6 +57,16 @@ abstract interface class ScopeInitContext {
   /// If the cancellation arrives while [action] is in flight, the wait ends
   /// there with that exception — and [action] runs on, its result discarded.
   /// It ends the waiting, not the work.
+  ///
+  /// Which is what it is for: a call that owns nothing and whose result nobody
+  /// needs any more — a read, a warm-up, a pause. An acquisition does not go
+  /// in here. Its value comes back to a wait that is already over, so the body
+  /// never receives it, and what nobody receives, nobody closes:
+  ///
+  /// ```dart
+  /// final database = await ctx.wait(Database.open);  // lost on cancellation
+  /// final database = await Database.open();          // released by the scope
+  /// ```
   ///
   /// For anything that must actually stop, hand the cancellation to it through
   /// [onCancel] and wait for it to finish.

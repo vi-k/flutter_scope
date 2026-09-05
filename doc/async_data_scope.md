@@ -17,7 +17,7 @@ AsyncDataScope<Database>(
   initData: (context, ctx) async {
     ctx.progress('opening the database');
 
-    return ctx.wait(Database.open);
+    return Database.open();
   },
   disposeData: (database) => database.close(),
   progressBuilder: (context, progress) => Text('$progress'),
@@ -54,7 +54,7 @@ what the type parameter is for; the progress is a caption.
 
 Returning is the handover, and until it happens the value belongs to
 the initialization alone. The scope has never seen it, so it cannot release it:
-`disposeData` runs only when the initialization succeeded, and `onUnmount` is handed
+after a failure `disposeData` is not called at all, and `onUnmount` is handed
 `null`.
 
 That is what makes this family's version of the trap easy to walk into — the
@@ -64,10 +64,10 @@ after it:
 ```dart
 // Wrong: the database is open, and `disposeData` will never be called with it.
 initData: (context, ctx) async {
-  final database = await ctx.wait(Database.open);
+  final database = await Database.open();
 
   ctx.progress('migrating');
-  await ctx.wait(database.migrate);     // throws
+  await database.migrate();             // throws
 
   return database;
 },
@@ -77,11 +77,11 @@ disposeData: (database) => database.close(),
 ```dart
 // Right: whatever ends the body early leaves the database mine to close.
 initData: (context, ctx) async {
-  final database = await ctx.wait(Database.open);
+  final database = await Database.open();
 
   try {
     ctx.progress('migrating');
-    await ctx.wait(database.migrate);
+    await database.migrate();
   } on Object {
     await database.close();
     rethrow;
@@ -95,13 +95,22 @@ disposeData: (database) => database.close(),
 One `catch` covers both ways this initialization ends early: a failing step,
 and a cancellation — the scope removed from the tree, or `close()`d, before it
 was ready. The second arrives as `ScopeInitCancelled`, thrown by the next
-member of `ctx` the body touches, which is why the guard has to sit around the
-steps that wait through `ctx` rather than around bare `await`s. See the
-`AsyncScope` topic for the whole of it.
+member of `ctx` the body touches, and here that member is the `ctx.progress`
+above the migration.
+
+Note what the acquisition is **not** wrapped in. `ctx.wait` ends the waiting
+rather than the work, so a database opened into one is a database the body
+never receives — and this whole section is about a value the body never
+received. Call it directly; the paragraph below says what becomes of it when
+the cancellation lands after the body has already built it. The `AsyncScope`
+topic has the rule in full.
 
 A value the body produces after the cancellation is handed to `disposeData`
 rather than lost, so a body that never asks `ctx` anything does not leak — it
-merely runs to its end for a scope that is already gone.
+merely runs to its end for a scope that is already gone. That promise is what
+makes a bare call the right way to acquire: the value has to reach the body
+before anyone can decide anything about it, and `disposeData` is the decision
+the scope makes when the body hands it over too late.
 
 Two ways to avoid writing the guard at all: build the value in one step that
 cannot fail halfway, or use the dependency container of the `Scope` family,

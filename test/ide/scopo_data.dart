@@ -54,7 +54,7 @@ final class DbScope extends AsyncDataScopeBase<DbScope, Database> {
 
   @override
   Future<Database> initData(BuildContext context, ScopeInitContext ctx) =>
-      ctx.wait(Database.open);
+      Database.open();
 
   @override
   FutureOr<void> disposeData(Database data) => data.close();

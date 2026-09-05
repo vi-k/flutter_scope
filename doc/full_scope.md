@@ -28,8 +28,11 @@ It is given a `ScopeInitContext` beside the `BuildContext`, and that is what
 carries the two things a bare `Future` has no room for: `ctx.progress(x)`
 reports a step any number of times, and the cancellation reaches the body
 through `ctx` — if the widget leaves the tree while the container is still
-being built, the body is thrown into at its next `ctx.wait` or `ctx.check`, and
-a half-built container is never handed to a state.
+being built, the body is thrown into at its next touch of the context, which
+between two steps is usually `ctx.progress` itself, and a half-built container
+is never handed to a state. What builds a dependency is called directly rather
+than through `ctx.wait`: a container the body never receives is one nobody can
+release. The rule is in the `AsyncScope` topic.
 
 What the scope shows, and what it calls, in order:
 
@@ -59,7 +62,7 @@ final class AppDependencies implements ScopeDependencies {
 
   static Future<AppDependencies> init(ScopeInitContext ctx) async {
     ctx.progress('Initializing storage…');
-    final sharedPreferences = await ctx.wait(SharedPreferences.getInstance);
+    final sharedPreferences = await SharedPreferences.getInstance();
 
     return AppDependencies(sharedPreferences: sharedPreferences);
   }
@@ -282,11 +285,11 @@ topic — what a step took is given back unless the container was handed over:
 
 ```dart
 static Future<AppDependencies> init(ScopeInitContext ctx) async {
-  final storage = await ctx.wait(Storage.open);
+  final storage = await Storage.open();
 
   try {
     ctx.progress('signing in');
-    final session = await ctx.wait(() => Session.restore(storage));
+    final session = await Session.restore(storage);
 
     return AppDependencies(storage: storage, session: session);
   } on Object {
@@ -532,7 +535,7 @@ initialization gives back — through `dep.dispose` when it was taken through
 ```dart
 // Wrong: the connection is open and no hook will ever be handed it.
 initDependencies: (context, ctx) async {
-  final connection = await ctx.wait(Connection.open);
+  final connection = await Connection.open();
 
   return somethingThatFails();
 }
