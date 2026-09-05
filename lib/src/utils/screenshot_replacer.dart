@@ -57,7 +57,7 @@ final class _ScreenshotReplacerState extends State<ScreenshotReplacer> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => unawaited(_capture()));
+    WidgetsBinding.instance.addPostFrameCallback((_) => _capture());
   }
 
   @override
@@ -148,7 +148,7 @@ final class _ScreenshotReplacerState extends State<ScreenshotReplacer> {
 
     WidgetsBinding.instance
       ..scheduleFrame()
-      ..addPostFrameCallback((_) => unawaited(_capture()));
+      ..addPostFrameCallback((_) => _capture());
   }
 
   Future<void> _capture() async {

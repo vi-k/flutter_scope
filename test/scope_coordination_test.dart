@@ -163,15 +163,14 @@ void main() {
         final queues = KeyedAccessQueues();
         var expired = false;
 
-        unawaited(queues.enter('key', AccessEntry('first')));
-        unawaited(
-          queues.enter(
+        queues
+          ..enter('key', AccessEntry('first'))
+          ..enter(
             'key',
             AccessEntry('second'),
             timeout: const Duration(seconds: 3),
             onTimeout: (_, __) => expired = true,
-          ),
-        );
+          );
 
         async.elapse(const Duration(minutes: 1));
 
@@ -300,11 +299,9 @@ void main() {
         final registry = ChildRegistry()..registerChild('slow');
         var expired = false;
 
-        unawaited(
-          registry.waitForChildren(
-            timeout: const Duration(seconds: 3),
-            onTimeout: (_, __) => expired = true,
-          ),
+        registry.waitForChildren(
+          timeout: const Duration(seconds: 3),
+          onTimeout: (_, __) => expired = true,
         );
 
         async.elapse(const Duration(minutes: 1));

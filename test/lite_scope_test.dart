@@ -1268,11 +1268,9 @@ void main() {
               listenable: closeNow,
               builder: (context, child) {
                 if (closeNow.value) {
-                  unawaited(
-                    element.close().onError((error, stackTrace) {
-                      refusal = error;
-                    }),
-                  );
+                  element.close().onError((error, stackTrace) {
+                    refusal = error;
+                  });
                 }
 
                 return const SizedBox();
@@ -1328,11 +1326,9 @@ void main() {
               listenable: closeNow,
               builder: (context, child) {
                 if (closeNow.value) {
-                  unawaited(
-                    element.close().onError((error, stackTrace) {
-                      refusal = error;
-                    }),
-                  );
+                  element.close().onError((error, stackTrace) {
+                    refusal = error;
+                  });
                 }
 
                 return const SizedBox();

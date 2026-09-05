@@ -556,11 +556,9 @@ abstract base class AsyncScopeElementBase<W extends AsyncScopeCore<W, E>,
       // application with ordinary crash reporting therefore saw the failures
       // that had nobody to be handed to, and missed the one that had -- a
       // `disposeScope()` that threw on the ordinary way off the tree.
-      unawaited(
-        disposal.catchError((Object error, StackTrace stackTrace) {
-          _reportFailure(error, stackTrace, 'while disposing of the scope');
-        }),
-      );
+      disposal.catchError((Object error, StackTrace stackTrace) {
+        _reportFailure(error, stackTrace, 'while disposing of the scope');
+      });
     }
 
     super.dispose();

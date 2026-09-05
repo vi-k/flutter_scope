@@ -15,12 +15,13 @@ include: package:flutter_lints/flutter.yaml
 
 analyzer:
   exclude:
-    # Web
-    "web/**": true
-    # Build
-    "build/**": true
-    # Assets
-    "assets/**": true
+    - build/**
+    - android/**
+    - ios/**
+    - web/**
+    - windows/**
+    - macos/**
+    - linux/**
 
   language:
     strict-casts: true
@@ -72,7 +73,13 @@ linter:
     comment_references: true
     # control_flow_in_finally: true # [recommended]
     # diagnostic_describe_all_properties: true
-    discarded_futures: true # DON'T invoke asynchronous functions in non-async blocks.
+    discarded_futures: false # DON'T invoke asynchronous functions in
+    # non-async blocks -- switched off deliberately. It fires on every future
+    # started from a callback that could not have awaited it anyway: a
+    # post-frame callback, a builder, a `fakeAsync` body. The wrapper it asks
+    # for says nothing there, and the case that does matter -- a future left
+    # unawaited inside an async body -- is `unawaited_futures` below, which
+    # stays on.
     # empty_statements: true # [recommended]
     # hash_and_equals: true # [core]
     invalid_case_patterns: true

@@ -203,24 +203,17 @@ final class _ScopeInitContext implements ScopeInitContext {
     // dropped for the same reason, and it is dropped *handled* — this
     // `onError` is what keeps it from becoming an unhandled asynchronous
     // error once nobody is waiting for it any more.
-    //
-    // `unawaited`, and that is the point rather than a formality: this future
-    // is deliberately not the one the caller gets back — [completer] is —
-    // and an analyzer newer than the floor says so out loud
-    // (`discarded_futures`).
-    unawaited(
-      Future<T>.sync(action).then(
-        (value) {
-          if (!completer.isCompleted) {
-            completer.complete(value);
-          }
-        },
-        onError: (Object error, StackTrace stackTrace) {
-          if (!completer.isCompleted) {
-            completer.completeError(error, stackTrace);
-          }
-        },
-      ),
+    Future<T>.sync(action).then(
+      (value) {
+        if (!completer.isCompleted) {
+          completer.complete(value);
+        }
+      },
+      onError: (Object error, StackTrace stackTrace) {
+        if (!completer.isCompleted) {
+          completer.completeError(error, stackTrace);
+        }
+      },
     );
 
     return completer.future.whenComplete(unregister);
